@@ -1,7 +1,6 @@
 open Core.Std
-(* open Core_sexp *)
+open Abbrevs
 open Wconstrs
-
 
 (* Example:
    Public key: [V,W]_1
@@ -14,22 +13,45 @@ let rV = rvar "V"
 let rW = rvar "W"
 
 (* Oracle *)
-let idx = "i"
-let hm = hvar "m" idx 
-let rR = rvar_idx "R" idx
+let i = "i"
+let j = "i"
+let hm i = hvar "m" i
+let rR i = rvar_idx "R" i
 
-let mu1 = param "mu1"
-let mu2 = param "mu2"
-let mu3 = param "mu3"
-
-let wm =
+let lincomb p1 p2 p3 =
   { sum =
-      [ ssum 1 []    { prod = [mu1] };
-        ssum 1 [idx] { prod = [mu2; rR] };
-        ssum 1 [idx] { prod = [mu3; hm; rV] };
-        ssum 1 [idx] { prod = [mu3; rW] };
-        ssum 1 [idx] { prod = [mu3; rR; rR] }; ] }
+      L.map
+        ~f:(fun e -> (BI.one,e))
+        [ ssum []  { prod = [p1] };
+          ssum [j] { prod = [p2 j; rR j] };
+          ssum [j] { prod = [p3 j; hm j; rV] };
+          ssum [j] { prod = [p3 j; rW] };
+          ssum [j] { prod = [p3 j; rR j; rR j] }; ] }
+
+let pm1   = param "pm1"
+let pm2 i = param_idx "pm2" i
+let pm3 i = param_idx "pm3" i
+let wm = lincomb pm1 pm2 pm3
+
+let ps1   = param "ps1"
+let ps2 i = param_idx "ps2" i
+let ps3 i = param_idx "ps3" i
+let ws = lincomb ps1 ps2 ps3
+
+let pr1   = param "pr1"
+let pr2 i = param_idx "pr2" i
+let pr3 i = param_idx "pr3" i
+let wr = lincomb ps1 ps2 ps3
+
+(* FIXME: define multiplication to make this work *)
+let s_constr () =
+  let rV = spoly_of_smonom [rV] in
+  let rW = spoly_of_smonom [rW] in
+  constr [] Eq SP.((wr *! wr) +! (ws *! rV) +! rW -! ws)
+
+let hm_spoly i = spoly_of_smonom [hm i]
+
+let m_constr = constr [i] InEq SP.(wm -! hm_spoly i)
 
 let () =
-  if compare_spoly wm wm = 0 then
-    print_string (Sexp.to_string_hum ~indent:2 (sexp_of_spoly wm))
+  F.printf "%a" pp_constr m_constr
