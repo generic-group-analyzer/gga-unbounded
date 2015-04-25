@@ -1,5 +1,6 @@
 open Core.Std
 open Abbrevs
+open Watom
 open Wconstrs
 
 (* Example:
@@ -8,50 +9,57 @@ open Wconstrs
    Win([m,r,s]_2) = forall i. m <> hm_i /\ s = m*V + W + r^2
 *)
 
+
 (* global random vars *)
-let rV = rvar "V"
-let rW = rvar "W"
+let rV = mk_rvar "V"
+let rW = mk_rvar "W"
+
 
 (* Oracle *)
-let i = "i"
-let j = "i"
-let hm i = hvar "m" i
-let rR i = rvar_idx "R" i
+let i = { name = "i"; id = 0 }
+let j = { name = "j"; id = 0 }
+let hm i = mk_hvar ~idx:i "m"
+let rR (i : ivar) = mk_rvar ~idx:(Some i) "R"
 
-let lincomb p1 p2 p3 =
-  { sum =
-      L.map
-        ~f:(fun e -> (BI.one,e))
-        [ ssum []  { prod = [p1] };
-          ssum [j] { prod = [p2 j; rR j] };
-          ssum [j] { prod = [p3 j; hm j; rV] };
-          ssum [j] { prod = [p3 j; rW] };
-          ssum [j] { prod = [p3 j; rR j; rR j] }; ] }
+let lincomb idx p1 p2 p3 =
+  SP.(
+    let p1 = of_a p1 in
+    let p2_j = of_a (p2 idx) in
+    let p3_j = of_a (p3 idx) in
+    let rV = of_a rV in
+    let rW = of_a rW in
+    let rR_j = of_a (rR idx) in
+    let hm_j = of_a (hm idx) in
 
-let pm1   = param "pm1"
-let pm2 i = param_idx "pm2" i
-let pm3 i = param_idx "pm3" i
-let wm = lincomb pm1 pm2 pm3
+    p1 +!
+    sum [idx] (p2_j *! rR_j) +!
+    sum [idx] (p3_j *! (hm_j *! rV +! rW +! (rR_j *! rR_j)))
+  )
 
-let ps1   = param "ps1"
-let ps2 i = param_idx "ps2" i
-let ps3 i = param_idx "ps3" i
-let ws = lincomb ps1 ps2 ps3
+let pm   = mk_param "pm"
+let pmR i = mk_param ~idx:(Some i) "pmR"
+let pmS i = mk_param ~idx:(Some i) "pmS"
+let wm = lincomb j pm pmR pmS
 
-let pr1   = param "pr1"
-let pr2 i = param_idx "pr2" i
-let pr3 i = param_idx "pr3" i
-let wr = lincomb ps1 ps2 ps3
+let hm_spoly i = SP.of_a (hm i)
 
-(* FIXME: define multiplication to make this work *)
-let s_constr () =
-  let rV = spoly_of_smonom [rV] in
-  let rW = spoly_of_smonom [rW] in
-  constr [] Eq SP.((wr *! wr) +! (ws *! rV) +! rW -! ws)
+let m_constr = mk_constr [i] InEq SP.(wm -! hm_spoly i)
 
-let hm_spoly i = spoly_of_smonom [hm i]
+let ps   = mk_param "ps"
+let psR i = mk_param ~idx:(Some i) "psR"
+let psS i = mk_param ~idx:(Some i) "psS"
+let ws = lincomb j ps psR psS
 
-let m_constr = constr [i] InEq SP.(wm -! hm_spoly i)
+let pr   = mk_param "pr"
+let prR i = mk_param ~idx:(Some i) "prR"
+let prS i = mk_param ~idx:(Some i) "prS"
+let wr = lincomb j pr prR prS
+
+let s_constr =
+  let rV = SP.of_a rV in
+  let rW = SP.of_a rW in
+  mk_constr [] Eq SP.((wr *! wr) +! (ws *! rV) +! rW -! ws)
 
 let () =
-  F.printf "%a" pp_constr m_constr
+  F.printf "@[1: %a@]@\n" pp_constr m_constr;
+  F.printf "@[2: %a@]@\n" pp_constr s_constr

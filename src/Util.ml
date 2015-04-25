@@ -1,7 +1,29 @@
+open Core.Std
 open Abbrevs
+open Big_int
 
-(*i ----------------------------------------------------------------------- i*)
-(* \hd{Pretty printing} *)
+(* ======================================================================= *)
+(* Big int helper functions *)
+
+module BI = struct
+  type t = big_int
+  let one = unit_big_int
+  let zero = zero_big_int
+  let is_one = eq_big_int one
+  let is_zero = eq_big_int zero
+  let ( *! ) a b = mult_big_int a b
+  let ( +! ) a b = mult_big_int a b
+  let opp = minus_big_int
+  let of_int = big_int_of_int
+  let to_string = string_of_big_int
+  let cmp = compare_big_int
+  let t_of_sexp se = big_int_of_string (string_of_sexp se)
+  let sexp_of_t bi = sexp_of_string (string_of_big_int bi)
+  let compare = compare_big_int
+end
+
+(* ======================================================================= *)
+(* Pretty printing *)
 
 let rec pp_list sep pp_elt f l =
   match l with
