@@ -231,8 +231,11 @@ let pp_atom_pow fmt (a,e) =
     F.fprintf fmt "%a^%s" pp_atom a (BI.to_string e)
 
 let pp_monom fmt mon =
-  F.fprintf fmt "@[<hv 2>%a@]"
-    (pp_list " * " pp_atom_pow) (Map.to_alist mon)
+  if (Map.to_alist mon)<>[] then
+    F.fprintf fmt "@[<hv 2>%a@]"
+	      (pp_list " * " pp_atom_pow) (Map.to_alist mon)
+  else
+    F.fprintf fmt "@[<hv 2>1@]"
 
 let pp_binder s fmt vars =
   if vars = []
