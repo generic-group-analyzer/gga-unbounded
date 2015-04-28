@@ -41,6 +41,12 @@ type constr = {
   poly   : poly;
 } with compare, sexp
 
+(* constraint conjunction *)
+type constr_conj = constr list with compare, sexp
+
+type constr_disj = constr_conj list with compare, sexp
+		  
+		  
 (* ----------------------------------------------------------------------- *)
 (* variables occurences *)
 
@@ -207,15 +213,66 @@ end
 
 (* ----------------------------------------------------------------------- *)
 (* useful functions *)
-
-let subst_idx (_c : constr) (_i : ivar) (_j : ivar) =
-  failwith "undefined"
-
+	      
 let subst (_c : constr) (_p : param) =
   failwith "undefined"
+			     
+let subst_idx_sum (s : sum) (i : ivar) (j : ivar) =
+  if L.mem s.ivars i then failwith "impossible to substitute a summation variable"
+  else mk_sum s.ivars (map_idx_monom ~f:(fun x -> if x = i then j else x) s.monom)
+	   
+let subst_idx_poly (p : poly) (i : ivar) (j : ivar) =
+  Map.fold p ~init:(mk_poly [])
+	     ~f:(fun ~key:s ~data:c p ->
+	         add_poly p (mk_poly [(c, subst_idx_sum s i j)]) )
+	   	   
+let subst_idx (c : constr) (i : ivar) (j : ivar) =
+  if L.mem c.qvars i then
+    {qvars = L.filter c.qvars ~f:(fun x -> x <> i) ;
+     is_eq = c.is_eq ; poly = subst_idx_poly c.poly i j}
+  else
+    {qvars = c.qvars ; is_eq = c.is_eq ; poly = subst_idx_poly c.poly i j}
 
-let split (_iv : ivar) (_c : constr) =
-  failwith "undefined"
+let split_sum (iv : ivar) (c : BI.t) (sum : sum) =
+  let rec aux s =    
+    match s.ivars with      
+    | [] -> [(c,s)]
+    | i :: rest_idx ->
+       let without_i = {ivars = rest_idx ; monom = s.monom} in
+       (L.map (aux without_i)
+	      ~f:(fun (k,x) -> (k,{ivars = i :: x.ivars ; monom = x.monom}) ))
+       @ (aux (subst_idx_sum without_i i iv))
+  in  
+  if L.mem sum.ivars iv then failwith "impossible to split a bound variable"
+  else aux sum
+         
+let split_poly (iv : ivar) (p : poly) =
+  Map.fold p ~init:(mk_poly [])
+	     ~f:(fun ~key:s ~data:c p ->
+	         add_poly p (mk_poly (split_sum iv c s)) )
+      
+let split_constr (iv : ivar) (constr : constr) =
+  let rec aux c =	
+    match c.qvars with      
+    | [] -> [c]
+    | i :: rest_idx ->
+       let without_i = {qvars = rest_idx ; is_eq = c.is_eq ; poly = c.poly} in
+         (L.map (aux without_i)
+	   ~f:(fun x -> {qvars = i :: x.qvars ; is_eq = x.is_eq ; poly = x.poly }))
+	 @ (aux (subst_idx without_i i iv) )
+  in
+  if L.mem constr.qvars iv then failwith "impossible to split a bound variable"
+  else
+    let splitted_sum = {qvars = constr.qvars ; is_eq = constr.is_eq ;
+			poly = split_poly iv constr.poly} in
+    aux splitted_sum
+           
+let split (iv : ivar) (conj : constr_conj) =
+  let rec aux new_conj = function
+    | [] -> new_conj
+    | c :: rest -> aux (new_conj @ (split_constr iv c)) rest
+  in
+  aux [] conj    
 
 (* ----------------------------------------------------------------------- *)
 (* pretty printing *)
@@ -275,3 +332,14 @@ let pp_poly fmt poly =
 
 let pp_constr fmt { qvars = qvs; poly = p; is_eq = is_eq } =
   F.fprintf fmt "@[<hv 2>%a%a %s 0@]" (pp_binder "forall") qvs pp_poly p (is_eq_to_string is_eq)
+
+let pp_constr_conj fmt conj =
+  let rec aux n list f =
+    match list with
+    | [] -> F.fprintf f "\n"
+    | c :: rest ->
+       F.fprintf f "@[%i: %a@]@\n" n pp_constr c;
+       F.fprintf f "%t" (aux (n+1) rest)
+  in
+  aux 1 conj fmt
+    

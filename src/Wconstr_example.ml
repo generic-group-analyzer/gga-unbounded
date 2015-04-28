@@ -58,8 +58,10 @@ let wr = lincomb j pr prR prS
 let s_constr =
   let rV = SP.of_a rV in
   let rW = SP.of_a rW in
-  mk_constr [] Eq SP.((wr *! wr) +! (ws *! rV) +! rW -! ws)
+  mk_constr [] Eq SP.((wr *! wr) +! (wm *! rV) +! rW -! ws)
+
+let system = [m_constr; s_constr]
+let system = split_constr {name = "k*"; id = 0} m_constr
 
 let () =
-  F.printf "@[1: %a@]@\n" pp_constr m_constr;
-  F.printf "@[2: %a@]@\n" pp_constr s_constr
+  F.printf "%a" pp_constr_conj system

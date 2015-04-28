@@ -91,6 +91,7 @@ let mk_hvar ~idx name = Hvar (name,idx)
 let map_idx ~f = function
   | Rvar (v,Some i)  -> Rvar (v,Some (f i))
   | Param (v,Some i) -> Param (v,Some (f i))
+  | Hvar (v,i) -> Hvar (v, (f i))
   | a                -> a
   
 (* ----------------------------------------------------------------------- *)
@@ -118,6 +119,6 @@ let pp_inv fmt = function
   | Inv   -> pp_string fmt "Inv"
 
 let pp_atom fmt = function
-  | Rvar(vi) 
+  | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
