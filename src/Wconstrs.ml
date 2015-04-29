@@ -10,7 +10,7 @@ type is_eq = Eq | InEq with compare, sexp
 
 (* Mapping from atom to exponent, we ensure in mk_monom that only random
    variables can have negative exponents *)
-type monom = BI.t Atom.Map.t with sexp, compare
+type monom = BI.t Atom.Map.t with compare, sexp
 
 (* [Sum ivars: monom] where monom can contain bound and free index variables *)
 type sum = {
@@ -18,6 +18,7 @@ type sum = {
   monom  : monom;
 } with compare, sexp
 
+		  
 (* data structures with sums *)
 module Sum = struct
   module T = struct
@@ -45,8 +46,7 @@ type constr = {
 type constr_conj = constr list with compare, sexp
 
 type constr_disj = constr_conj list with compare, sexp
-		  
-		  
+		  					    
 (* ----------------------------------------------------------------------- *)
 (* variables occurences *)
 
@@ -66,11 +66,15 @@ let ivars_poly poly =
 let ivars_constr constr =
   ivars_poly constr.poly
 
+let ivars_conj conj =
+  L.fold_left conj ~init:Ivar.Set.empty
+	           ~f:(fun se1 t -> Set.union se1 (ivars_constr t))
+
 (* ----------------------------------------------------------------------- *)
 (* smart constructors *)
 
 let mult_monom_atom m (e,a) =
-    if BI.cmp e BI.zero < 0 && not (is_rvar a) then
+    if BI.compare e BI.zero < 0 && not (is_rvar a) then
       failwith "mk_monom: only random variables can have negative exponent";
     Map.change m a
       (function 
@@ -273,7 +277,43 @@ let split (iv : ivar) (conj : constr_conj) =
     | c :: rest -> aux (new_conj @ (split_constr iv c)) rest
   in
   aux [] conj    
+    
+let vars (mon : monom) =
+  let var2monom k v = if (is_rvar k || is_hvar k) then Atom.Map.singleton k v
+		       else Atom.Map.empty in
+  Map.fold mon
+    ~init:Atom.Map.empty
+    ~f:(fun ~key:k ~data:v m -> mult_monom m (var2monom k v) )
 
+let params (mon : monom) =  
+  let param2monom k v = if (is_param k) then Atom.Map.singleton k v
+		         else Atom.Map.empty in
+  Map.fold mon
+    ~init:Atom.Map.empty
+    ~f:(fun ~key:k ~data:v m -> mult_monom m (param2monom k v) )
+    
+let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
+  if ((Map.compare_direct BI.compare (vars s.monom) mon) = 0) then
+    mk_poly [(c, mk_sum [] (params s.monom))]
+  else SP.zero
+    
+let coeff (p : poly) (mon : monom) =
+  Map.fold p ~init:(mk_poly [])
+	     ~f:(fun ~key:s ~data:c p -> add_poly p (coeff_sum c s mon) )
+
+let mons (p : poly) =
+  Map.fold p ~init:[]
+	     ~f:(fun ~key:s ~data:_c list -> (vars s.monom) :: list)
+
+let mons_sets_product (m_list1 : monom list) (m_list2 : monom list) =
+  let prod_el_list x list =
+    List.fold_left list ~init: [] ~f:(fun list y -> (mult_monom x y) :: list) in  
+  let prod = List.fold_left m_list1 ~init: []
+		~f:(fun list x -> (prod_el_list x m_list2) @ list) in
+  let prod = Set.to_list (Sum.Set.of_list (L.map prod ~f:(fun m -> mk_sum [] m))) in
+  L.map prod ~f:(fun s -> s.monom)
+ 		 
+      
 (* ----------------------------------------------------------------------- *)
 (* pretty printing *)
 
@@ -315,9 +355,9 @@ let pp_term fmt (s,c) =
 
 let pp_poly fmt poly =
   let mneg = Map.filter_map poly
-    ~f:(fun bi -> if BI.(cmp bi zero < 0) then Some (BI.opp bi) else None)
+    ~f:(fun bi -> if BI.(compare bi zero < 0) then Some (BI.opp bi) else None)
   in
-  let mpos = Map.filter poly ~f:(fun ~key:_k ~data:bi -> BI.(cmp bi zero >= 0)) in
+  let mpos = Map.filter poly ~f:(fun ~key:_k ~data:bi -> BI.(compare bi zero >= 0)) in
   match Map.to_alist mpos, Map.to_alist mneg with
   | [], [] ->
     F.fprintf fmt "0"

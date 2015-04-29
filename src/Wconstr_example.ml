@@ -61,7 +61,16 @@ let s_constr =
   mk_constr [] Eq SP.((wr *! wr) +! (wm *! rV) +! rW -! ws)
 
 let system = [m_constr; s_constr]
-let system = split_constr {name = "k*"; id = 0} m_constr
+let system = split {name = "k"; id = 0} system
 
+let monomials = mons m_constr.poly
+
+let rec list_element n = function
+  | [] -> failwith "empty list"
+  | hd :: tl -> if n = 1 then hd else list_element (n-1) tl
+		   
 let () =
-  F.printf "%a" pp_constr_conj system
+  F.printf "%a" pp_constr_conj system ;
+  F.printf "[%a]\n" (Util.pp_list ", " pp_monom) monomials ;
+  F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
+  F.printf "%a" pp_poly (coeff m_constr.poly (list_element 4 monomials)) ;
