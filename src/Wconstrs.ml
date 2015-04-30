@@ -46,6 +46,13 @@ type constr = {
 type constr_conj = constr list with compare, sexp
 
 type constr_disj = constr_conj list with compare, sexp
+
+type k_inf = {
+  h : atom list   ; (* handle variables in G_i *)
+  n : monom list  ; (* non-recursive knowledge in G_i *)
+  r : monom list  ; (* recursive knowledge in G_i *)
+  rj : monom list ; (* recursive indexed knowledge in G_i *)
+}
 		  					    
 (* ----------------------------------------------------------------------- *)
 (* variables occurences *)
@@ -278,12 +285,19 @@ let split (iv : ivar) (conj : constr_conj) =
   in
   aux [] conj    
     
-let vars (mon : monom) =
-  let var2monom k v = if (is_rvar k || is_hvar k) then Atom.Map.singleton k v
+let rvars (mon : monom) =
+  let rvar2monom k v = if (is_rvar k) then Atom.Map.singleton k v
 		       else Atom.Map.empty in
   Map.fold mon
     ~init:Atom.Map.empty
-    ~f:(fun ~key:k ~data:v m -> mult_monom m (var2monom k v) )
+    ~f:(fun ~key:k ~data:v m -> mult_monom m (rvar2monom k v) )
+
+let hvars (mon : monom) =
+  let hvar2monom k v = if (is_hvar k) then Atom.Map.singleton k v
+		       else Atom.Map.empty in
+  Map.fold mon
+    ~init:Atom.Map.empty
+    ~f:(fun ~key:k ~data:v m -> mult_monom m (hvar2monom k v) )
 
 let params (mon : monom) =  
   let param2monom k v = if (is_param k) then Atom.Map.singleton k v
@@ -293,7 +307,7 @@ let params (mon : monom) =
     ~f:(fun ~key:k ~data:v m -> mult_monom m (param2monom k v) )
     
 let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
-  if ((Map.compare_direct BI.compare (vars s.monom) mon) = 0) then
+  if ((Map.compare_direct BI.compare (mult_monom (rvars s.monom) (hvars s.monom)) mon) = 0) then
     mk_poly [(c, mk_sum [] (params s.monom))]
   else SP.zero
     
@@ -303,7 +317,9 @@ let coeff (p : poly) (mon : monom) =
 
 let mons (p : poly) =
   Map.fold p ~init:[]
-	     ~f:(fun ~key:s ~data:_c list -> (vars s.monom) :: list)
+	     ~f:(fun ~key:s ~data:_c list -> (mult_monom (rvars s.monom) (hvars s.monom)) :: list)
+
+let degree (v : atom) (m : monom) = try Map.find_exn m v with Not_found -> BI.zero
 
 let mons_sets_product (m_list1 : monom list) (m_list2 : monom list) =
   let prod_el_list x list =
@@ -312,7 +328,83 @@ let mons_sets_product (m_list1 : monom list) (m_list2 : monom list) =
 		~f:(fun list x -> (prod_el_list x m_list2) @ list) in
   let prod = Set.to_list (Sum.Set.of_list (L.map prod ~f:(fun m -> mk_sum [] m))) in
   L.map prod ~f:(fun s -> s.monom)
- 		 
+
+let all_index_poss monom_list indices =
+  let rec aux output_list = function
+    | [] -> output_list
+    | m :: rest ->
+       let i_list = Set.to_list (ivars_monom m) in
+       if (L.length i_list = 0) then aux (m :: output_list) rest
+       else if (L.length i_list = 1) then    
+	 let list = L.fold_left indices ~init:[]
+	            ~f:(fun l x -> (map_idx_monom ~f:(fun _ -> x) m) :: l) in			    
+	 aux (output_list @ list) rest
+       else failwith "Not supported"
+  in aux [] monom_list
+
+let rvars_set (m : monom) =
+  Map.fold m ~init:Atom.Set.empty
+	     ~f:(fun ~key:k ~data:_v se ->
+	         Atom.Set.union se (if is_rvar k then Atom.Set.singleton k else Atom.Set.empty))
+	     
+let list2string (list : string list) sep lim1 lim2 =
+  let rec aux output = function
+    | [] -> output
+    | [s] -> output ^ s
+    | s :: rest -> aux (output ^ s ^ sep) rest
+  in lim1 ^ (aux "" list) ^ lim2
+	     
+let matrix_row (a : atom) (recur : monom list) (recur_j : monom list) =
+  list2string (List.map (recur @ recur_j) ~f:(fun x -> BI.to_string (degree a x))) ", " "[" "]"
+	     
+let smt_case mon rvars_hm nr recur recur_j n_delta =
+  let monomials = Atom.Set.to_list
+     (Atom.Set.union (rvars_set mon) (Atom.Set.union (rvars_set rvars_hm) (rvars_set nr)) ) in
+  let (matrix, vector) = L.fold_left monomials ~init: ([], [])
+     ~f:(fun (mat,vec) x ->
+	 (mat @ [matrix_row x recur recur_j],
+	  vec @ [BI.(to_string ((degree x mon) -! (degree x rvars_hm) -! (degree x nr)))] ) ) in
+  "\'{\\\"matrix\\\" : " ^ (list2string matrix ", " "[" "]") ^
+    ", \\\"vector\\\": " ^ (list2string vector ", " "[" "]") ^
+    ", \\\"L\\\": " ^ (string_of_int (L.length recur)) ^
+    ", \\\"D\\\": " ^ (string_of_int (n_delta)) ^ "}\'"
+		    
+	 
+let smt_system mon (rvars_hm : monom) non_recur recur recur_j n_delta =
+  L.fold_left non_recur
+     ~init:String.Set.empty	      
+     ~f:(fun se x -> String.Set.union se
+		     (String.Set.singleton (smt_case mon rvars_hm x recur recur_j n_delta)) )     
+
+     
+(* This function is not finished *)     
+let overlap (m : monom) (hm : monom) (k1 : k_inf) (k2 : k_inf) =
+  let indices = Ivar.Set.to_list (ivars_monom (mult_monom m (rvars hm))) in
+  let handles_list = Map.fold (hvars hm) ~init:[]
+	     ~f:(fun ~key:k ~data:v list -> if (BI.(compare v one) = 0) then k :: list
+				       else if (BI.(compare v (one +! one)) = 0) then [k;k] @ list
+					  else failwith "Not supported" )  in  
+  if (L.length handles_list > 1) then failwith "Not supported" (* Change to support 2 *)
+  else if (L.length handles_list = 1) then    
+    if L.mem k1.h (L.hd_exn handles_list) then (* The handle variable is in G_1 *)
+      let non_recursive = all_index_poss k1.n indices in
+      let recursive_j = all_index_poss k1.rj indices in
+      let system = (smt_system m (rvars hm) non_recursive k1.r recursive_j (L.length k1.rj)) in
+      let system = list2string (Set.to_list system) ", " "{" "}" in
+      F.printf "%s" system ;
+      5
+      (* smt_solver (smt_system m (rvars hm) indices non_recursive k1.r recursive_j) *)
+    else
+      let non_recursive = all_index_poss k2.n indices in      
+      let recursive_j = all_index_poss k2.rj indices in
+      let system = (smt_system m (rvars hm) non_recursive k2.r recursive_j (L.length k2.rj)) in
+      let system = list2string (Set.to_list system) ",\n" "" "" in
+      F.printf "%s" system ;      
+      4				   
+(*smt_solver (smt_system m (rvars hm) non_recursive k2.r recursive_j) *)
+  else
+    5
+       		 
       
 (* ----------------------------------------------------------------------- *)
 (* pretty printing *)

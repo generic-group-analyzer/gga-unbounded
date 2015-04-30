@@ -63,14 +63,19 @@ let s_constr =
 let system = [m_constr; s_constr]
 let system = split {name = "k"; id = 0} system
 
+let unit_monom = mk_monom []
+let k1 = {h = []; n = [unit_monom]; r =[]; rj =[]}
+let k2 = {h = [hm i]; n = [unit_monom; (mk_monom [(NoInv,rR i)]) ; (mk_monom [(NoInv,rW)])];
+	  r =[(mk_monom [(NoInv,rV)])]; rj =[]}
+	   
 let monomials = mons m_constr.poly
 
-let rec list_element n = function
-  | [] -> failwith "empty list"
-  | hd :: tl -> if n = 1 then hd else list_element (n-1) tl
-		   
+		     
+let _n = overlap (List.nth_exn monomials 0) (List.nth_exn monomials 1) k1 k2
+		     
 let () =
   F.printf "%a" pp_constr_conj system ;
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) monomials ;
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
-  F.printf "%a" pp_poly (coeff m_constr.poly (list_element 4 monomials)) ;
+  F.printf "%a\n" pp_poly (coeff m_constr.poly (List.nth_exn monomials 3)) ;
+  F.printf "%s" (Util.BI.to_string (degree rW (List.nth_exn monomials 0))) ;
