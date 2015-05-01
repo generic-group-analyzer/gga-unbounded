@@ -353,6 +353,12 @@ let list2string (list : string list) sep lim1 lim2 =
     | [s] -> output ^ s
     | s :: rest -> aux (output ^ s ^ sep) rest
   in lim1 ^ (aux "" list) ^ lim2
+
+let handle_group (h : atom) k1 k2 =
+  let h_list1 = L.map k1.h ~f:(function Hvar (v,_) -> v | _ -> failwith "Hvar expected") in
+  let h_list2 = L.map k2.h ~f:(function Hvar (v,_) -> v | _ -> failwith "Hvar expected") in
+  let h_name = match h with Hvar (v,_) -> v | _ -> failwith "Hvar expected" in
+  if L.mem h_list1 h_name then 1 else if L.mem h_list2 h_name then 2 else failwith "Unknown Hvar"
 	     
 let matrix_row (a : atom) (recur : monom list) (recur_j : monom list) =
   list2string (List.map (recur @ recur_j) ~f:(fun x -> BI.to_string (degree a x))) ", " "[" "]"
@@ -366,8 +372,8 @@ let smt_case mon rvars_hm nr recur recur_j n_delta =
 	  vec @ [BI.(to_string ((degree x mon) -! (degree x rvars_hm) -! (degree x nr)))] ) ) in
   "\'{\\\"matrix\\\" : " ^ (list2string matrix ", " "[" "]") ^
     ", \\\"vector\\\": " ^ (list2string vector ", " "[" "]") ^
-    ", \\\"L\\\": " ^ (string_of_int (L.length recur)) ^
-    ", \\\"D\\\": " ^ (string_of_int (n_delta)) ^ "}\'"
+    ", \\\"lambda\\\": " ^ (string_of_int (L.length recur)) ^
+    ", \\\"indices\\\": " ^ (string_of_int (n_delta)) ^ "}\'"
 		    
 	 
 let smt_system mon (rvars_hm : monom) non_recur recur recur_j n_delta =
@@ -376,34 +382,63 @@ let smt_system mon (rvars_hm : monom) non_recur recur recur_j n_delta =
      ~f:(fun se x -> String.Set.union se
 		     (String.Set.singleton (smt_case mon rvars_hm x recur recur_j n_delta)) )     
 
-     
-(* This function is not finished *)     
+let simple_system mon rvars_hm n r rj indices =
+  let non_recursive = all_index_poss n indices in
+  let recursive_j = all_index_poss rj indices in
+  let system = smt_system mon rvars_hm non_recursive r recursive_j (L.length indices) in	
+  list2string (Set.to_list system) ",\n" "" ""
+
+let double_system mon rvars_hm n1 r1 rj1 n2 r2 rj2 indices =
+  let non_recursive1 = all_index_poss n1 indices in  
+  let non_recursive2 = all_index_poss n2 indices in
+  let non_recursive = mons_sets_product non_recursive1 non_recursive2 in
+
+  let recursive_j1 = all_index_poss rj1 indices in
+  let recursive_j2 = all_index_poss rj2 indices in
+  let recursive_j = mons_sets_product recursive_j1 recursive_j2 in
+
+  let recursive = mons_sets_product r1 r2 in
+  let recursive = recursive @ (L.filter recursive_j
+				        ~f:(fun x -> Ivar.Set.is_empty (ivars_monom x)) ) in
+  let recursive_j = L.filter recursive_j
+			     ~f:(fun x -> not (Ivar.Set.is_empty (ivars_monom x))) in
+  let system = smt_system mon rvars_hm non_recursive recursive recursive_j (L.length indices) in
+  list2string (Set.to_list system) ",\n" "" "" 
+         
 let overlap (m : monom) (hm : monom) (k1 : k_inf) (k2 : k_inf) =
-  let indices = Ivar.Set.to_list (ivars_monom (mult_monom m (rvars hm))) in
+  let indices = Ivar.Set.to_list (ivars_monom (mult_monom m hm)) in
   let handles_list = Map.fold (hvars hm) ~init:[]
 	     ~f:(fun ~key:k ~data:v list -> if (BI.(compare v one) = 0) then k :: list
 				       else if (BI.(compare v (one +! one)) = 0) then [k;k] @ list
 					  else failwith "Not supported" )  in  
-  if (L.length handles_list > 1) then failwith "Not supported" (* Change to support 2 *)
+  if (L.length handles_list > 2) then failwith "Not supported"
   else if (L.length handles_list = 1) then    
-    if L.mem k1.h (L.hd_exn handles_list) then (* The handle variable is in G_1 *)
-      let non_recursive = all_index_poss k1.n indices in
-      let recursive_j = all_index_poss k1.rj indices in
-      let system = (smt_system m (rvars hm) non_recursive k1.r recursive_j (L.length k1.rj)) in
-      let system = list2string (Set.to_list system) ", " "{" "}" in
+    if (handle_group (L.hd_exn handles_list) k1 k2) = 1 then (* The handle variable is in G_1 *)
+      let system = simple_system m (rvars hm) k1.n k1.r k1.rj indices in
       F.printf "%s" system ;
-      5
+      4
       (* smt_solver (smt_system m (rvars hm) indices non_recursive k1.r recursive_j) *)
     else
-      let non_recursive = all_index_poss k2.n indices in      
-      let recursive_j = all_index_poss k2.rj indices in
-      let system = (smt_system m (rvars hm) non_recursive k2.r recursive_j (L.length k2.rj)) in
-      let system = list2string (Set.to_list system) ",\n" "" "" in
+      let system = simple_system m (rvars hm) k2.n k2.r k2.rj indices in
       F.printf "%s" system ;      
       4				   
 (*smt_solver (smt_system m (rvars hm) non_recursive k2.r recursive_j) *)
   else
-    5
+    if (handle_group (L.nth_exn handles_list 0) k1 k2) = 1 &&
+       (handle_group (L.nth_exn handles_list 1) k1 k2) = 1 then
+      let system = double_system m (rvars hm) k1.n k1.r k1.rj k1.n k1.r k1.rj indices in
+      F.printf "%s" system ;
+      5
+    else if (handle_group (L.nth_exn handles_list 0) k1 k2) = 2 &&
+            (handle_group (L.nth_exn handles_list 1) k1 k2) = 2 then
+      let system = double_system m (rvars hm) k2.n k2.r k2.rj k2.n k2.r k2.rj indices in
+      F.printf "%s" system ;
+      5
+    else
+      let () = F.printf "%a" (pp_list ", " pp_atom) handles_list in
+      let system = double_system m (rvars hm) k1.n k1.r k1.rj k2.n k2.r k2.rj indices in
+      F.printf "%s" system ;
+      5
        		 
       
 (* ----------------------------------------------------------------------- *)
