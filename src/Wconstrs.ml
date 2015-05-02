@@ -308,7 +308,7 @@ let params (mon : monom) =
     
 let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
   if ((Map.compare_direct BI.compare (mult_monom (rvars s.monom) (hvars s.monom)) mon) = 0) then
-    mk_poly [(c, mk_sum [] (params s.monom))]
+    mk_poly [(c, mk_sum s.ivars (params s.monom))]
   else SP.zero
     
 let coeff (p : poly) (mon : monom) =
@@ -363,7 +363,7 @@ let handle_group (h : atom) k1 k2 =
 let matrix_row (a : atom) (recur : monom list) (recur_j : monom list) =
   list2string (List.map (recur @ recur_j) ~f:(fun x -> BI.to_string (degree a x))) ", " "[" "]"
 	     
-let smt_case mon rvars_hm nr recur recur_j n_delta =
+let smt_case mon rvars_hm nr recur recur_j n_indices =
   let monomials = Atom.Set.to_list
      (Atom.Set.union (rvars_set mon) (Atom.Set.union (rvars_set rvars_hm) (rvars_set nr)) ) in
   let (matrix, vector) = L.fold_left monomials ~init: ([], [])
@@ -373,20 +373,19 @@ let smt_case mon rvars_hm nr recur recur_j n_delta =
   "\'{\\\"matrix\\\" : " ^ (list2string matrix ", " "[" "]") ^
     ", \\\"vector\\\": " ^ (list2string vector ", " "[" "]") ^
     ", \\\"lambda\\\": " ^ (string_of_int (L.length recur)) ^
-    ", \\\"indices\\\": " ^ (string_of_int (n_delta)) ^ "}\'"
-		    
-	 
-let smt_system mon (rvars_hm : monom) non_recur recur recur_j n_delta =
+    ", \\\"indices\\\": " ^ (string_of_int (n_indices)) ^ "}\'"
+		    	 
+let smt_system mon (rvars_hm : monom) non_recur recur recur_j n_indices =
   L.fold_left non_recur
      ~init:String.Set.empty	      
      ~f:(fun se x -> String.Set.union se
-		     (String.Set.singleton (smt_case mon rvars_hm x recur recur_j n_delta)) )     
+		     (String.Set.singleton (smt_case mon rvars_hm x recur recur_j n_indices)) )     
 
 let simple_system mon rvars_hm n r rj indices =
   let non_recursive = all_index_poss n indices in
   let recursive_j = all_index_poss rj indices in
   let system = smt_system mon rvars_hm non_recursive r recursive_j (L.length indices) in	
-  list2string (Set.to_list system) ",\n" "" ""
+  list2string (Set.to_list system) ", " "\"[" "]\""
 
 let double_system mon rvars_hm n1 r1 rj1 n2 r2 rj2 indices =
   let non_recursive1 = all_index_poss n1 indices in  
@@ -403,8 +402,20 @@ let double_system mon rvars_hm n1 r1 rj1 n2 r2 rj2 indices =
   let recursive_j = L.filter recursive_j
 			     ~f:(fun x -> not (Ivar.Set.is_empty (ivars_monom x))) in
   let system = smt_system mon rvars_hm non_recursive recursive recursive_j (L.length indices) in
-  list2string (Set.to_list system) ",\n" "" "" 
-         
+  list2string (Set.to_list system) ", " "\"[" "]\""
+
+let smt_solver system =
+  let syscall cmd =
+    let ic, oc = Unix.open_process cmd in
+    let buf = Buffer.create 16 in
+    (try while true do Buffer.add_channel buf ic 1 done
+     with End_of_file -> ());
+    let _ = Unix.close_process (ic, oc) in Buffer.contents buf
+  in
+  let result = syscall ("python smt_solver.py " ^ system) in
+  if result = "True\n" then true else if result = "False\n" then false
+  else failwith "Communication with python failed"
+    	      
 let overlap (m : monom) (hm : monom) (k1 : k_inf) (k2 : k_inf) =
   let indices = Ivar.Set.to_list (ivars_monom (mult_monom m hm)) in
   let handles_list = Map.fold (hvars hm) ~init:[]
@@ -413,33 +424,38 @@ let overlap (m : monom) (hm : monom) (k1 : k_inf) (k2 : k_inf) =
 					  else failwith "Not supported" )  in  
   if (L.length handles_list > 2) then failwith "Not supported"
   else if (L.length handles_list = 1) then    
-    if (handle_group (L.hd_exn handles_list) k1 k2) = 1 then (* The handle variable is in G_1 *)
+    if (handle_group (L.hd_exn handles_list) k1 k2) = 1 then
       let system = simple_system m (rvars hm) k1.n k1.r k1.rj indices in
-      F.printf "%s" system ;
-      4
-      (* smt_solver (smt_system m (rvars hm) indices non_recursive k1.r recursive_j) *)
+      smt_solver system
     else
       let system = simple_system m (rvars hm) k2.n k2.r k2.rj indices in
-      F.printf "%s" system ;      
-      4				   
-(*smt_solver (smt_system m (rvars hm) non_recursive k2.r recursive_j) *)
+      smt_solver system
   else
     if (handle_group (L.nth_exn handles_list 0) k1 k2) = 1 &&
        (handle_group (L.nth_exn handles_list 1) k1 k2) = 1 then
       let system = double_system m (rvars hm) k1.n k1.r k1.rj k1.n k1.r k1.rj indices in
-      F.printf "%s" system ;
-      5
+      smt_solver system
     else if (handle_group (L.nth_exn handles_list 0) k1 k2) = 2 &&
             (handle_group (L.nth_exn handles_list 1) k1 k2) = 2 then
       let system = double_system m (rvars hm) k2.n k2.r k2.rj k2.n k2.r k2.rj indices in
-      F.printf "%s" system ;
-      5
+      smt_solver system
     else
       let () = F.printf "%a" (pp_list ", " pp_atom) handles_list in
       let system = double_system m (rvars hm) k1.n k1.r k1.rj k2.n k2.r k2.rj indices in
-      F.printf "%s" system ;
-      5
-       		 
+      smt_solver system
+
+let stable (eq : constr) (s : sum) k1 k2 =
+  let distinct m1 m2 = (Map.compare_direct BI.compare m1 m2) <> 0 in
+  if (eq.qvars = [] && eq.is_eq = Eq) then
+    let handle_mons = L.filter (mons eq.poly) ~f:(fun x -> distinct (hvars x) (mk_monom []) ) in
+    if (L.fold_left handle_mons ~init:false ~f:(fun is_stb x -> is_stb || (overlap s.monom x k1 k2)) ) then
+      [eq]
+    else
+      [{qvars = []; is_eq = Eq; poly = Map.fold eq.poly ~init:Sum.Map.empty
+       	~f:(fun ~key:s2 ~data:c p -> if (distinct s2.monom s.monom) then add_poly p (mk_poly [(c,s2)])
+   				     else p) };
+       {qvars = s.ivars; is_eq = Eq; poly = coeff eq.poly s.monom}]
+  else [eq]
       
 (* ----------------------------------------------------------------------- *)
 (* pretty printing *)
