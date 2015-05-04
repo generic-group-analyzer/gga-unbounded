@@ -281,42 +281,46 @@ let split (iv : ivar) (conj : constr_conj) =
     | c :: rest -> aux (new_conj @ (split_constr iv c)) rest
   in
   aux [] conj    
-    
-let rvars (mon : monom) =
-  let rvar2monom k v = if (is_rvar k) then Atom.Map.singleton k v
-		       else Atom.Map.empty in
-  Map.fold mon
-    ~init:Atom.Map.empty
-    ~f:(fun ~key:k ~data:v m -> mult_monom m (rvar2monom k v) )
 
-let hvars (mon : monom) =
-  let hvar2monom k v = if (is_hvar k) then Atom.Map.singleton k v
-		       else Atom.Map.empty in
-  Map.fold mon
-    ~init:Atom.Map.empty
-    ~f:(fun ~key:k ~data:v m -> mult_monom m (hvar2monom k v) )
+type monlist = (atom * BI.t) list with compare
 
-let params (mon : monom) =  
-  let param2monom k v = if (is_param k) then Atom.Map.singleton k v
-		         else Atom.Map.empty in
-  Map.fold mon
-    ~init:Atom.Map.empty
-    ~f:(fun ~key:k ~data:v m -> mult_monom m (param2monom k v) )
-    
+let equal_monlist a b =
+  compare_monlist a b = 0
+
+let monom_to_monlist p_var mon =
+  Map.filter mon ~f:(fun ~key:k ~data:_v -> p_var k)
+  |> Map.to_alist
+  |> L.sort ~cmp:(fun (k1,_) (k2,_) -> compare_atom k1 k2)
+  
+let rvars (mon : monom)  = monom_to_monlist is_rvar mon
+let hvars (mon : monom)  = monom_to_monlist is_hvar mon
+let params (mon : monom) = monom_to_monlist is_param mon
+
+let monom_filter_vars p_var mon =
+  Map.filter ~f:(fun ~key:k ~data:_d -> p_var k) mon
+
+let rvars_monom  (mon : monom) = monom_filter_vars is_rvar mon
+let hvars_monom  (mon : monom) = monom_filter_vars is_hvar mon
+let params_monom (mon : monom) = monom_filter_vars is_param mon
+
 let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
-  if ((Map.compare_direct BI.compare (mult_monom (rvars s.monom) (hvars s.monom)) mon) = 0) then
-    mk_poly [(c, mk_sum s.ivars (params s.monom))]
+  if (equal_monlist (rvars s.monom) (rvars mon)) &&
+     (equal_monlist (hvars s.monom) (hvars mon))
+  then mk_poly [(c, mk_sum s.ivars (params_monom s.monom))]
   else SP.zero
     
 let coeff (p : poly) (mon : monom) =
-  Map.fold p ~init:(mk_poly [])
-	     ~f:(fun ~key:s ~data:c p -> add_poly p (coeff_sum c s mon) )
+  Map.fold p
+    ~init:(mk_poly [])
+	  ~f:(fun ~key:s ~data:c p -> add_poly p (coeff_sum c s mon) )
 
 let mons (p : poly) =
-  Map.fold p ~init:[]
-	     ~f:(fun ~key:s ~data:_c list -> (mult_monom (rvars s.monom) (hvars s.monom)) :: list)
+  Map.fold p
+    ~init:[]
+	  ~f:(fun ~key:s ~data:_c list -> (rvars s.monom, hvars s.monom) :: list)
 
-let degree (v : atom) (m : monom) = try Map.find_exn m v with Not_found -> BI.zero
+let degree (v : atom) (m : monom) =
+  Option.value ~default:BI.zero (Map.find m v)
 
 let mons_sets_product (m_list1 : monom list) (m_list2 : monom list) =
   let prod_el_list x list =
@@ -413,45 +417,53 @@ let smt_solver system =
   if result = "True\n" then true else if result = "False\n" then false
   else failwith "Communication with python failed"
     	      
-let overlap (m : monom) (hm : monom) (k1 : k_inf) (k2 : k_inf) =
+let overlap (m : monom) (rvars : monlist) (k1 : k_inf) (k2 : k_inf) =
   let indices = Ivar.Set.to_list (ivars_monom (mult_monom m hm)) in
-  let handles_list = Map.fold (hvars hm) ~init:[]
-	     ~f:(fun ~key:k ~data:v list -> if (BI.(compare v one) = 0) then k :: list
-				       else if (BI.(compare v (one +! one)) = 0) then [k;k] @ list
-					  else failwith "Not supported" )  in  
-  if (L.length handles_list > 2) then failwith "Not supported"
-  else if (L.length handles_list = 1) then    
-    if (handle_group (L.hd_exn handles_list) k1 k2) = 1 then
-      let system = simple_system m (rvars hm) k1.n k1.r k1.rj indices in
+  let handles_list =
+    L.concat_map (hvars hm)
+	    ~f:(fun (v,e) ->
+            if BI.is_one e then [v]
+				    else if BI.(equal e (of_int 2)) then [v;v]
+					  else failwith "Not supported" )
+  in
+  match handles_list with
+  | [h] ->
+    if (handle_group h k1 k2) = 1 then
+      let system = simple_system m (rvars_monom hm) k1.n k1.r k1.rj indices in
       smt_solver system
     else
-      let system = simple_system m (rvars hm) k2.n k2.r k2.rj indices in
+      let system = simple_system m (rvars_monom hm) k2.n k2.r k2.rj indices in
       smt_solver system
-  else
-    if (handle_group (L.nth_exn handles_list 0) k1 k2) = 1 &&
-       (handle_group (L.nth_exn handles_list 1) k1 k2) = 1 then
-      let system = double_system m (rvars hm) k1.n k1.r k1.rj k1.n k1.r k1.rj indices in
+  | [h1; h2] ->
+    if (handle_group h1 k1 k2) = 1 &&
+       (handle_group h2 k1 k2) = 1 then
+      let system = double_system m (rvars_monom hm) k1.n k1.r k1.rj k1.n k1.r k1.rj indices in
       smt_solver system
-    else if (handle_group (L.nth_exn handles_list 0) k1 k2) = 2 &&
-            (handle_group (L.nth_exn handles_list 1) k1 k2) = 2 then
-      let system = double_system m (rvars hm) k2.n k2.r k2.rj k2.n k2.r k2.rj indices in
+    else if (handle_group h1 k1 k2) = 2 &&
+            (handle_group h2 k1 k2) = 2 then
+      let system = double_system m (rvars_monom hm) k2.n k2.r k2.rj k2.n k2.r k2.rj indices in
       smt_solver system
     else
       let () = F.printf "%a" (pp_list ", " pp_atom) handles_list in
-      let system = double_system m (rvars hm) k1.n k1.r k1.rj k2.n k2.r k2.rj indices in
+      let system = double_system m (rvars_monom hm) k1.n k1.r k1.rj k2.n k2.r k2.rj indices in
       smt_solver system
+  | [] ->
+    assert false
+  | _::_::_::_ ->
+    failwith "Not supported"
 
 let stable (eq : constr) (s : sum) k1 k2 =
-  let distinct m1 m2 = (Map.compare_direct BI.compare m1 m2) <> 0 in
   if (eq.qvars = [] && eq.is_eq = Eq) then
-    let handle_mons = L.filter (mons eq.poly) ~f:(fun x -> distinct (hvars x) (mk_monom []) ) in
-    if (L.fold_left handle_mons ~init:false ~f:(fun is_stb x -> is_stb || (overlap s.monom x k1 k2)) ) then
+    let handle_mons = L.filter (mons eq.poly) ~f:(fun (rvs,hvs) -> hvs <> []) in
+    if (L.exists handle_mons  ~f:(fun (rvs,hvs) -> overlap s.monom x k1 k2)) then
       [eq]
     else
+      failwith "FIXME" (*
       [{qvars = []; is_eq = Eq; poly = Map.fold eq.poly ~init:Sum.Map.empty
        	~f:(fun ~key:s2 ~data:c p -> if (distinct s2.monom s.monom) then add_poly p (mk_poly [(c,s2)])
    				     else p) };
        {qvars = s.ivars; is_eq = Eq; poly = coeff eq.poly s.monom}]
+    *)
   else [eq]
 
 let remove_forall (c : constr) =

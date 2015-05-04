@@ -20,6 +20,7 @@ module BI = struct
   let t_of_sexp se = big_int_of_string (string_of_sexp se)
   let sexp_of_t bi = sexp_of_string (string_of_big_int bi)
   let compare = compare_big_int
+  let equal a b = compare a b = 0
 end
 
 (* ======================================================================= *)
