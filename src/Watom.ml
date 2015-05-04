@@ -38,7 +38,11 @@ type rvar = name_oidx with compare, sexp
 type param = name_oidx with compare, sexp
 
 (* handle variables *)
-type hvar = string * ivar * group_name with compare, sexp
+type hvar = {
+  hv_name : string;
+  hv_ivar : ivar;
+  hv_gname : group_name
+} with compare, sexp
 
 type atom =
   | Param of param
@@ -73,8 +77,8 @@ let is_hvar = function Hvar _ -> true | _ -> false
 
 let ivars_atom = function
   | Rvar (_,Some i)
-  | Param (_,Some i)
-  | Hvar (_,i,_)     -> Ivar.Set.singleton i
+  | Param (_,Some i) -> Ivar.Set.singleton i
+  | Hvar hv          -> Ivar.Set.singleton hv.hv_ivar
   | _                -> Ivar.Set.empty
 
 (* ----------------------------------------------------------------------- *)
@@ -85,12 +89,13 @@ let mk_rvar ?idx:(idx=None) name =
 
 let mk_param ?idx:(idx=None) name = Param (name,idx)
 
-let mk_hvar ~idx gname name = Hvar (name,idx,gname)
+let mk_hvar ~idx gname name =
+  Hvar {hv_name = name; hv_ivar = idx; hv_gname = gname }
 
 let map_idx ~f = function
   | Rvar (v,Some i)  -> Rvar (v,Some (f i))
   | Param (v,Some i) -> Param (v,Some (f i))
-  | Hvar (v,i,gname) -> Hvar (v, (f i),gname)
+  | Hvar hv          -> Hvar { hv with hv_ivar = f hv.hv_ivar }
   | a                -> a
   
 (* ----------------------------------------------------------------------- *)
@@ -115,7 +120,7 @@ let pp_rvar = pp_name_oidx
 
 let pp_param = pp_name_oidx
 
-let pp_hvar fmt (s,i,gn) =
+let pp_hvar fmt { hv_name=s; hv_ivar=i; hv_gname=gn } =
   F.fprintf fmt "%s_%a@%a" s pp_ivar i pp_gname gn
 
 let pp_inv fmt = function
