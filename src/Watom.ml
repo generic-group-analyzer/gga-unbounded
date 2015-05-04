@@ -8,6 +8,8 @@ open Abbrevs
 
 type inv = NoInv | Inv with compare, sexp
 
+type group_name = G1 | G2 with compare, sexp
+
 (* index variables *)
 type ivar = {
   name : string;
@@ -26,9 +28,6 @@ module Ivar = struct
   include Comparable.Make(T)
 end
 
-(* name with index *)
-type name_idx = string * ivar with compare, sexp
-
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp
 
@@ -39,7 +38,7 @@ type rvar = name_oidx with compare, sexp
 type param = name_oidx with compare, sexp
 
 (* handle variables *)
-type hvar = name_idx with compare, sexp
+type hvar = string * ivar * group_name with compare, sexp
 
 type atom =
   | Param of param
@@ -75,7 +74,7 @@ let is_hvar = function Hvar _ -> true | _ -> false
 let ivars_atom = function
   | Rvar (_,Some i)
   | Param (_,Some i)
-  | Hvar (_,i)       -> Ivar.Set.singleton i
+  | Hvar (_,i,_)     -> Ivar.Set.singleton i
   | _                -> Ivar.Set.empty
 
 (* ----------------------------------------------------------------------- *)
@@ -86,16 +85,20 @@ let mk_rvar ?idx:(idx=None) name =
 
 let mk_param ?idx:(idx=None) name = Param (name,idx)
 
-let mk_hvar ~idx name = Hvar (name,idx)
+let mk_hvar ~idx gname name = Hvar (name,idx,gname)
 
 let map_idx ~f = function
   | Rvar (v,Some i)  -> Rvar (v,Some (f i))
   | Param (v,Some i) -> Param (v,Some (f i))
-  | Hvar (v,i) -> Hvar (v, (f i))
+  | Hvar (v,i,gname) -> Hvar (v, (f i),gname)
   | a                -> a
   
 (* ----------------------------------------------------------------------- *)
 (* Pretty printing *)
+
+let pp_gname fmt = function
+  | G1 -> pp_string fmt "G1"
+  | G2 -> pp_string fmt "G2"
 
 let pp_ivar fmt { name; id } =
   F.fprintf fmt "%s%s" name (String.make id '\'')
@@ -112,7 +115,8 @@ let pp_rvar = pp_name_oidx
 
 let pp_param = pp_name_oidx
 
-let pp_hvar = pp_name_idx
+let pp_hvar fmt (s,i,gn) =
+  F.fprintf fmt "%s_%a@%a" s pp_ivar i pp_gname gn
 
 let pp_inv fmt = function
   | NoInv -> pp_string fmt "NoInv"

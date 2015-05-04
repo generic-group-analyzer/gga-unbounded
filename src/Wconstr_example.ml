@@ -18,7 +18,7 @@ let rW = mk_rvar "W"
 (* Oracle *)
 let i = { name = "i"; id = 0 }
 let j = { name = "j"; id = 0 }
-let hm i = mk_hvar ~idx:i "m"
+let hm i = mk_hvar ~idx:i G2 "m"
 let rR (i : ivar) = mk_rvar ~idx:(Some i) "R"
 
 let lincomb idx p1 p2 p3 =
@@ -63,8 +63,8 @@ let s_constr =
 
 
 let unit_monom = mk_monom []
-let k1 = {h = []; n = [unit_monom]; r =[]; rj =[]}
-let k2 = {h = [hm i]; n = [unit_monom; (mk_monom [(NoInv,rR i)]) ; (mk_monom [(NoInv,rW)])];
+let k1 = { n = [unit_monom]; r =[]; rj =[]}
+let k2 = { n = [unit_monom; (mk_monom [(NoInv,rR i)]) ; (mk_monom [(NoInv,rW)])];
 	  r =[(mk_monom [(NoInv,rV)])]; rj =[]}
 
 let system = [m_constr]

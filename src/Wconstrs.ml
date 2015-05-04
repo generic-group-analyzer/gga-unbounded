@@ -55,7 +55,7 @@ type k_inf = {
 }
 		  					    
 (* ----------------------------------------------------------------------- *)
-(* variables occurences *)
+(* variable occurences *)
 
 let ivars_monom mon =
   Map.fold mon
@@ -82,7 +82,7 @@ let ivars_conj conj =
 
 let mult_monom_atom m (e,a) =
     if BI.compare e BI.zero < 0 && not (is_rvar a) then
-      failwith "mk_monom: only random variables can have negative exponent";
+      failwith "mult_monom_atom: only random variables can have negative exponent";
     Map.change m a
       (function 
          | None   -> Some e
@@ -95,16 +95,13 @@ let mk_monom atoms =
     ~init:Atom.Map.empty
     ~f:(fun m (inv,a) -> mult_monom_atom m (bi_of_inv inv,a))
 
-let mk_sum ivs mon =
-  let iv_occs = ivars_monom mon in
-  let ivs = L.filter ~f:(fun iv -> Set.mem iv_occs iv) ivs in
-  { ivars = ivs; monom = mon }
+let mk_sum ivs mon = { ivars = ivs; monom = mon }
 
 let poly_add m (c,t) =
   Map.change m t
     (function 
     | None    -> Some c
-    | Some c' -> 
+    | Some c' ->
       let c = BI.(c +! c') in
       if BI.is_zero c then None else Some c)
 
@@ -164,19 +161,17 @@ let new_ivar taken old_idx =
 let renaming_away_from taken ivars =
   Set.fold ivars ~init:(Ivar.Map.empty,taken)
     ~f:(fun (m,taken) ivar ->
-      let ivar' = new_ivar taken ivar in
-      (Map.add m ~key:ivar ~data:ivar', Set.add taken ivar'))
+          let ivar' = new_ivar taken ivar in
+          (Map.add m ~key:ivar ~data:ivar', Set.add taken ivar'))
 
 let rename rn ivar =
   Option.value ~default:ivar (Map.find rn ivar)
 
+let free_vars_sum s =
+  (Set.diff (ivars_sum s) (Ivar.Set.of_list s.ivars))
+
 let mult_sum s1 s2 =
-  (* rename bound variables in s1 and s2 *)
-  let free_vars =
-    Set.union
-      (Set.diff (ivars_sum s1) (Ivar.Set.of_list s1.ivars))
-      (Set.diff (ivars_sum s2) (Ivar.Set.of_list s2.ivars))
-  in
+  let free_vars = Set.union (free_vars_sum s1) (free_vars_sum s2) in
   let (rn1,taken) = renaming_away_from free_vars (Ivar.Set.of_list s1.ivars) in
   let ivars1 = L.map s1.ivars ~f:(rename rn1) in
   let monom1 = map_idx_monom  ~f:(rename rn1) s1.monom in
