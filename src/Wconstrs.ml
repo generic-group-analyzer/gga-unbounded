@@ -224,10 +224,7 @@ end
 
 (* ----------------------------------------------------------------------- *)
 (* useful functions *)
-	      
-let subst (_c : constr) (_p : param) =
-  failwith "undefined"
-			     
+	      			     
 let subst_idx_sum (s : sum) (i : ivar) (j : ivar) =
   if L.mem s.ivars i then failwith "impossible to substitute a summation variable"
   else mk_sum s.ivars (map_idx_monom ~f:(fun x -> if x = i then j else x) s.monom)
@@ -456,7 +453,41 @@ let stable (eq : constr) (s : sum) k1 k2 =
    				     else p) };
        {qvars = s.ivars; is_eq = Eq; poly = coeff eq.poly s.monom}]
   else [eq]
-      
+
+let remove_forall (c : constr) =
+  {c with qvars = L.filter c.qvars ~f:(fun x -> L.mem (Ivar.Set.to_list (ivars_constr c)) x )}
+    
+let power_poly (p : poly) (e : BI.t) =
+  let rec aux p' n = if BI.(compare n one) = 0 then p' else aux (mult_poly p' p) BI.(n -! one) in
+  if BI.(compare e zero) < 0 then failwith "Not suported"
+  else if BI.(compare e zero) = 0 then SP.one else aux p e 
+						       
+let subst_sum (c : BI.t) (s : sum) (par : atom) (value : poly) =
+  let d = degree par s.monom in
+  let s = {s with monom = Map.remove s.monom par} in
+  Map.fold (power_poly value d) ~init:(mk_poly [])
+	   ~f:(fun ~key:s' ~data:c' p -> add_poly p (mk_poly [(BI.(c *! c'), mult_sum s s')]))
+	   
+(* not use this function with bound parameters *)
+let subst (c : constr_conj) (par : atom) (value : poly) =
+  List.map c ~f:(fun x -> {x with poly = Map.fold x.poly ~init:(mk_poly [])
+		~f:(fun ~key:s ~data:c p -> add_poly p (subst_sum c s par value) )}  )
+
+let subst_bound_sum c s qvars = function
+  | Param (name, Some _) ->
+     let filt = Map.filter s.monom
+	 ~f:(fun ~key:k ~data:_v -> match k with
+				  | Param (name', Some i) when name' = name && L.mem (s.ivars @ qvars) i -> true
+				  | _ -> false) in
+     if Map.is_empty filt then mk_poly [(c,s)]
+     else mk_poly []
+  | _ -> failwith "Indexed parameter expected"
+	   
+let subst_bound_by_zero (c : constr_conj) (par : atom) =
+  List.map c ~f:(fun x -> {x with poly = Map.fold x.poly ~init:(mk_poly [])
+	     ~f:(fun ~key:s ~data:c p -> add_poly p (subst_bound_sum c s x.qvars par) )}  )
+  |> List.map ~f:remove_forall
+	 
 (* ----------------------------------------------------------------------- *)
 (* pretty printing *)
 

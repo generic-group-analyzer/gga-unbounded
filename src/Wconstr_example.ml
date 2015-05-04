@@ -44,7 +44,8 @@ let wm = lincomb j pm pmR pmS
 let hm_spoly i = SP.of_a (hm i)
 
 let m_constr = mk_constr [i] InEq SP.(wm -! hm_spoly i)
-
+let m_constr = mk_constr [i] InEq SP.(wm -! SP.of_a (pmR i))
+				       
 let ps   = mk_param "ps"
 let psR i = mk_param ~idx:(Some i) "psR"
 let psS i = mk_param ~idx:(Some i) "psS"
@@ -66,9 +67,9 @@ let k1 = {h = []; n = [unit_monom]; r =[]; rj =[]}
 let k2 = {h = [hm i]; n = [unit_monom; (mk_monom [(NoInv,rR i)]) ; (mk_monom [(NoInv,rW)])];
 	  r =[(mk_monom [(NoInv,rV)])]; rj =[]}
 
-
-let system = [m_constr] @ (stable s_constr (mk_sum [] (mk_monom [(NoInv,rW)])) k1 k2)
-(* let system = split {name = "k"; id = 0} system *)
+let system = [m_constr]
+(*let system = [m_constr] @ (stable s_constr (mk_sum [] (mk_monom [(NoInv,rW)])) k1 k2)*)
+(*let system = split {name = "k"; id = 0} system *)
 	   
 let monomials = mons m_constr.poly
 
@@ -78,6 +79,12 @@ let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 
 		 
 let () =
   F.printf "%a" pp_constr_conj system ;
+  let system2 = subst system pm (SP.(one)) in
+  F.printf "%a" pp_constr_conj system2 ;
+  let system3 = subst_bound_by_zero system (pmR j) in
+  F.printf "%a" pp_constr_conj system3 ;
+  (*
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) monomials ;
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
   F.printf "%a\n" pp_poly (coeff m_constr.poly (List.nth_exn monomials 3)) ;
+   *)
