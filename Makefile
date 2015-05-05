@@ -1,3 +1,10 @@
+OCAMLBUILDFLAGS=-cflags "-w +a-e-9-44-48" -use-menhir -menhir "menhir -v" -classic-display -use-ocamlfind -quiet -ocamlc ocamlc -ocamlopt ocamlopt
+COREFLAGS=-pkg core \
+    -pkg sexplib.syntax,comparelib.syntax,fieldslib.syntax,variantslib.syntax \
+    -pkg bin_prot.syntax \
+    -tag short_paths \
+    -cflags -strict-sequence
+
 all:
-	corebuild Wconstr_example.native
+	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./Wconstr_example.native
 	./Wconstr_example.native

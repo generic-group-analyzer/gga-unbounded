@@ -1,5 +1,5 @@
 true: bin_annot, debug
 
 <src>: include
-<src/*>: package(num)
+<src/*>: package(num), thread, package(core), syntax(camlp4o)
 

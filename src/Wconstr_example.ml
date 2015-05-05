@@ -69,12 +69,12 @@ let k2 = { n = [unit_monom; (mk_monom [(NoInv,rR i)]) ; (mk_monom [(NoInv,rW)])]
 	  r =[(mk_monom [(NoInv,rV)])]; rj =[]}
 
 let system = [m_constr]
-(*let system = [m_constr] @ (stable s_constr (mk_sum [] (mk_monom [(NoInv,rW)])) k1 k2)*)
-(*let system = split {name = "k"; id = 0} system *)
+(* let system = [m_constr] @ (stable s_constr (mk_sum [] (mk_monom [(NoInv,rW)])) k1 k2)
+let system = split {name = "k"; id = 0} system *)
 	   
 let monomials = mons m_constr.poly
 
-(*
+
 let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 1) (List.nth_exn monomials 1)) k1 k2
 
 		 
@@ -83,10 +83,14 @@ let () =
   let system2 = subst system pm (SP.(one)) in
   F.printf "%a" pp_constr_conj system2 ;
   let system3 = subst_bound_by_zero system (pmR j) in
-  F.printf "%a" pp_constr_conj system3 ;
+  F.printf "%a" pp_constr_conj system3
   (*
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) monomials ;
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
   F.printf "%a\n" pp_poly (coeff m_constr.poly (List.nth_exn monomials 3)) ;
-   *)
-*)
+  *)
+
+let () =
+  let inp  = Wparse.constr "1" in
+  let outp = Wparse.constr "0" in
+  assert (not (equal_constr inp outp))

@@ -46,7 +46,18 @@ type constr = {
 type constr_conj = constr list with compare, sexp
 
 type constr_disj = constr_conj list with compare, sexp
-		  					    
+
+(* ----------------------------------------------------------------------- *)
+(* equality functions *)
+
+let equal_is_eq a b = compare_is_eq a b = 0
+let equal_monom a b = compare_monom a b = 0
+let equal_sum a b = compare_sum a b = 0
+let equal_poly a b = compare_poly a b = 0
+let equal_constr a b = compare_constr a b = 0
+let equal_constr_conj a b = compare_constr_conj a b = 0
+let equal_constr_disj a b = compare_constr_disj a b = 0
+
 (* ----------------------------------------------------------------------- *)
 (* variable occurences *)
 

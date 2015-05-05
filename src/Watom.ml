@@ -1,5 +1,4 @@
 open Core.Std
-open Big_int
 open Util
 open Abbrevs
 
