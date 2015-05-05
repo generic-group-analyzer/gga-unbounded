@@ -18,7 +18,14 @@ rule lex = parse
   | [' ' '\t']
   | newline { Lexing.new_line lexbuf; lex lexbuf }
   | eof     { EOF }
+  | ":"     { COLON }
+  | ","     { COMMA }
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
+  | "forall" { FORALL }
+  | ['a'-'z' 'A'-'Z' ]
+    ['a'-'z' 'A'-'Z' '\'' '_' '0'-'9']* as s
+    { ID s }
+
 
 and comment = parse
   | "*)"        { () }

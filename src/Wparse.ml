@@ -17,7 +17,12 @@ let wrap_error f s =
     in
     print_endline err;
     failwith err
-  | _ -> failwith "Unknown error while lexing/parsing."
+  | e ->
+    let ex = Printexc.to_string e in
+    let bt = Printexc.get_backtrace () in
+    let err = Printf.sprintf "Unknown error while lexing/parsing: %s\n%s%!" ex bt in
+    print_endline err;    
+    failwith err
 
 (** Parse type declaration. *)
 let constr = wrap_error (Wparser.constr Wlexer.lex)

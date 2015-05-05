@@ -91,6 +91,5 @@ let () =
   *)
 
 let () =
-  let inp  = Wparse.constr "1" in
-  let outp = Wparse.constr "0" in
-  assert (not (equal_constr inp outp))
+  let c  = Wparse.constr "forall i1,i2: 1" in
+  F.printf "%a" pp_constr c
