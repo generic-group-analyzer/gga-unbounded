@@ -2,6 +2,7 @@ open Core.Std
 open Abbrevs
 open Watom
 open Wconstrs
+open Wrules
 
 (* Example:
    Public key: [V,W]_1
@@ -73,7 +74,7 @@ let system = [m_constr]
 	   
 let monomials = mons m_constr.poly
 
-		     
+(*
 let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 1) (List.nth_exn monomials 1)) k1 k2
 
 		 
@@ -88,3 +89,4 @@ let () =
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
   F.printf "%a\n" pp_poly (coeff m_constr.poly (List.nth_exn monomials 3)) ;
    *)
+*)
