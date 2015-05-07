@@ -28,7 +28,6 @@ let rvars_monom  (mon : monom) = monom_filter_vars is_rvar mon
 let hvars_monom  (mon : monom) = monom_filter_vars is_hvar mon
 let params_monom (mon : monom) = monom_filter_vars is_param mon
 
-
 let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
   if (equal_monlist (rvars s.monom) (rvars mon)) &&
      (equal_monlist (hvars s.monom) (hvars mon))

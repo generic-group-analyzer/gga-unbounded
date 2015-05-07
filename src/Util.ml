@@ -24,6 +24,16 @@ module BI = struct
 end
 
 (* ======================================================================= *)
+(* List functions *)
+
+let repeat_element x n =
+  let rec aux output k =
+    if k <= 0 then output
+    else aux (x :: output) (k-1)
+  in
+  aux [] n
+	      
+(* ======================================================================= *)
 (* Pretty printing *)
 
 let rec pp_list sep pp_elt f l =

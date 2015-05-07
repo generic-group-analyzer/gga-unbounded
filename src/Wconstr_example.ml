@@ -45,7 +45,6 @@ let wm = lincomb j pm pmR pmS
 let hm_spoly i = SP.of_a (hm i)
 
 let m_constr = mk_constr [i] InEq SP.(wm -! hm_spoly i)
-let m_constr = mk_constr [i] InEq SP.(wm -! SP.of_a (pmR i))
 				       
 let ps   = mk_param "ps"
 let psR i = mk_param ~idx:(Some i) "psR"
@@ -77,13 +76,14 @@ let monomials = mons m_constr.poly
 
 let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 1) (List.nth_exn monomials 1)) k1 k2
 
-		 
+  (*		 
 let () =
   F.printf "%a" pp_constr_conj system ;
   let system2 = subst system pm (SP.(one)) in
   F.printf "%a" pp_constr_conj system2 ;
   let system3 = subst_bound_by_zero system (pmR j) in
   F.printf "%a" pp_constr_conj system3
+  *)
   (*
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) monomials ;
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
@@ -91,5 +91,14 @@ let () =
   *)
 
 let () =
-  let c  = Wparse.constr "forall i1,i2: 1" in
-  F.printf "%a" pp_constr c
+  let c1 = Wparse.constr "forall i,j: (sum k: rR_k * pr_k * pr_j) = 0" in
+  let c2 = split_constr {name = "w"; id = 0} c1 in
+  let coeff1 = coeff c1.poly (mk_monom [(NoInv, Rvar("rR",Some {name = "k"; id = 0}))]) in
+  F.printf "%a\n" pp_constr c1;
+  F.printf "%a\n" pp_poly coeff1;
+  F.printf "%a\n" pp_constr_conj c2;
+
+  assert(isomorphic_constr c1 c1)
+ 
+		 
+

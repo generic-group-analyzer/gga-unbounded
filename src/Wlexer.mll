@@ -11,7 +11,8 @@
 
 let blank = [' ' '\t' '\r' '\n']
 let newline = '\n'
-
+let chars = ['a'-'z' 'A'-'Z' '0'-'9']
+		
 rule lex = parse
   | blank+  { lex lexbuf }
   | "(*"    { comment lexbuf; lex lexbuf }
@@ -20,11 +21,23 @@ rule lex = parse
   | eof     { EOF }
   | ":"     { COLON }
   | ","     { COMMA }
+  | "_"     { UNDERSCORE }
+  | "("     { LPAR }
+  | ")"     { RPAR }
+  | "*"     { STAR }
+  | "+"     { PLUS }
+  | "-"     { MINUS }
+  | "^"     { HAT }
+  | "="     { EQ }
+  | "<>"    { NEQ }
+	    
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
   | "forall" { FORALL }
-  | ['a'-'z' 'A'-'Z' ]
-    ['a'-'z' 'A'-'Z' '\'' '_' '0'-'9']* as s
-    { ID s }
+  | "sum"    { SUM }
+  | ['i'-'k']chars* as s    { ID s}
+  | ['r']chars* as s    { RVAR s}
+  | ['p']chars* as s    { PARAM s}
+  | ['h']chars* as s    { HVAR s}						    
 
 
 and comment = parse
