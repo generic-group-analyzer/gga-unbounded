@@ -18,7 +18,7 @@ val sexp_of_monom : monom -> Sexplib.Type.t
 val compare_monom : monom -> monom -> int
 val equal_monom   : monom -> monom -> bool
 
-type sum = private { ivars : ivar list; monom : monom; }
+type sum = private { ivars : ivar list; i_ineq : ivar_pair list; monom : monom; }
 val sum_of_sexp : Sexplib.Type.t -> sum
 val sexp_of_sum : sum -> Sexplib.Type.t
 val compare_sum : sum -> sum -> int
@@ -33,14 +33,14 @@ val poly_of_sexp : Sexplib.Type.t -> poly
 val sexp_of_poly : poly -> Sexplib.Type.t
 val compare_poly : poly -> poly -> int
 val equal_poly   : poly -> poly -> bool
-val isomorphic_poly : poly -> poly -> bool
+(*val isomorphic_poly : poly -> poly -> bool*)
 
-type constr = private { qvars : ivar list; is_eq : is_eq; poly : poly; }
+type constr = private { qvars : ivar list; q_ineq : ivar_pair list; is_eq : is_eq; poly : poly; }
 val constr_of_sexp : Sexplib.Type.t -> constr
 val sexp_of_constr : constr -> Sexplib.Type.t
 val compare_constr : constr -> constr -> int
 val equal_constr : constr -> constr -> bool
-val isomorphic_constr : constr -> constr -> bool					      
+(*val isomorphic_constr : constr -> constr -> bool*)					      
 
 type constr_conj = constr list
 val constr_conj_of_sexp : Sexplib.Type.t -> constr_conj
@@ -75,16 +75,17 @@ val map_idx_monom : f:(ivar -> ivar) ->  monom -> monom
 
 val new_ivar : Ivar.Set.t -> ivar -> ivar
 
-val rename_sum_indices : poly -> string -> poly
+(*val rename_sum_indices : poly -> string -> poly*)
 					     
 (* ----------------------------------------------------------------------- *)
 (* smart constructors *)
 
 val mk_monom : (inv * atom) list -> BI.t Atom.Map.t
-val mk_sum : ivar list -> monom -> sum
+val mk_sum : ivar list -> ivar_pair list -> monom -> sum
 val mk_poly : (BI.t * sum) list -> BI.t Sum.Map.t
-val mk_constr : ivar list ->  is_eq -> poly -> constr
+val mk_constr : ivar list -> ivar_pair list -> is_eq -> poly -> constr
 
+val all_ivar_distinct_poly : poly -> poly
 (* ----------------------------------------------------------------------- *)
 (* arithmetic operations *)
 
@@ -94,6 +95,8 @@ val mult_monom : monom -> monom -> monom
 val mult_sum : sum -> sum -> sum
 val mult_term : BI.t * sum -> BI.t * sum -> BI.t * sum
 
+val all_ivar_distinct_constr_conj : constr list -> constr list
+  
 module SP : sig
   val ( *! ) : poly -> poly -> poly
   val ( +! ) : poly -> poly -> poly

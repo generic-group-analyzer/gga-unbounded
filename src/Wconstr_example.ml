@@ -44,7 +44,7 @@ let wm = lincomb j pm pmR pmS
 
 let hm_spoly i = SP.of_a (hm i)
 
-let m_constr = mk_constr [i] InEq SP.(wm -! hm_spoly i)
+let m_constr = mk_constr [i] [] InEq SP.(wm -! hm_spoly i)
 				       
 let ps   = mk_param "ps"
 let psR i = mk_param ~idx:(Some i) "psR"
@@ -59,7 +59,7 @@ let wr = lincomb j pr prR prS
 let s_constr =
   let rV = SP.of_a rV in
   let rW = SP.of_a rW in
-  mk_constr [] Eq SP.((wr *! wr) +! (wm *! rV) +! rW -! ws)
+  mk_constr [] [] Eq SP.((wr *! wr) +! (wm *! rV) +! rW -! ws)
 
 
 let unit_monom = mk_monom []
@@ -72,7 +72,6 @@ let system = [m_constr]
 let system = split {name = "k"; id = 0} system *)
 	   
 let monomials = mons m_constr.poly
-
 
 let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 1) (List.nth_exn monomials 1)) k1 k2
 
@@ -91,14 +90,16 @@ let () =
   *)
 
 let () =
-  let c1 = Wparse.constr "forall i,j: (sum k: rR_k * pr_k * pr_j) = 0" in
-  let c2 = split_constr {name = "w"; id = 0} c1 in
-  let coeff1 = coeff c1.poly (mk_monom [(NoInv, Rvar("rR",Some {name = "k"; id = 0}))]) in
+  let c1 = Wparse.constr "forall i,j: (sum k1,k2: r_j * p_k1 * p_k2) = p_i" in
+  let conj = all_ivar_distinct_constr_conj [c1] in
+  (*  let c2 = split_constr {name = "w"; id = 0} c1 in *)
+  (*  let coeff1 = coeff c1.poly (mk_monom [(NoInv, Rvar("rR",Some {name = "k"; id = 0}))]) in *)
   F.printf "%a\n" pp_constr c1;
-  F.printf "%a\n" pp_poly coeff1;
-  F.printf "%a\n" pp_constr_conj c2;
+  F.printf "%a" pp_constr_conj conj
+  (* F.printf "%a\n" pp_poly coeff1; *)
+  (* F.printf "%a\n" pp_constr_conj c2; *)
 
-  assert(isomorphic_constr c1 c1)
+  (* assert(isomorphic_constr c1 c1) *)
  
 		 
 

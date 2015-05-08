@@ -15,7 +15,6 @@ type ivar = {
   id : int;
 } with compare, sexp
 		  
-
 (* data structures for ivar *)
 module Ivar = struct
   module T = struct
@@ -28,6 +27,22 @@ module Ivar = struct
   include Comparable.Make(T)
 end
 
+(* index variables *)
+type ivar_pair = (ivar * ivar) with compare, sexp
+					     
+(* data structures for ivar pairs *)
+module Ivar_Pair = struct
+  module T = struct
+    type t = ivar_pair
+    let compare (i1,j1) (i2,j2) = if (compare_ivar i1 j2 = 0 && compare_ivar j1 i2 = 0) then 0
+				  else compare_ivar_pair (i1,j1) (i2,j2)
+    let sexp_of_t = sexp_of_ivar_pair
+    let t_of_sexp = ivar_pair_of_sexp
+  end
+  include T
+  include Comparable.Make(T)
+end
+		
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp
 
@@ -115,6 +130,9 @@ let pp_name_oidx fmt (s,oi) =
   match oi with
   | None   -> pp_string fmt s
   | Some i -> pp_name_idx fmt (s,i)
+
+let pp_ivar_pair fmt (i,j) =
+  F.fprintf fmt "%a<>%a" pp_ivar i pp_ivar j
 
 let pp_rvar = pp_name_oidx
 

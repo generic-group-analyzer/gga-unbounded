@@ -23,6 +23,15 @@ module Ivar : sig
   include Comparable.S with type t := ivar
 end
 
+type ivar_pair = ivar * ivar
+val ivar_pair_of_sexp : Sexplib.Type.t -> ivar * ivar
+val sexp_of_ivar_pair : ivar * ivar -> Sexplib.Type.t
+val compare_ivar_pair : ivar * ivar -> ivar * ivar -> int
+
+module Ivar_Pair : sig
+  include Comparable.S with type t := ivar_pair
+end		
+
 type name_oidx = bytes * ivar option
 val name_oidx_of_sexp : Sexplib.Type.t -> name_oidx
 val sexp_of_name_oidx : name_oidx -> Sexplib.Type.t
@@ -79,6 +88,7 @@ val pp_gname : Format.formatter -> group_name -> unit
 val pp_ivar : Format.formatter -> ivar -> unit
 val pp_name_idx : Format.formatter -> bytes * ivar -> unit
 val pp_name_oidx : Format.formatter -> bytes * ivar option -> unit
+val pp_ivar_pair : Format.formatter -> ivar_pair-> unit
 val pp_rvar : Format.formatter -> bytes * ivar option -> unit
 val pp_param : Format.formatter -> bytes * ivar option -> unit
 val pp_hvar : Format.formatter -> hvar -> unit

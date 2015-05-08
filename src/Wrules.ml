@@ -31,7 +31,7 @@ let params_monom (mon : monom) = monom_filter_vars is_param mon
 let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
   if (equal_monlist (rvars s.monom) (rvars mon)) &&
      (equal_monlist (hvars s.monom) (hvars mon))
-  then mk_poly [(c, mk_sum s.ivars (params_monom s.monom))]
+  then mk_poly [(c, mk_sum s.ivars [] (params_monom s.monom))]
   else SP.zero
     
 let coeff (p : poly) (mon : monom) =
@@ -64,7 +64,7 @@ type k_inf = {
 let subst_idx_sum (i : ivar) (j : ivar) (s : sum) =
   if L.mem s.ivars i
   then failwith "subst_idx_sum: cannot substitute Sum-bound index variable bound"
-  else mk_sum s.ivars (map_idx_monom ~f:(fun x -> if x = i then j else x) s.monom)
+  else mk_sum s.ivars s.i_ineq (map_idx_monom ~f:(fun x -> if x = i then j else x) s.monom)
 	   
 let subst_idx_poly (i : ivar) (j : ivar) (p : poly) =
   Map.fold p
@@ -74,8 +74,14 @@ let subst_idx_poly (i : ivar) (j : ivar) (p : poly) =
 let subst_idx_constr (i : ivar) (j : ivar) (c : constr) =
   if L.mem c.qvars i
   then failwith "subst_idx_sum: impossible to substitute a summation variable"
-  else mk_constr c.qvars c.is_eq (subst_idx_poly i j c.poly)
+  else mk_constr c.qvars c.q_ineq c.is_eq (subst_idx_poly i j c.poly)
+		 
+let rm_from_pairs (i : ivar) (pairs : ivar_pair list) =  
+  L.filter pairs ~f:(fun (x,y) -> x <> i && y <> i)
 
+let keep_from_pairs (i : ivar) (pairs : ivar_pair list) =
+  L.filter pairs ~f:(fun (x,y) -> x = i || y = i)
+	   
 (* ----------------------------------------------------------------------- *)
 (* Split forall and sum quantification as follows:
    split(i', forall i. e) = split(i',e)[i -> i'] /\ (forall i. (split(i',e)))
@@ -87,10 +93,11 @@ let split_sum (iv : ivar) (sum : sum) =
     match s.ivars with      
     | [] -> [s]
     | i::is ->
-      let sums = do_split (mk_sum is s.monom) in
-      let sums1 = L.map ~f:(fun s -> mk_sum (i::s.ivars) s.monom) sums in
-      let sums2 = L.map ~f:(subst_idx_sum i iv) sums in
-      sums1 @ sums2
+       let (i_pairs, rest_pairs) = (keep_from_pairs i s.i_ineq), (rm_from_pairs i s.i_ineq) in       
+       let sums = do_split (mk_sum is rest_pairs s.monom) in       
+       let sums1 = L.map ~f:(fun s -> mk_sum (i::s.ivars) i_pairs s.monom) sums in       
+       let sums2 = L.map ~f:(subst_idx_sum i iv) sums in       
+       sums1 @ sums2		 
   in  
   if L.mem sum.ivars iv
   then failwith "split_sum: given index variable must be fresh"
@@ -105,10 +112,10 @@ let split_poly (iv : ivar) (p : poly) =
 let split_constr (iv : ivar) (constr : constr) =
   let rec do_split c =
     match c.qvars with      
-    | [] -> [ mk_constr [] c.is_eq (split_poly iv c.poly) ]
+    | [] -> [ mk_constr [] [] c.is_eq (split_poly iv c.poly) ]
     | i::is ->
-      let constrs = do_split (mk_constr is c.is_eq c.poly) in
-      let constrs1 = L.map ~f:(fun c -> mk_constr (i::c.qvars) c.is_eq c.poly) constrs in
+      let constrs = do_split (mk_constr is (rm_from_pairs i c.q_ineq) c.is_eq c.poly) in
+      let constrs1 = L.map ~f:(fun c -> mk_constr (i::c.qvars) c.q_ineq c.is_eq c.poly) constrs in
       let constrs2 = L.map ~f:(subst_idx_constr i iv) constrs in
       constrs1 @ constrs2
   in
@@ -244,14 +251,14 @@ let stable (eq : constr) (s : sum) k1 k2 =
        	  ~f:(fun ~key:s_eq ~data:_c ->
                 not (equal_monlist (rvars s_eq.monom) rvs && hvars s_eq.monom = []))
       in
-      let constr1 = mk_constr [] Eq poly1 in
-      let constr2 = mk_constr s.ivars Eq (coeff eq.poly s.monom) in
+      let constr1 = mk_constr [] [] Eq poly1 in
+      let constr2 = mk_constr s.ivars [] Eq (coeff eq.poly s.monom) in
       [ constr1; constr2 ]
   ) else ( [eq] )
 
 (* ----------------------------------------------------------------------- *)
 (* Case distinctions *)
-
+(*
 let remove_forall (c : constr) =
   mk_constr (L.filter c.qvars ~f:(fun x -> L.mem (Ivar.Set.to_list (ivars_constr c)) x )) c.is_eq c.poly
     
@@ -291,3 +298,5 @@ let subst_bound_by_zero (c : constr_conj) (par : atom) =
   in
   List.map c
     ~f:(fun x -> remove_forall (mk_constr x.qvars x.is_eq (subst_poly x.poly x.qvars)))
+ 
+ *)

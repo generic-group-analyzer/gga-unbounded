@@ -68,7 +68,7 @@ monom:
 
 sum:
 | LPAR; SUM; ids=separated_list(COMMA,ID); COLON; m = monom; RPAR
-   { mk_sum (L.map ~f:(fun s -> { name = s; id = 0}) ids ) m }
+   { mk_sum (L.map ~f:(fun s -> { name = s; id = 0}) ids ) [] m }
 				
 poly :
 | n = INT                    { SP.of_const (BI.of_int n) }
@@ -92,4 +92,4 @@ is_eq :
   
 constr :
 | qp = qprefix? f = poly sep = is_eq g = poly? EOF
-  { mk_constr (optional ~d:[] qp) sep SP.(f -! (optional ~d:zero g)) }
+  { mk_constr (optional ~d:[] qp) [] sep SP.(f -! (optional ~d:zero g)) }
