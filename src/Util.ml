@@ -32,7 +32,23 @@ let repeat_element x n =
     else aux (x :: output) (k-1)
   in
   aux [] n
-	      
+
+(* insert x at all positions into a list *)
+let rec insert x list =
+  match list with
+  | [] -> [[x]]
+  | hd::tl -> (x::list) :: (L.map ~f:(fun l -> hd::l) (insert x tl))
+
+(* list of all permutations of a list *)
+let rec perms = function
+  | [] -> [[]]
+  | hd::tl -> L.concat (L.map ~f:(insert hd) (perms tl))   
+
+(* remove one element for every position of a list *)
+let rec rm_diagonal = function
+  | [] -> []
+  | hd::tl -> tl :: (L.map ~f:(fun l -> hd::l) (rm_diagonal tl))
+		       
 (* ======================================================================= *)
 (* Pretty printing *)
 

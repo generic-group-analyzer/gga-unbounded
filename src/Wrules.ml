@@ -28,16 +28,28 @@ let rvars_monom  (mon : monom) = monom_filter_vars is_rvar mon
 let hvars_monom  (mon : monom) = monom_filter_vars is_hvar mon
 let params_monom (mon : monom) = monom_filter_vars is_param mon
 
-let coeff_sum (c : BI.t) (s : sum) (mon : monom) =
+						   
+let coeff_sum (c : BI.t) (s : sum) (_idxs, mon) =
   if (equal_monlist (rvars s.monom) (rvars mon)) &&
      (equal_monlist (hvars s.monom) (hvars mon))
   then mk_poly [(c, mk_sum s.ivars [] (params_monom s.monom))]
   else SP.zero
-    
-let coeff (p : poly) (mon : monom) =
+						    
+let nchoosek_perm list k =
+  let rec aux output list k =
+    if k = 0 then output
+    else
+      aux (L.concat ( L.map output ~f:(fun l -> L.map list ~f:(fun x -> x::l) ) )) list k
+  in
+  aux [[]] k list
+						   
+(*let coeff_sum (c : BI.t) (s : sum) (idxs, mon) =*)
+  
+	 
+let coeff (p : poly) (idxs, mon) =
   Map.fold p
     ~init:(mk_poly [])
-	  ~f:(fun ~key:s ~data:c p -> SP.(p +! (coeff_sum c s mon) ))
+	  ~f:(fun ~key:s ~data:c p -> SP.(p +! (coeff_sum c s (idxs, mon)) ))
 
 let mons (p : poly) =
   Map.fold p
@@ -252,7 +264,7 @@ let stable (eq : constr) (s : sum) k1 k2 =
                 not (equal_monlist (rvars s_eq.monom) rvs && hvars s_eq.monom = []))
       in
       let constr1 = mk_constr [] [] Eq poly1 in
-      let constr2 = mk_constr s.ivars [] Eq (coeff eq.poly s.monom) in
+      let constr2 = mk_constr s.ivars [] Eq (coeff eq.poly ([],s.monom)) in
       [ constr1; constr2 ]
   ) else ( [eq] )
 

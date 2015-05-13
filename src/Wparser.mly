@@ -69,7 +69,7 @@ monom:
 sum:
 | LPAR; SUM; ids=separated_list(COMMA,ID); COLON; m = monom; RPAR
    { mk_sum (L.map ~f:(fun s -> { name = s; id = 0}) ids ) [] m }
-				
+   
 poly :
 | n = INT                    { SP.of_const (BI.of_int n) }
 | a = atom                   { SP.of_a a }

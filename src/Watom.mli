@@ -18,6 +18,7 @@ type ivar = { name : bytes; id : int; }
 val ivar_of_sexp : Sexplib.Type.t -> ivar
 val sexp_of_ivar : ivar -> Sexplib.Type.t
 val compare_ivar : ivar -> ivar -> int
+val equal_ivar : ivar -> ivar -> bool
 
 module Ivar : sig
   include Comparable.S with type t := ivar

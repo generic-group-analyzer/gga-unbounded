@@ -34,7 +34,7 @@ rule lex = parse
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
   | "forall" { FORALL }
   | "sum"    { SUM }
-  | ['i'-'k']chars* as s    { ID s}
+  | ['i'-'l']chars* as s    { ID s}
   | ['r']chars* as s    { RVAR s}
   | ['p']chars* as s    { PARAM s}
   | ['h']chars* as s    { HVAR s}						    

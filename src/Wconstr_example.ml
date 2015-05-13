@@ -75,6 +75,17 @@ let monomials = mons m_constr.poly
 
 let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 1) (List.nth_exn monomials 1)) k1 k2
 
+		 (*
+let rec print_int_list = function
+  | [] -> ()
+  | a :: rest -> let () = print_string ((string_of_int a) ^ " ") in print_int_list rest
+
+let rec print_int_list_list = function
+  | [] -> ()
+  | a :: rest -> let () = print_int_list a in
+		 let () = print_string "\n" in
+		 print_int_list_list rest	    
+		  *)								   
   (*		 
 let () =
   F.printf "%a" pp_constr_conj system ;
@@ -87,19 +98,21 @@ let () =
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) monomials ;
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
   F.printf "%a\n" pp_poly (coeff m_constr.poly (List.nth_exn monomials 3)) ;
-  *)
-
+   *)
+let pp_renaming rn =
+  let () = print_string "Renaming:\n" in
+  Map.iter rn ~f:(fun ~key:k ~data:v -> F.printf "(%a |-> %a)\n" pp_ivar k pp_ivar v)
+	   
 let () =
-  let c1 = Wparse.constr "forall i,j: (sum k1,k2: r_j * p_k1 * p_k2) = p_i" in
-  let conj = all_ivar_distinct_constr_conj [c1] in
-  (*  let c2 = split_constr {name = "w"; id = 0} c1 in *)
-  (*  let coeff1 = coeff c1.poly (mk_monom [(NoInv, Rvar("rR",Some {name = "k"; id = 0}))]) in *)
+  let c1 = Wparse.constr "(sum i,j: p_i*r_j^2) + (sum k: p_k*p_l) = 0" in
+  let c2 = Wparse.constr "(sum k: p_k*p_l) + (sum k,j: p_j*r_k^2) = 0" in
+  let c3 = Wparse.constr "forall k,l: (sum i: p_i*p_k) + r_l <> 0" in
   F.printf "%a\n" pp_constr c1;
-  F.printf "%a" pp_constr_conj conj
-  (* F.printf "%a\n" pp_poly coeff1; *)
-  (* F.printf "%a\n" pp_constr_conj c2; *)
+  F.printf "%a\n" pp_constr c2;
+  F.printf "%a" pp_constr_conj (all_ivar_distinct_constr_conj [c3]);
+  assert(isomorphic_constr c1 c2)
 
-  (* assert(isomorphic_constr c1 c1) *)
+
  
 		 
 

@@ -14,6 +14,8 @@ type ivar = {
   name : string;
   id : int;
 } with compare, sexp
+
+let equal_ivar = (fun i j -> compare_ivar i j = 0)
 		  
 (* data structures for ivar *)
 module Ivar = struct
@@ -34,8 +36,8 @@ type ivar_pair = (ivar * ivar) with compare, sexp
 module Ivar_Pair = struct
   module T = struct
     type t = ivar_pair
-    let compare (i1,j1) (i2,j2) = if (compare_ivar i1 j2 = 0 && compare_ivar j1 i2 = 0) then 0
-				  else compare_ivar_pair (i1,j1) (i2,j2)
+    let sort_pair (i,j) = if (compare_ivar i j <= 0) then (i,j) else (j,i)
+    let compare pair1 pair2 = compare_ivar_pair (sort_pair pair1) (sort_pair pair2)
     let sexp_of_t = sexp_of_ivar_pair
     let t_of_sexp = ivar_pair_of_sexp
   end

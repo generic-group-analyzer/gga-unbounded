@@ -33,15 +33,16 @@ val poly_of_sexp : Sexplib.Type.t -> poly
 val sexp_of_poly : poly -> Sexplib.Type.t
 val compare_poly : poly -> poly -> int
 val equal_poly   : poly -> poly -> bool
-(*val isomorphic_poly : poly -> poly -> bool*)
+val matching_poly : poly -> poly -> ivar Ivar.Map.t list
 
 type constr = private { qvars : ivar list; q_ineq : ivar_pair list; is_eq : is_eq; poly : poly; }
 val constr_of_sexp : Sexplib.Type.t -> constr
 val sexp_of_constr : constr -> Sexplib.Type.t
 val compare_constr : constr -> constr -> int
 val equal_constr : constr -> constr -> bool
-(*val isomorphic_constr : constr -> constr -> bool*)					      
-
+val matching_constr : constr -> constr -> ivar Ivar.Map.t list
+val isomorphic_constr : constr -> constr -> bool
+					       
 type constr_conj = constr list
 val constr_conj_of_sexp : Sexplib.Type.t -> constr_conj
 val sexp_of_constr_conj : constr_conj -> Sexplib.Type.t
@@ -63,19 +64,12 @@ val ivars_poly : poly  -> Ivar.Set.t
 val ivars_constr : constr -> Ivar.Set.t
 val ivars_conj : constr list -> Ivar.Set.t
 
-val free_ivars_sum : sum -> Ivar.Set.t
-val free_ivars_poly : poly -> Ivar.Set.t
-val bound_ivars_sum : sum -> Ivar.Set.t
-val bound_ivars_poly : poly -> Ivar.Set.t
-
 val renaming_away_from : Ivar.Set.t -> Ivar.Set.t ->  ivar Ivar.Map.t * Ivar.Set.t
 val apply_renaming : ivar Ivar.Map.t -> ivar -> ivar
 
 val map_idx_monom : f:(ivar -> ivar) ->  monom -> monom
 
 val new_ivar : Ivar.Set.t -> ivar -> ivar
-
-(*val rename_sum_indices : poly -> string -> poly*)
 					     
 (* ----------------------------------------------------------------------- *)
 (* smart constructors *)
