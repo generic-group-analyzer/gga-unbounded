@@ -75,7 +75,7 @@ let monomials = mons m_constr.poly
 
 let _n = overlap (List.nth_exn monomials 0) (mult_monom (List.nth_exn monomials 1) (List.nth_exn monomials 1)) k1 k2
 
-		 (*
+		 
 let rec print_int_list = function
   | [] -> ()
   | a :: rest -> let () = print_string ((string_of_int a) ^ " ") in print_int_list rest
@@ -85,7 +85,7 @@ let rec print_int_list_list = function
   | a :: rest -> let () = print_int_list a in
 		 let () = print_string "\n" in
 		 print_int_list_list rest	    
-		  *)								   
+		  								   
   (*		 
 let () =
   F.printf "%a" pp_constr_conj system ;
@@ -99,20 +99,36 @@ let () =
   F.printf "[%a]\n" (Util.pp_list ", " pp_monom) (mons_sets_product monomials  monomials) ;
   F.printf "%a\n" pp_poly (coeff m_constr.poly (List.nth_exn monomials 3)) ;
    *)
+				     
 let pp_renaming rn =
   let () = print_string "Renaming:\n" in
   Map.iter rn ~f:(fun ~key:k ~data:v -> F.printf "(%a |-> %a)\n" pp_ivar k pp_ivar v)
 	   
+let rec pp_perms = function
+  | [] -> F.printf "\n"
+  | p :: rest -> F.printf "%a\n" (Util.pp_list "," pp_ivar) p; pp_perms rest
+	   
 let () =
+
+  (* Examples *)
   let c1 = Wparse.constr "(sum i,j: p_i*r_j^2) + (sum k: p_k*p_l) = 0" in
   let c2 = Wparse.constr "(sum k: p_k*p_l) + (sum k,j: p_j*r_k^2) = 0" in
-  let c3 = Wparse.constr "forall k,l: (sum i: p_i*p_k) + r_l <> 0" in
-  F.printf "%a\n" pp_constr c1;
+  let _c3 = Wparse.constr "forall k,l: (sum i: p_i*p_k) + h_l@2 <> 0" in
+  let c4 = Wparse.constr "(sum i: p_i) * (sum i: p_i) = 0" in
+  let c5 = Wparse.constr "(sum l1: p_l1) * (sum k: p_k) = 0" in
+  let c6 = Wparse.constr "(sum i,j,k: p_i * r_i*r_j*r_k) = 0" in
+  let c7 = coeff c6.poly (L.map ["i";"j";"k"] ~f:Wparse.ivar, Wparse.monom "r_i*r_j*r_k") in
+  let c8 = Wparse.poly "2 * (p_i1 + p_i2 + p_i3)" in
+
+  F.printf "%a" pp_constr c1;
   F.printf "%a\n" pp_constr c2;
-  F.printf "%a" pp_constr_conj (all_ivar_distinct_constr_conj [c3]);
-  assert(isomorphic_constr c1 c2)
-
-
+  F.printf "%a" pp_constr_conj (all_ivar_distinct_constr_conj [_c3]);
+  F.printf "%a" pp_constr c4;
+  F.printf "%a\n" pp_constr c5;
+  F.printf "%a\n" pp_constr c6;
+  F.printf "%a\n" pp_poly c7;
+  F.printf "%a" pp_poly c8;
  
-		 
-
+  assert(isomorphic_constr c1 c2);
+  assert(isomorphic_constr c4 c5);
+  assert(isomorphic_poly c7 c8);

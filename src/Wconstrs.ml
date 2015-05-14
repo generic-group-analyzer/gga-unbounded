@@ -371,7 +371,7 @@ let pp_constr fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq } =
 	       pp_poly p
 	      (is_eq_to_string is_eq)
   else
-    F.fprintf fmt "@[<hov 2>%a%a %s 0@]" (pp_binder "forall") qvs pp_poly p (is_eq_to_string is_eq)
+    F.fprintf fmt "@[<hov 2>%a%a %s 0@]@\n" (pp_binder "forall") qvs pp_poly p (is_eq_to_string is_eq)
 
 let pp_constr_conj fmt conj =
   let rec aux n list f =
@@ -451,4 +451,5 @@ let matching_constr c1 c2 =
   in
   L.filter (matching_poly c1.poly c2.poly) ~f:(valid_rn)
 
+let isomorphic_poly p1 p2 = L.length (matching_poly p1 p2) > 0	   
 let isomorphic_constr c1 c2 = L.length (matching_constr c1 c2) > 0

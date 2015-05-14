@@ -29,23 +29,34 @@ let hvars_monom  (mon : monom) = monom_filter_vars is_hvar mon
 let params_monom (mon : monom) = monom_filter_vars is_param mon
 
 						   
-let coeff_sum (c : BI.t) (s : sum) (_idxs, mon) =
+let coeff_term c s mon =
   if (equal_monlist (rvars s.monom) (rvars mon)) &&
      (equal_monlist (hvars s.monom) (hvars mon))
   then mk_poly [(c, mk_sum s.ivars [] (params_monom s.monom))]
-  else SP.zero
-						    
+  else mk_poly []
+	 
 let nchoosek_perm list k =
-  let rec aux output list k =
+    let rec aux output list k =
     if k = 0 then output
     else
-      aux (L.concat ( L.map output ~f:(fun l -> L.map list ~f:(fun x -> x::l) ) )) list k
+      aux (L.concat ( L.map output ~f:(fun l -> L.map list ~f:(fun x -> x::l) ) )) list (k-1)
   in
-  aux [[]] k list
-						   
-(*let coeff_sum (c : BI.t) (s : sum) (idxs, mon) =*)
-  
-	 
+  aux [[]] list k
+  |> L.filter ~f:(fun l -> L.length (L.dedup ~compare:compare_ivar l) = L.length l)
+      
+let coeff_sum (c : BI.t) (s : sum) (idxs, mon) =
+  if (L.length s.ivars < L.length idxs) then mk_poly []
+  else
+    let (rn,_) = renaming_away_from (Ivar.Set.of_list idxs) (Ivar.Set.of_list s.ivars) in
+    let s = rename_sum s rn in
+    let idx_perms = nchoosek_perm s.ivars (L.length idxs) in
+    let renamings = L.map idx_perms ~f:(fun l -> Ivar.Map.of_alist_exn (L.zip_exn l idxs)) in
+    let monomials = L.map renamings ~f:(fun rn -> map_idx_monom ~f:(apply_renaming rn) s.monom) in
+    let new_ivars = L.map idx_perms ~f:(fun l -> L.filter s.ivars
+						 ~f:(fun i -> not (L.mem ~equal:equal_ivar l i))) in
+    L.map2_exn monomials new_ivars ~f:(fun m ivs -> coeff_term c (mk_sum ivs s.i_ineq m) mon)
+    |> L.fold_left ~init:(mk_poly []) ~f:SP.(+!)
+      
 let coeff (p : poly) (idxs, mon) =
   Map.fold p
     ~init:(mk_poly [])
@@ -251,7 +262,7 @@ let overlap (m : monom) (hm: monom) (k1 : k_inf) (k2 : k_inf) =
   in
   smt_solver system
 
-let stable (eq : constr) (s : sum) k1 k2 =
+let extract_stable (eq : constr) (s : sum) k1 k2 =
   if (eq.qvars = [] && eq.is_eq = Eq) then (
     let handle_mons = L.filter (mons eq.poly) ~f:(fun m -> rvars m <> []) in
     if (L.exists handle_mons ~f:(fun hm -> overlap s.monom hm k1 k2))

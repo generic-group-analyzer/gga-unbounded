@@ -25,4 +25,7 @@ let wrap_error f s =
     failwith err
 
 (** Parse type declaration. *)
+let ivar = wrap_error (Wparser.ivar Wlexer.lex)	     
 let constr = wrap_error (Wparser.constr Wlexer.lex)
+let monom = wrap_error (Wparser.monom_read Wlexer.lex)
+let poly = wrap_error (Wparser.poly_read Wlexer.lex)

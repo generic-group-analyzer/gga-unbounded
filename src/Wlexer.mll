@@ -22,6 +22,7 @@ rule lex = parse
   | ":"     { COLON }
   | ","     { COMMA }
   | "_"     { UNDERSCORE }
+  | "@"     { AT }
   | "("     { LPAR }
   | ")"     { RPAR }
   | "*"     { STAR }
@@ -35,9 +36,9 @@ rule lex = parse
   | "forall" { FORALL }
   | "sum"    { SUM }
   | ['i'-'l']chars* as s    { ID s}
-  | ['r']chars* as s    { RVAR s}
-  | ['p']chars* as s    { PARAM s}
-  | ['h']chars* as s    { HVAR s}						    
+  | ['r']chars* as s        { RVAR s}
+  | ['p']chars* as s        { PARAM s}
+  | ['h']chars* as s        { HVAR s}						    
 
 
 and comment = parse

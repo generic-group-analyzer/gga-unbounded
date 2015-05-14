@@ -34,6 +34,7 @@ val sexp_of_poly : poly -> Sexplib.Type.t
 val compare_poly : poly -> poly -> int
 val equal_poly   : poly -> poly -> bool
 val matching_poly : poly -> poly -> ivar Ivar.Map.t list
+val isomorphic_poly : poly -> poly -> bool
 
 type constr = private { qvars : ivar list; q_ineq : ivar_pair list; is_eq : is_eq; poly : poly; }
 val constr_of_sexp : Sexplib.Type.t -> constr
@@ -66,7 +67,8 @@ val ivars_conj : constr list -> Ivar.Set.t
 
 val renaming_away_from : Ivar.Set.t -> Ivar.Set.t ->  ivar Ivar.Map.t * Ivar.Set.t
 val apply_renaming : ivar Ivar.Map.t -> ivar -> ivar
-
+val rename_sum : sum -> ivar Ivar.Map.t -> sum
+						  
 val map_idx_monom : f:(ivar -> ivar) ->  monom -> monom
 
 val new_ivar : Ivar.Set.t -> ivar -> ivar
