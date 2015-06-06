@@ -1,14 +1,19 @@
 open Core.Std
 open Util
 open Abbrevs
-
+       
 (* ======================================================================= *)
 (* Variables and parameters *)
+						  
+type inv = NoInv | Inv with compare, sexp					
+       
+(* group settings *)
 
-type inv = NoInv | Inv with compare, sexp
+let group_order_bound = ref (BI.of_int 2)
 
-type group_name = G1 | G2 with compare, sexp
-
+type group_name = G1 | G2 | Fp with compare, sexp
+type group_setting = I | II | III with compare, sexp
+	   
 (* index variables *)
 type ivar = {
   name : string;
@@ -97,7 +102,7 @@ let ivars_atom = function
   | Param (_,Some i) -> Ivar.Set.singleton i
   | Hvar hv          -> Ivar.Set.singleton hv.hv_ivar
   | _                -> Ivar.Set.empty
-
+		  
 (* ----------------------------------------------------------------------- *)
 (* Constructors *)
 
@@ -121,6 +126,7 @@ let map_idx ~f = function
 let pp_gname fmt = function
   | G1 -> pp_string fmt "G1"
   | G2 -> pp_string fmt "G2"
+  | Fp -> pp_string fmt "Fp"
 
 let pp_ivar fmt { name; id } =
   F.fprintf fmt "%s%s" name (String.make id '\'')

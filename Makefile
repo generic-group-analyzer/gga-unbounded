@@ -6,5 +6,5 @@ COREFLAGS=-pkg core \
     -cflags -strict-sequence
 
 all:
-	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./Wconstr_example.native
-	./Wconstr_example.native
+	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./ubt.native
+	./ubt.native

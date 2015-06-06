@@ -1,7 +1,7 @@
 open Core.Std
 open Abbrevs
 open Big_int
-
+       
 (* ======================================================================= *)
 (* Big int helper functions *)
 
@@ -15,12 +15,15 @@ module BI = struct
   let ( *! ) a b = mult_big_int a b
   let ( +! ) a b = add_big_int a b
   let ( -! ) a b = a +! (opp b)
+  let ( /! ) a b = div_big_int a b
   let of_int = big_int_of_int
   let to_string = string_of_big_int
   let t_of_sexp se = big_int_of_string (string_of_sexp se)
   let sexp_of_t bi = sexp_of_string (string_of_big_int bi)
   let compare = compare_big_int
   let equal a b = compare a b = 0
+  let max = max_big_int
+  let min = min_big_int
 end
 
 (* ======================================================================= *)
@@ -48,7 +51,47 @@ let rec perms = function
 let rec rm_diagonal = function
   | [] -> []
   | hd::tl -> tl :: (L.map ~f:(fun l -> hd::l) (rm_diagonal tl))
-		       
+
+let gcd_big_int_list list =
+  let rec aux gcd = function
+    | [] -> gcd
+    | a :: rest -> aux (gcd_big_int gcd a) rest
+  in
+  match list with
+  | [] -> BI.one
+  | hd :: [] -> hd
+  | hd :: tl -> aux hd tl
+
+let list_map_nth list n f =
+  let rec aux hd k = function
+    | [] -> failwith "list_map_nth: n is greater than list length"
+    | a :: tl ->
+       if (k = 1) then hd @ [f a] @ tl
+       else aux (hd @ [f a]) (k-1) tl
+  in
+  if n > 0 then aux [] n list
+  else failwith "list_map_nth: n has to be positive"
+
+let list_remove list n =
+  let rec aux hd k = function
+    | [] -> failwith "list_remove: n is greater than list length"
+    | a :: tl ->
+       if (k = 1) then hd @ tl
+       else aux (hd @ [a]) (k-1) tl
+  in
+  if n > 0 then aux [] n list
+  else failwith "list_remove: n has to be positive"
+
+let range n m =
+  let rec aux output k = if (k <= m) then aux (output @ [k]) (k+1) else output in
+  if (n <= m) then aux [] n
+  else failwith "range: n has to be lower or equal than m"
+
+let rec unique xs ~equal =
+  match xs with
+  | y::ys -> if L.mem ~equal ys y then false else unique ys ~equal
+  | []    -> true
+		    
 (* ======================================================================= *)
 (* Pretty printing *)
 
@@ -87,3 +130,20 @@ let fsprintf fmt =
       F.pp_print_flush fbuf ();
       (Buffer.contents buf))
     fbuf fmt
+
+let group rel xs =
+  let rec go xs y acc = match xs with
+    | []                 -> [ L.rev acc ]
+    | x::xs when rel x y -> go xs y (x::acc)
+    | x::xs              -> (L.rev acc)::go xs x [x] 
+  in
+  match xs with
+  | []    -> []
+  | x::xs -> go xs x [x]
+
+let sorted_nub cmp xs =
+  xs |> L.sort ~cmp |> group (fun a b -> cmp a b = 0) |> L.map ~f:L.hd_exn
+
+let conc_map f xs = L.concat (L.map ~f xs)
+
+let (%) f g x = f (g x)

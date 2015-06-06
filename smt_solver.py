@@ -10,7 +10,10 @@ import traceback
 def check_feasibility(matrix, vector, n_lambda, n_indices):
     Lambda = []
     Delta = []
-    n_delta = (len(matrix[0]) - n_lambda)/n_indices
+    if (n_indices == 0):
+        n_delta = (len(matrix[0]))
+    else:
+        n_delta = (len(matrix[0]) - n_lambda)/n_indices
 
     s = Solver()
     for i in range(n_lambda):
@@ -36,7 +39,7 @@ def check_feasibility(matrix, vector, n_lambda, n_indices):
         for idx in range(n_indices):
             expression = 0
             for j in range(n_delta):
-                expression += expression + Delta[j+idx*n_indices]        
+                expression += expression + Delta[j+idx*n_delta]        
             s.add(expression <= 1)
 
     return s.check() == sat
@@ -63,14 +66,17 @@ def _parseJSON(obj):
 def main():
     try:
         systems_list = ast.literal_eval(sys.argv[1])
- 
+	result = False
+	
 	for system in systems_list:
             cmd = ast.literal_eval(system)
             M = cmd["matrix"]
             v = cmd["vector"]
             n_lambda = cmd["lambda"]
             n_indices = cmd["indices"]
-            if len(M[0]) == 0:
+	    if len(M) == 0:
+	       result = v == []
+            elif len(M[0]) == 0:
                 result = not any(v)	   
             else:	     
                 result = check_feasibility(M, v, n_lambda, n_indices)	

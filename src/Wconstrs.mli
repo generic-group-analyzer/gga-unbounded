@@ -23,7 +23,8 @@ val sum_of_sexp : Sexplib.Type.t -> sum
 val sexp_of_sum : sum -> Sexplib.Type.t
 val compare_sum : sum -> sum -> int
 val equal_sum   : sum -> sum -> bool
-
+val isomorphic_sum : sum -> sum -> bool
+				  
 module Sum : sig
   include Comparable.S with type t := sum
 end
@@ -98,12 +99,14 @@ module SP : sig
   val ( +! ) : poly -> poly -> poly
   val ( -! ) : poly -> poly -> poly
   val zero : BI.t Sum.Map.t
+  val one : poly
+  val opp : poly -> poly
   val of_coeff_monom : BI.t -> (inv * atom) list -> poly
   val of_const : BI.t -> poly
   val of_monom : (inv * atom) list -> poly
   val of_a : atom -> poly
   val sum : ivar list -> poly -> poly
-  val one : poly
+
 end
 
 (* ----------------------------------------------------------------------- *)

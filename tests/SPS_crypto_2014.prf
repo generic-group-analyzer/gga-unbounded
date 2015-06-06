@@ -1,0 +1,14 @@
+extract (;) 2.
+extract (; W) 2.
+extract (i; R_i) 2.
+extract (i; R_i^2) 2.
+extract (i; R_i^3) 2.
+extract (i; R_i^4) 2.
+extract (i,j; R_i*R_j) 2.
+
+case_distinction p5_i.
+admit.
+
+simplify.
+admit.
+

@@ -109,11 +109,12 @@ let apply_renaming rn ivar =
 let free_ivars_sum s =
   (Set.diff (ivars_sum s) (Ivar.Set.of_list s.ivars))
 
+    (*
 let free_ivars_poly p =
   Map.fold p 
     ~init:Ivar.Set.empty
     ~f:(fun ~key:s ~data:_c se -> Set.union se (free_ivars_sum s))
-
+     *)
 (*
 let free_ivars_constr c =
   Set.diff (free_ivars_poly c.poly) (Ivar.Set.of_list c.qvars)
@@ -197,10 +198,12 @@ let mk_poly terms =
 							      
 let mk_constr ivs ivs_dist is_eq poly =
   let iv_occs = ivars_poly poly in
-  let ivs = L.filter ~f:(fun iv -> Set.mem iv_occs iv) ivs in
-  let ivs = Ivar.Set.to_list (Ivar.Set.of_list ivs) in
-  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x && L.mem ivs y) in
-  let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
+  let ivs = L.filter ~f:(fun iv -> Set.mem iv_occs iv) ivs
+	    |> L.dedup ~compare:compare_ivar
+  in
+  let ivs_p = Ivar.Set.to_list (ivars_poly poly) in
+  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs_p x && L.mem ivs_p y) in
+  let ivar_pairs = L.dedup ~compare:compare_ivar_pair ivs_dist in
   { qvars = ivs; q_ineq = ivar_pairs; is_eq = is_eq; poly = poly }
 
 (* ----------------------------------------------------------------------- *)
@@ -285,6 +288,7 @@ module SP = struct
   let ( *! ) a b = mult_poly a b |> all_ivar_distinct_poly
   let ( +! ) a b = add_poly a b
   let ( -! ) a b = minus_poly a b
+  let opp a = opp_poly a
   let zero = mk_poly []
 
   (* define shortcut poly constructors *)
@@ -365,7 +369,7 @@ let pp_poly fmt poly =
 
 let pp_constr fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq } =
   if qinqs<>[] then
-    F.fprintf fmt "@[<hov 2>%a(%a) %a %s 0@]"
+    F.fprintf fmt "@[<hov 2>%a(%a) %a %s 0@]\n"
 	      (pp_binder "forall") qvs
 	      (pp_list ", " pp_ivar_pair) qinqs
 	       pp_poly p
@@ -446,10 +450,12 @@ let matching_constr c1 c2 =
     let (ivars1, ivars2) = L.unzip (Map.to_alist rn) in
     L.map2_exn ivars1 ivars2
      ~f:(fun i j -> ((L.mem ~equal:equal_ivar c1.qvars i) && (L.mem ~equal:equal_ivar c2.qvars j)) ||
-		not ((L.mem ~equal:equal_ivar c1.qvars i) || (L.mem ~equal:equal_ivar c2.qvars j))  )
+	  (not ((L.mem ~equal:equal_ivar c1.qvars i) || (L.mem ~equal:equal_ivar c2.qvars j))) && (equal_ivar i j)  )
     |> L.fold_left ~init:true ~f:(&&)
   in
   L.filter (matching_poly c1.poly c2.poly) ~f:(valid_rn)
 
-let isomorphic_poly p1 p2 = L.length (matching_poly p1 p2) > 0	   
-let isomorphic_constr c1 c2 = L.length (matching_constr c1 c2) > 0
+let isomorphic_sum s1 s2 = L.length (matching_term (BI.one,s1) (BI.one,s2) Ivar.Map.empty) > 0 
+let isomorphic_constr c1 c2 = L.length (matching_constr c1 c2) > 0 ||
+			      L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0
+let isomorphic_poly p1 p2 = L.length (matching_constr (mk_constr [] [] Eq p1) (mk_constr [] [] Eq p2)) > 0	  

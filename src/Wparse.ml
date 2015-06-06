@@ -23,9 +23,8 @@ let wrap_error f s =
     let err = Printf.sprintf "Unknown error while lexing/parsing: %s\n%s%!" ex bt in
     print_endline err;    
     failwith err
-
+	     
 (** Parse type declaration. *)
-let ivar = wrap_error (Wparser.ivar Wlexer.lex)	     
-let constr = wrap_error (Wparser.constr Wlexer.lex)
-let monom = wrap_error (Wparser.monom_read Wlexer.lex)
-let poly = wrap_error (Wparser.poly_read Wlexer.lex)
+let p_cmds = wrap_error (Wparser.cmds_t Wlexer.lex)
+let p_instrs = wrap_error (Wparser.instrs_t Wlexer.lex)
+

@@ -4,16 +4,22 @@ open Util
 (* ======================================================================= *)
 (* Variables and parameters *)
 
+val group_order_bound : BI.t ref
+       
 type inv = NoInv | Inv
 val inv_of_sexp : Sexplib.Type.t -> inv
 val sexp_of_inv : inv -> Sexplib.Type.t
 val compare_inv : inv -> inv -> int
 
-type group_name = G1 | G2
+type group_name = G1 | G2 | Fp
 val group_name_of_sexp : Sexplib.Type.t -> group_name
 val sexp_of_group_name : group_name -> Sexplib.Type.t
 val compare_group_name : group_name -> group_name -> int
 
+type group_setting = I | II | III
+val group_setting_of_sexp : Sexplib.Type.t -> group_setting
+val sexp_of_group_setting : group_setting -> Sexplib.Type.t
+val compare_group_setting : group_setting -> group_setting -> int						       
 type ivar = { name : bytes; id : int; }
 val ivar_of_sexp : Sexplib.Type.t -> ivar
 val sexp_of_ivar : ivar -> Sexplib.Type.t
@@ -43,7 +49,7 @@ val rvar_of_sexp : Sexplib.Type.t -> rvar
 val sexp_of_rvar : rvar -> Sexplib.Type.t
 val compare_rvar : rvar -> rvar -> int
 
-type param = rvar
+type param = name_oidx
 val param_of_sexp : Sexplib.Type.t -> param
 val sexp_of_param : param -> Sexplib.Type.t
 val compare_param : param -> param -> int
