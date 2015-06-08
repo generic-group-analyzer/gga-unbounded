@@ -214,18 +214,28 @@ let subst_bound_by_zero (c : constr_conj) (par : atom) =
 let fresh_ivar (c : constr_conj) =
   let taken_ivars = ivars_conj c in
   new_ivar taken_ivars (Option.value ~default:{name = "i"; id = 0} (Set.choose taken_ivars))
+
+let free_idx constraints i =
+  L.fold_left constraints
+   ~init:false
+   ~f:(fun free c -> free || (Ivar.Set.mem (free_ivars_constr c) i))	      
 	   
-let case_dist (c : constr_conj) (par : atom) =
+let case_dist (c : constr_conj) par =
   match par with
   | Param (_, None) ->
      let c1 = subst c par SP.zero in
      let c2 = (mk_constr [] [] InEq (SP.of_a par)) :: c in
-     [ c1; c2 ]       
-  | Param (name, Some _) ->
-     let c1 = subst_bound_by_zero c par in
-     let i = fresh_ivar c in
-     let c2 = (mk_constr [] [] InEq (SP.of_a (mk_param ~idx:(Some i) name))) :: (split i c) in
-     [ c1; c2 ]			   
+     [ c1; c2 ]
+  | Param (name, Some i) ->
+     if (free_idx c i) then
+       let c1 = subst c par SP.zero in
+       let c2 = (mk_constr [] [] InEq (SP.of_a par)) :: c in
+       [ c1; c2 ]
+     else
+       let c1 = subst_bound_by_zero c par in
+       let i = fresh_ivar c in
+       let c2 = (mk_constr [] [] InEq (SP.of_a (mk_param ~idx:(Some i) name))) :: (split i c) in
+       [ c1; c2 ]			   
   | _ -> failwith "case_dist: second argument has to be a parameter"
   
 (* ----------------------------------------------------------------------- *)
@@ -352,10 +362,12 @@ let simplify_params (constraints : constr_conj) =
   in
   aux constraints constraints
 
-let simplify_vars_constr c v =
+let simplify_vars_constr c v =  (* Let's think of this rule!!! *)
   let pairs = poly2pairs c.poly v in
   let minimum = f_pairs BI.min pairs in
-  let new_poly = pairs2poly (L.map pairs ~f:(fun (p,d) -> (p, BI.(d -! minimum)) )) v in
+  let new_poly =
+    if (BI.compare minimum BI.zero) < 0 then c.poly
+    else pairs2poly (L.map pairs ~f:(fun (p,d) -> (p, BI.(d -! minimum)) )) v in
   mk_constr c.qvars c.q_ineq c.is_eq new_poly
       
 let simplify_vars (constraitns : constr_conj) =
@@ -376,7 +388,6 @@ let simplify_vars (constraitns : constr_conj) =
 let simplify constraints =
   clear_equations constraints
   |> simplify_params
-  |> simplify_vars
   |> clear_equations
 
 (* ----------------------------------------------------------------------- *)
@@ -582,11 +593,12 @@ let extract_stable (eq : constr) (idxs, mon) k1 k2 =
     then failwith (fsprintf "the monomial %a is not stable (overlap exists)" pp_monom mon) (* [eq] *)
     else
       let rvs = Atom.Map.of_alist_exn (rvars mon) in
+      let free_ivars = Ivar.Set.diff (ivars_monom rvs) (Ivar.Set.of_list idxs) in
       let poly1 =
         Map.filter eq.poly
        	  ~f:(fun ~key:s_eq ~data:_c ->
-              not (isomorphic_sum (mk_sum (Set.to_list (ivars_monom rvs)) [] rvs)
-				  (mk_sum (Set.to_list (ivars_monom (rvars_monom s_eq.monom))) [] (rvars_monom s_eq.monom))
+              not (isomorphic_sum (mk_sum idxs [] rvs)
+				  (mk_sum (Set.to_list (Ivar.Set.diff (ivars_monom (rvars_monom s_eq.monom)) free_ivars )) [] (rvars_monom s_eq.monom))
 		   && hvars s_eq.monom = []))
       in
       let constr1 = mk_constr [] [] Eq poly1 in

@@ -41,6 +41,7 @@ rule lex = parse
   | "forall" { FORALL }
   | "sum"    { SUM }
   | "_"      { UNDERSCORE }
+  | "'"      { QUOTE }
 
   | "return" { RETURN }
   | "input"  { INP }
@@ -53,15 +54,16 @@ rule lex = parse
   | "goto"     { GOTO }
   | "admit"    { ADMIT }
   | "simplify" { SIMPLIFY }
+  | "simplify_vars" { SIMPLIFYVARS }
 
   | ['G']chars* as s { GROUP (String.sub s 1 (String.length s - 1)) }
   | "Fp"             { FIELD }
   | ['o']chars* as s { ONAME s }
 					   
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
-  | ['i'-'j']chars* as s         { ID s}
+  | ['i'-'k']chars* as s         { ID s}
   | chars* as s                  { RVAR s}
-
+				 
 and comment = parse
   | "*)"        { () }
   | "(*"        { comment lexbuf; comment lexbuf }

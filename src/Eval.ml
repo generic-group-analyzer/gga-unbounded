@@ -72,64 +72,54 @@ let classify_gname es_gs gname =
 		 else if String.equal gname "Fp" then Fp
 		 else failwith (fsprintf "%s is not a source group" gname)
 
+let map_rvar s ~f =
+  mk_sum s.ivars s.i_ineq (Map.fold s.monom ~init:Atom.Map.empty ~f)
+
 let rvar2param s v =
-  let monom =
-    Map.fold s.monom
-       ~init:Atom.Map.empty
-       ~f:(fun ~key:k ~data:d m ->
-	   let new_k = match k with
-	     | Rvar (name, idx) when String.equal name (atom2name v) -> Param(name, idx)
-	     | _ -> k
-	   in
-	   Map.add m ~key:new_k ~data:d)
+  let f = fun ~key:k ~data:d m ->
+    let new_k = match k with
+      | Rvar (name, idx) when String.equal name (atom2name v) -> Param(name, idx)
+      | _ -> k
+    in 
+    Map.add m ~key:new_k ~data:d
   in
-  mk_sum s.ivars s.i_ineq monom
-
+  map_rvar s ~f
+	   
 let rvar2hvar s v g =
-  let monom =
-    Map.fold s.monom
-       ~init:Atom.Map.empty
-       ~f:(fun ~key:k ~data:d m ->
-	   let new_k = match k with
-	     | Rvar (name, Some i) when String.equal name (atom2name v) ->
-		Hvar { hv_name = name; hv_ivar = i; hv_gname = g }
-	     | Rvar (name, None) when String.equal name (atom2name v) ->
-		Hvar { hv_name = name; hv_ivar = {name = "k"; id = 0}; hv_gname = g }
-	     | _ -> k
-	   in
-	   Map.add m ~key:new_k ~data:d)
+  let f = fun ~key:k ~data:d m ->
+    let new_k = match k with
+      | Rvar (name, Some i) when String.equal name (atom2name v) ->
+	 Hvar { hv_name = name; hv_ivar = i; hv_gname = g }
+      | Rvar (name, None) when String.equal name (atom2name v) ->
+	 Hvar { hv_name = name; hv_ivar = {name = "k"; id = 0}; hv_gname = g }
+      | _ -> k
+    in
+    Map.add m ~key:new_k ~data:d
   in
-  mk_sum s.ivars s.i_ineq monom
-
+  map_rvar s ~f
+	   
 let rvar2irvar s v i =
-  let monom =
-    Map.fold s.monom
-       ~init:Atom.Map.empty
-       ~f:(fun ~key:k ~data:d m ->
-	   let new_k = match k with
-	     | Rvar (name, None) when String.equal name (atom2name v) ->
-		Rvar (name, Some i)
-	     | _ -> k
-	   in
-	   Map.add m ~key:new_k ~data:d)
+  let f = fun ~key:k ~data:d m ->
+    let new_k = match k with
+      | Rvar (name, None) when String.equal name (atom2name v) ->
+	 Rvar (name, Some i)
+      | _ -> k
+    in
+    Map.add m ~key:new_k ~data:d
   in
-  mk_sum s.ivars s.i_ineq monom
+  map_rvar s ~f
 	 
 let param2iparam s par_name i =
-  let monom =
-    Map.fold s.monom
-       ~init:Atom.Map.empty
-       ~f:(fun ~key:k ~data:d m ->
-	   let new_k = match k with
-	     | Param (name, None) when String.equal name par_name->
-		Param (name, Some i)
-	     | _ -> k
-	   in
-	   Map.add m ~key:new_k ~data:d)
+  let f = fun ~key:k ~data:d m ->
+    let new_k = match k with
+      | Param (name, None) when String.equal name par_name->
+	 Param (name, Some i)
+      | _ -> k
+    in
+    Map.add m ~key:new_k ~data:d
   in
-  mk_sum s.ivars s.i_ineq monom
-	 
-			       
+  map_rvar s ~f
+	   
 let ipoly_to_opoly es_gs params p =
   L.fold_left params
    ~init:p
@@ -344,10 +334,15 @@ let knowledge estate =
 	  ~f:(fun m -> (Set.length (ivars_monom (rvars_monom m)) > 0) && (L.length (hvars m) > 0))
 	 |> L.map ~f:(fun m -> rvars_monom m)
        in
-       match group with
-       | G1 -> (update_k k1 non_recur recur recur_idx, k2)
-       | G2 -> (k1, update_k k2 non_recur recur recur_idx)
-       | Fp -> (k1,k2)
+       match group, estate.es_gs with
+       | G1,_ -> (update_k k1 non_recur recur recur_idx, k2)
+       | G2, (Some gs,_,_) ->
+	  if (compare_group_setting gs II) = 0 then
+	    (update_k k1 non_recur recur recur_idx, update_k k2 non_recur recur recur_idx)
+	  else
+	    (k1, update_k k2 non_recur recur recur_idx)
+       | G2,_ -> (k1, update_k k2 non_recur recur recur_idx)
+       | Fp,_ -> (k1,k2)
       )
    	     
 let eval_cmds cmds =
@@ -362,12 +357,13 @@ type instr =
   | GoTo            of int
   | Admit
   | Simplify
+  | SimplifyVars
 
 let eval_instr (k1,k2) system nth instr =
   match instr with
   | Extract((idxs,mon), n) ->
      let f constraints = extract_stable_nth constraints (idxs,mon) k1 k2 n
-			 |> simplify
+		         |> simplify
      in
      (list_map_nth system nth f, nth)
 		  
@@ -392,6 +388,9 @@ let eval_instr (k1,k2) system nth instr =
 
   | Simplify ->
      (list_map_nth system nth simplify, nth)
+
+  | SimplifyVars ->
+     (list_map_nth system nth (fun constrs -> simplify (simplify_vars constrs)), nth)
 
 let eval_instrs instrs (k1,k2) system nth =
   L.fold_left instrs

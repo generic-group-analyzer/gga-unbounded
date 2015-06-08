@@ -8,7 +8,6 @@ extract (i,j; R_i*R_j) 2.
 
 case_distinction p5_i.
 admit.
-
 simplify.
 admit.
 

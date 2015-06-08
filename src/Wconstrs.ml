@@ -109,16 +109,15 @@ let apply_renaming rn ivar =
 let free_ivars_sum s =
   (Set.diff (ivars_sum s) (Ivar.Set.of_list s.ivars))
 
-    (*
 let free_ivars_poly p =
   Map.fold p 
     ~init:Ivar.Set.empty
     ~f:(fun ~key:s ~data:_c se -> Set.union se (free_ivars_sum s))
-     *)
-(*
+
 let free_ivars_constr c =
   Set.diff (free_ivars_poly c.poly) (Ivar.Set.of_list c.qvars)
 
+(*
 let bound_ivars_poly p =
   Map.fold p 
     ~init:Ivar.Set.empty

@@ -54,7 +54,9 @@
 %token GOTO
 %token ADMIT
 %token SIMPLIFY
-
+%token SIMPLIFYVARS
+       
+%token QUOTE
 
 /************************************************************************/       
 /* Priority & associativity */
@@ -81,8 +83,11 @@
 /* Types */
 
 ivar :
-| idx = ID                                  { { name = idx; id = 0 } };
- 
+| idx = ID                    { if (String.compare idx "k" <> 0) then { name = idx; id = 0 }
+			        else failwith "index 'k' is reserved" }
+| idx = ID; QUOTE;            { { name = idx; id = 1 } }
+| idx = ID; QUOTE; n = INT    { if n > 0 then { name = idx; id = n } else assert false }
+	
 atom :
 | s = RVAR UNDERSCORE idx = ivar            { mk_rvar s ~idx:(Some idx) }
 | s = RVAR                                  { mk_rvar s }
@@ -191,6 +196,8 @@ instr :
   { Admit }
 | SIMPLIFY; DOT;
   { Simplify }
+| SIMPLIFYVARS; DOT;
+  { SimplifyVars }
 
 instrs_t : instrs = list(instr); EOF; { instrs };
 

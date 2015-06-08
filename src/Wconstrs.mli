@@ -66,6 +66,8 @@ val ivars_poly : poly  -> Ivar.Set.t
 val ivars_constr : constr -> Ivar.Set.t
 val ivars_conj : constr list -> Ivar.Set.t
 
+val free_ivars_constr : constr -> Ivar.Set.t
+
 val renaming_away_from : Ivar.Set.t -> Ivar.Set.t ->  ivar Ivar.Map.t * Ivar.Set.t
 val apply_renaming : ivar Ivar.Map.t -> ivar -> ivar
 val rename_sum : sum -> ivar Ivar.Map.t -> sum

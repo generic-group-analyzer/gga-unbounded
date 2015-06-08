@@ -67,7 +67,7 @@ let list_map_nth list n f =
     | [] -> failwith "list_map_nth: n is greater than list length"
     | a :: tl ->
        if (k = 1) then hd @ [f a] @ tl
-       else aux (hd @ [f a]) (k-1) tl
+       else aux (hd @ [a]) (k-1) tl
   in
   if n > 0 then aux [] n list
   else failwith "list_map_nth: n has to be positive"
