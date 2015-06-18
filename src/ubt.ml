@@ -21,4 +21,4 @@ let main =
   else
     let scmds = input_file Sys.argv.(1) in
     let instrs = input_file Sys.argv.(2) in
-    Analize.analyze_unbounded scmds instrs
+    Analyze.analyze_unbounded scmds instrs

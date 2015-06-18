@@ -23,3 +23,24 @@ let analyze_unbounded cmds instrs =
     if Wrules.contradictions constraints then
       print_string "Contradiction!\n\n"
     else ()
+
+
+let analyze_unbounded_ws cmds instrs =
+  let open Big_int in
+  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
+  let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
+
+  let buf  = Buffer.create 127 in
+  let fbuf = F.formatter_of_buffer buf in
+  begin match system with
+  | [] ->
+    F.fprintf fbuf "Proven!\n(Group order >= %s)@\n" (string_of_big_int !group_order_bound)
+  | _::_ ->
+    let constraints = L.nth_exn system (nth-1) in
+    F.fprintf fbuf "\nWorking on goal %d out of %d." nth (L.length system);  
+    F.fprintf fbuf "    (Group order >= %s)@\n\n" (string_of_big_int !group_order_bound);
+    F.fprintf fbuf "%a" pp_constr_conj constraints;
+    if Wrules.contradictions constraints then F.fprintf fbuf "Contradiction!\n\n"
+  end;
+  F.pp_print_flush fbuf ();
+  Buffer.contents buf

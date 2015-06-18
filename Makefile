@@ -5,6 +5,15 @@ COREFLAGS=-pkg core \
     -tag short_paths \
     -cflags -strict-sequence
 
-all:
+.PHONY: ubt wsubt
+
+all: wsubt # ubt
+
+ubt:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./ubt.native
 	./ubt.native
+
+wsubt:
+	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./wsubt.native
+	killall wsubt.native
+

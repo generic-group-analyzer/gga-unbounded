@@ -90,6 +90,7 @@ val mk_poly : (BI.t * sum) list -> BI.t Sum.Map.t
 val mk_constr : ivar list -> ivar_pair list -> is_eq -> poly -> constr
 
 val all_ivar_distinct_poly : poly -> poly
+
 (* ----------------------------------------------------------------------- *)
 (* arithmetic operations *)
 
