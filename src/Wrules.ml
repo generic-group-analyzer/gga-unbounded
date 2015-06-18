@@ -178,35 +178,54 @@ let power_poly (p : poly) (e : BI.t) =
   if BI.(compare e zero) < 0 then failwith "Not supported"
   else if BI.(compare e zero) = 0 then SP.one else aux p e 
 						       
-let subst_sum (c : BI.t) (s : sum) (par : atom) (value : poly) =
+let subst_sum (c : BI.t) (s : sum) (par : atom) qvars (value : poly) =
   let d = degree par s.monom in
   let s = mk_sum s.ivars s.i_ineq (Map.remove s.monom par) in
-  Map.fold (power_poly value d) ~init:(mk_poly [])
+  let (rn,_) = renaming_away_from (Ivar.Set.of_list qvars) (bound_ivars_poly value) in
+  let new_value = rename_poly value rn in
+  Map.fold (power_poly new_value d) ~init:(mk_poly [])
 	   ~f:(fun ~key:s' ~data:c' p -> SP.(p +! (mk_poly [(BI.(c *! c'), mult_sum s s')])))
 	   
 (* not use this function with bound parameters *)
 let subst (c : constr_conj) (par : atom) (value : poly) =
-  let subst_poly p =
-    Map.fold p ~init:(mk_poly [])
-		  ~f:(fun ~key:s ~data:c p -> SP.(p +! (subst_sum c s par value)))
-  in
-  List.map c ~f:(fun x -> mk_constr x.qvars x.q_ineq x.is_eq (subst_poly x.poly))
-
-let subst_bound_sum c s qvars = function
-  | Param (name, Some _) ->
-     let filt = Map.filter s.monom ~f:(fun ~key:k ~data:_v ->
-		 match k with
-		 | Param (name', Some i) ->
-		    String.equal name' name && L.mem (s.ivars @ qvars) i ~equal:equal_ivar
-		 | _ -> false) in
-     if Map.is_empty filt then mk_poly [(c,s)]
-     else mk_poly []
-  | _ -> failwith "Indexed parameter expected"
-	   
-let subst_bound_by_zero (c : constr_conj) (par : atom) =
   let subst_poly p qvars =
     Map.fold p ~init:(mk_poly [])
-       ~f:(fun ~key:s ~data:c p -> SP.(p +! (subst_bound_sum c s qvars par)))
+		  ~f:(fun ~key:s ~data:c p -> SP.(p +! (subst_sum c s par qvars value)))
+  in
+  List.map c ~f:(fun x -> mk_constr x.qvars x.q_ineq x.is_eq (subst_poly x.poly x.qvars))
+
+let subst_bound_sum c s qvars value = function
+  | Param (name, Some par_idx) ->
+     let filt =
+       Map.filter s.monom ~f:(fun ~key:k ~data:_v ->
+	   match k with
+	   | Param (name', Some i) ->
+	      String.equal name' name && L.mem (s.ivars @ qvars) i ~equal:equal_ivar
+	   | _ -> false) in
+     if Map.is_empty filt then mk_poly [(c,s)]
+     else
+       let residue = Map.filter s.monom ~f:(fun ~key:k ~data:_v ->
+		      match k with
+		      | Param (name', Some i) ->
+			 not (String.equal name' name && L.mem (s.ivars @ qvars) i ~equal:equal_ivar)
+		      | _ -> true)
+       in
+       Map.fold filt
+	  ~init:( mk_poly [(c, mk_sum s.ivars s.i_ineq residue)] )
+	  ~f:(fun ~key:k ~data:v p ->
+	      let k_ivar = L.hd_exn (Set.to_list (ivars_atom k)) in
+	      let new_value = rename_poly value (Ivar.Map.of_alist_exn [(par_idx, k_ivar)]) in
+	      let (rn,_) = renaming_away_from (Ivar.Set.of_list qvars) (bound_ivars_poly new_value) in
+	      let new_value = rename_poly new_value rn in
+	      SP.( p *! (power_poly new_value v))		  
+	     )
+
+  | _ -> failwith "Indexed parameter expected"
+	   
+let subst_bound (c : constr_conj) (par : atom) (value : poly) =
+  let subst_poly p qvars =
+    Map.fold p ~init:(mk_poly [])
+	     ~f:(fun ~key:s ~data:c p -> SP.(p +! (subst_bound_sum c s qvars value par)))
   in
   List.map c
 	   ~f:(fun x -> mk_constr x.qvars x.q_ineq x.is_eq (subst_poly x.poly x.qvars))
@@ -232,7 +251,7 @@ let case_dist (c : constr_conj) par =
        let c2 = (mk_constr [] [] InEq (SP.of_a par)) :: c in
        [ c1; c2 ]
      else
-       let c1 = subst_bound_by_zero c par in
+       let c1 = subst_bound c par SP.zero in
        let i = fresh_ivar c in
        let c2 = (mk_constr [] [] InEq (SP.of_a (mk_param ~idx:(Some i) name))) :: (split i c) in
        [ c1; c2 ]			   
@@ -240,11 +259,27 @@ let case_dist (c : constr_conj) par =
   
 (* ----------------------------------------------------------------------- *)
 (* Simplification rules *)	   
-	  
+
+let pp_changes constraints new_constraints p1 link p2 qvars =
+  let modified = L.filter (L.zip_exn constraints new_constraints)
+		  ~f:(fun (c1,c2) -> (compare_constr c1 c2) <> 0) in
+  if (L.length modified > 0) then
+    let () =
+      if qvars = [] then
+	F.printf " Use equation:@\n   %a %s %a \n@\n To simplify:@\n" pp_poly p1 link pp_poly p2
+      else
+	F.printf " Use equation:@\n forall %a: %a %s %a \n@\n To simplify:@\n" (pp_list "," pp_ivar) qvars pp_poly p1 link pp_poly p2
+    in
+    L.iter modified
+     ~f:(fun (c1,c2) -> F.printf "  # %a    ->@\n    %a@\n@\n" pp_constr c1 pp_constr c2)
+  else ()
+    
 let remove_constants (p : poly) =
-  let gcd = gcd_big_int_list (Map.fold p ~init:[] ~f:(fun ~key:_s ~data:c l -> c :: l)) in
-  group_order_bound := BI.(max !group_order_bound (one +! gcd));
-  Map.fold p ~init:SP.zero ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(BI.(c /! gcd),s)])) )
+  let coefficients = (Map.fold p ~init:[] ~f:(fun ~key:_s ~data:c l -> c :: l)) in
+  let gcd = BI.abs (gcd_big_int_list coefficients) in
+  let freq_sign = most_frequent_sign coefficients in
+  group_order_bound := BI.(max !group_order_bound (one +! gcd ));
+  Map.fold p ~init:SP.zero ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(BI.(c /! gcd *! freq_sign),s)])) )
   (* Be carefull, the group order has to be distinct from gcd!!! *)
    
 let clear_equations (constraints : constr_conj) =
@@ -254,13 +289,38 @@ let clear_equations (constraints : constr_conj) =
   L.map constraints ~f:(fun c -> mk_constr c.qvars c.q_ineq c.is_eq (remove_constants c.poly))
   |> L.filter ~f:(fun c -> not (f c))  
 
+let rename_bound_idx (s : sum) iname taken =
+  let new_ivars = L.map (range 1 (L.length s.ivars)) ~f:(fun n -> { name = iname ; id = n-1 }) in
+  let (rn_ivars, _) = renaming_away_from taken (Ivar.Set.of_list new_ivars) in
+  let rn = Ivar.Map.of_alist_exn (L.zip_exn s.ivars (Map.data rn_ivars)) in
+  rename_sum s rn
+	      
+let uniform_bound_poly (p : poly) =
+  let free = free_ivars_poly p in
+  match (Set.to_list (bound_ivars_poly p)) with
+  | [] -> p
+  | i :: _ -> (* i will be the variable for every summation *)
+     Map.fold p
+	~init:SP.zero
+	~f:(fun ~key:s ~data:c p' ->
+	    SP.(p' +! (mk_poly [(c, rename_bound_idx s i.name free)])) )
+
+let uniform_bound constraints =
+  L.map constraints ~f:(fun c -> mk_constr c.qvars c.q_ineq c.is_eq (uniform_bound_poly c.poly))
+	
 let known_not_null (p : poly) (constraints : constr_conj) =
   let p = remove_constants p in
-  let not_null = L.fold_left (clear_equations constraints)
-		  ~init:[]
-		  ~f:(fun l c -> if c.is_eq = InEq then c.poly :: l else l) in
-  L.mem ~equal:isomorphic_poly (SP.one :: not_null) p
-	      
+  let not_null = L.map (L.filter (clear_equations constraints) ~f:(fun c -> c.is_eq = InEq))
+		       ~f:(fun c -> c.poly) in
+  (L.mem ~equal:isomorphic_poly (SP.one :: not_null) p) ||
+    match Map.to_alist p with
+    | (s1,_) :: [] -> (L.length s1.ivars = 1) && Map.is_empty s1.monom
+    | (s1,c1) :: (s2,c2)  :: [] ->
+       ((L.length s1.ivars) + (L.length s2.ivars) = 1) &&
+	 (Map.is_empty s1.monom) && (Map.is_empty s2.monom) &&
+	 ((BI.sign c1) = (BI.sign c2))
+    | _ -> false
+	     
 let collect_pairs list =
   let rec aux output = function
     | [] -> output
@@ -292,8 +352,8 @@ let f_pairs f pairs =
   match degrees with
   | [] -> BI.zero
   | d :: rest -> L.fold rest ~init:d ~f
-
-(*     We use the fact that 'a * par^d = b' is an equation     *)
+			
+(* We use the fact that 'a * par^d = b' is an equation *)
 let simplify_param_poly (par : atom) (d : BI.t) (a : poly) (b : poly) (p : poly) =
   let rec aux pairs =
     if BI.compare (f_pairs BI.max pairs) d < 0 then pairs2poly pairs par
@@ -307,60 +367,100 @@ let simplify_param_poly (par : atom) (d : BI.t) (a : poly) (b : poly) (p : poly)
 	  )
 	  (* Must the group order be distinct from a? *)
   in
-  aux (poly2pairs p par)
+  uniform_bound_poly (aux (poly2pairs p par))
        
-let simplify_param_constrs (par : atom) (qbound : bool) (d : BI.t) (a : poly) (b : poly) constraints =
+let simplify_param_constrs (par : atom) (qbound : bool) (d : BI.t) (a : poly) (b : poly) constraints qvars qineq =
   if (known_not_null a constraints) then
     if (equal_poly b SP.zero) then
       if (not qbound) then subst constraints par SP.zero
-      else subst_bound_by_zero constraints par
+      else subst_bound constraints par SP.zero
 	     
     else
       if (not qbound) then
-	let current = mk_constr [] [] Eq SP.((a *! (power_poly (of_a par) d)) -! b) in
-        (L.map constraints
-	  ~f:(fun c -> if isomorphic_constr c current then c
-		       else mk_constr c.qvars c.q_ineq c.is_eq (simplify_param_poly par d a b c.poly) )
+	let current = mk_constr qvars qineq Eq SP.((a *! (power_poly (of_a par) d)) -! b) in
+        let new_constraints =
+	  (L.map constraints
+	    ~f:(fun c ->
+		if isomorphic_constr c current then c
+		else
+		  if (L.length (poly2pairs c.poly par)) = 1 && c.is_eq = InEq then c
+		  else
+		    let (rn,_) = renaming_away_from (Ivar.Set.of_list qvars)
+				 (Set.union (bound_ivars_poly c.poly)
+					    (Ivar.Set.of_list c.qvars))
+		    in
+		    let c = rename_constr c rn in
+		    mk_constr (c.qvars @ qvars) (c.q_ineq @ qineq) c.is_eq (simplify_param_poly par d a b c.poly)
+	       )
+	  )
+	in
+	pp_changes constraints new_constraints SP.((power_poly (of_a par) d) *! a) "=" b qvars;
+	new_constraints
+      else
+	let current = mk_constr ((Set.to_list (ivars_atom par)) @ qvars) qineq Eq SP.((a *! (power_poly (of_a par) d)) -! b) in
+	(L.map constraints
+	  ~f:(fun c ->
+	      if isomorphic_constr c current then c
+	      else
+		if (equal_poly a SP.one) && (BI.(equal d one)) then L.hd_exn (subst_bound [c] par b)
+		else c
+	     )
 	)
-      else constraints  
   else
     constraints
 
-let use_param_equation (par : atom) (c : constr) (constraints : constr_conj) =
+let divide_by_par par c =
+  let pairs = poly2pairs c.poly par in
+  let minimum = f_pairs BI.min pairs in
+  let new_poly = pairs2poly (L.map pairs ~f:(fun (p,d) -> (p, BI.(d -! minimum)) )) par in
+  let () = if (BI.is_zero minimum) then ()
+	   else F.printf " Division by %a^%s in %a@\n" pp_atom par (BI.to_string minimum) pp_constr c
+  in
+  mk_constr c.qvars c.q_ineq c.is_eq new_poly
+	    
+let use_param_equation (par : atom) (c : constr) (constraints : constr_conj) is_eq =
   let qbound = match par with
     | Param (_, Some i) -> L.mem c.qvars ~equal:equal_ivar i
     | _ -> false
-  in				     
+  in
   match poly2pairs c.poly par with
-  | (p,d) :: [] -> if not (BI.is_zero d) then simplify_param_constrs par qbound d p SP.zero constraints
-		   else constraints
+  | (p,d) :: [] ->
+     if is_eq = Eq then
+       if not (BI.is_zero d) then
+	 simplify_param_constrs par qbound d p SP.zero constraints c.qvars c.q_ineq
+       else constraints
+     else
+       if (qbound) then constraints
+       else L.map constraints ~f:(fun c -> divide_by_par par c)
   | (p,d) :: (p',d') :: [] ->
-     if (BI.is_zero d') then simplify_param_constrs par qbound d p (SP.opp p') constraints
-     else if (BI.is_zero d) then simplify_param_constrs par qbound d' p' (SP.opp p) constraints
+     if (BI.is_zero d') && (is_eq = Eq) then
+       simplify_param_constrs par qbound d p (SP.opp p') constraints c.qvars c.q_ineq
+     else if (BI.is_zero d) && (is_eq = Eq) then
+       simplify_param_constrs par qbound d' p' (SP.opp p) constraints c.qvars c.q_ineq
      else constraints
   | _ -> constraints
-    	   
+	       	   
 let simplify_params (constraints : constr_conj) =
   let rec aux output = function
     | [] -> output
     | c :: rest_c ->
-       if c.is_eq = Eq then
-	 let f = (fun ~key:s ~data:_ l -> l @ (not_bound_sum_params s) ) in	   
-	 let param_list = Map.fold c.poly ~init:[] ~f
-			  |> L.dedup ~compare:compare_atom in
-	 let new_output = L.fold_left param_list
-	                   ~init:output
-			   ~f:(fun output' p -> use_param_equation p c output')
-	 in
-	 let new_rest = L.fold_left param_list
-			 ~init:rest_c
-			 ~f:(fun rest p -> use_param_equation p c rest)
-	 in
-	 aux new_output new_rest
-       else
-	 aux output rest_c
+       let f = (fun ~key:s ~data:_ l -> l @ (not_bound_sum_params s) ) in	   
+       let param_list = Map.fold c.poly ~init:[] ~f
+			|> L.dedup ~compare:compare_atom
+       in
+       let new_output = L.fold_left param_list
+			 ~init:output
+			 ~f:(fun output' p -> use_param_equation p c output' c.is_eq)
+			|> clear_equations
+       in
+       let new_rest = L.fold_left param_list
+                       ~init:rest_c
+		       ~f:(fun rest p -> use_param_equation p c rest c.is_eq)
+		      |> clear_equations
+       in
+       aux (new_output @ [c]) new_rest
   in
-  aux constraints constraints
+  aux [] constraints
 
 let simplify_vars_constr c v =  (* Let's think of this rule!!! *)
   let pairs = poly2pairs c.poly v in
@@ -386,7 +486,8 @@ let simplify_vars (constraitns : constr_conj) =
   aux [] constraitns
       
 let simplify constraints =
-  clear_equations constraints
+  uniform_bound constraints
+  |> clear_equations
   |> simplify_params
   |> clear_equations
 
@@ -395,7 +496,7 @@ let simplify constraints =
        
 let contradictions (constraints : constr_conj) =
   let f c = (equal_poly c.poly SP.zero && c.is_eq = InEq) ||
-	    (equal_poly c.poly SP.one  && c.is_eq = Eq)
+	    (known_not_null c.poly constraints && c.is_eq = Eq)
   in
   L.exists constraints ~f
       

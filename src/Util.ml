@@ -24,6 +24,8 @@ module BI = struct
   let equal a b = compare a b = 0
   let max = max_big_int
   let min = min_big_int
+  let abs = abs_big_int
+  let sign = sign_big_int
 end
 
 (* ======================================================================= *)
@@ -62,6 +64,11 @@ let gcd_big_int_list list =
   | hd :: [] -> hd
   | hd :: tl -> aux hd tl
 
+let most_frequent_sign list =
+  let positive = L.count list ~f:(fun x -> compare x BI.zero > 0) in
+  if (2 * positive) >= L.length list then BI.one
+  else BI.(opp one)
+
 let list_map_nth list n f =
   let rec aux hd k = function
     | [] -> failwith "list_map_nth: n is greater than list length"
@@ -85,7 +92,7 @@ let list_remove list n =
 let range n m =
   let rec aux output k = if (k <= m) then aux (output @ [k]) (k+1) else output in
   if (n <= m) then aux [] n
-  else failwith "range: n has to be lower or equal than m"
+  else []
 
 let rec unique xs ~equal =
   match xs with

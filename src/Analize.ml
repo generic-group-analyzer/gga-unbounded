@@ -3,9 +3,15 @@ open Wconstrs
 open Watom
 
 let analyze_unbounded cmds instrs =
+  let file = open_out "log" in
+  let shell = Unix.dup Unix.stdout in
+  Unix.dup2 (Unix.descr_of_out_channel file) Unix.stdout;
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
-
+  F.print_flush ();
+  close_out file;
+  Unix.dup2 shell Unix.stdout;
+  
   if (L.length system = 0) then
     F.printf "Proven!\n(Group order >= %d)@\n" (Big_int.int_of_big_int !group_order_bound)
 
@@ -17,4 +23,3 @@ let analyze_unbounded cmds instrs =
     if Wrules.contradictions constraints then
       print_string "Contradiction!\n\n"
     else ()
-	   

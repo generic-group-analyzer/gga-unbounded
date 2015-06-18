@@ -72,7 +72,7 @@ let ivars_monom mon =
     ~f:(fun ~key:k ~data:_v se -> Set.union se (ivars_atom k))
 
 let ivars_sum sum =
-  ivars_monom sum.monom
+  Set.union (ivars_monom sum.monom) (Ivar.Set.of_list sum.ivars)
 
 let ivars_poly poly =
   L.fold_left (Map.keys poly)
@@ -80,7 +80,7 @@ let ivars_poly poly =
     ~f:(fun se1 t -> Set.union se1 (ivars_sum t))
 
 let ivars_constr constr =
-  ivars_poly constr.poly
+  Set.union (ivars_poly constr.poly) (Ivar.Set.of_list constr.qvars)
 
 let ivars_conj conj =
   L.fold_left conj ~init:Ivar.Set.empty
@@ -95,7 +95,7 @@ let new_ivar taken old_idx =
     else
       idx
   in
-  go 0
+  go old_idx.id
 
 let renaming_away_from taken ivars =
   Set.fold ivars ~init:(Ivar.Map.empty,taken)
@@ -117,12 +117,10 @@ let free_ivars_poly p =
 let free_ivars_constr c =
   Set.diff (free_ivars_poly c.poly) (Ivar.Set.of_list c.qvars)
 
-(*
 let bound_ivars_poly p =
   Map.fold p 
     ~init:Ivar.Set.empty
     ~f:(fun ~key:s ~data:_c se -> Set.union se (Ivar.Set.of_list s.ivars))
- *)
     
 let all_pairs (ivars : ivar list) =
   L.filter (L.cartesian_product ivars ivars) ~f:(fun (x,y) -> x <> y)
@@ -374,14 +372,14 @@ let pp_constr fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq } =
 	       pp_poly p
 	      (is_eq_to_string is_eq)
   else
-    F.fprintf fmt "@[<hov 2>%a%a %s 0@]@\n" (pp_binder "forall") qvs pp_poly p (is_eq_to_string is_eq)
+    F.fprintf fmt "@[<hov 2>%a%a %s 0@]" (pp_binder "forall") qvs pp_poly p (is_eq_to_string is_eq)
 
 let pp_constr_conj fmt conj =
   let rec aux n list f =
     match list with
     | [] -> F.fprintf f "\n"
     | c :: rest ->
-       F.fprintf f "@[%i: %a@]@\n" n pp_constr c;
+       F.fprintf f "@[%i: %a@]@\n\n" n pp_constr c;
        F.fprintf f "%t" (aux (n+1) rest)
   in
   aux 1 conj fmt
@@ -395,6 +393,17 @@ let rename_sum s rn =
   let monom = map_idx_monom ~f:(apply_renaming rn) s.monom in
   mk_sum ivars i_ineq monom
 
+let rename_poly p rn =
+  Map.fold p
+     ~init:SP.zero
+     ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(c,rename_sum s rn)]) ) )
+
+let rename_constr c rn =
+  let qvars = L.map c.qvars ~f:(apply_renaming rn) in
+  let q_ineq = L.map c.q_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y)) in
+  let poly = rename_poly c.poly rn in
+  mk_constr qvars q_ineq c.is_eq poly
+     
 let matching_term (c1,s1) (c2,s2) ren =
   let free1 = L.filter (Set.to_list (free_ivars_sum s1)) ~f:(fun x -> (Ivar.Map.find ren x)=None) in
   let free2 = L.filter (Set.to_list (free_ivars_sum s2)) ~f:(fun x -> (Ivar.Map.find ren x)=None) in
