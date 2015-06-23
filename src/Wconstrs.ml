@@ -157,10 +157,14 @@ let mk_monom atoms =
     ~f:(fun m (inv,a) -> mult_monom_atom m (bi_of_inv inv,a))
 
 let mk_sum ivs ivs_dist mon =
-  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x && L.mem ivs y) in
+  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
   let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
-  let ivs = Ivar.Set.to_list (Ivar.Set.of_list ivs) in
-  { ivars = ivs; i_ineq = ivar_pairs; monom = mon }
+  let unused_ivars = Set.diff (Ivar.Set.of_list ivs) (ivars_monom mon) in
+  let ivs = Ivar.Set.to_list (Set.diff (Ivar.Set.of_list ivs) unused_ivars) in
+  let new_mon = if (Set.length unused_ivars) = 0 then mon
+		else Map.add mon ~key:Nqueries ~data:(BI.of_int (Set.length unused_ivars))
+  in
+  { ivars = ivs; i_ineq = ivar_pairs; monom = new_mon }
 
 let add_poly_term m (c,t) =
   Map.change m t
@@ -198,8 +202,7 @@ let mk_constr ivs ivs_dist is_eq poly =
   let ivs = L.filter ~f:(fun iv -> Set.mem iv_occs iv) ivs
 	    |> L.dedup ~compare:compare_ivar
   in
-  let ivs_p = Ivar.Set.to_list (ivars_poly poly) in
-  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs_p x && L.mem ivs_p y) in
+  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
   let ivar_pairs = L.dedup ~compare:compare_ivar_pair ivs_dist in
   { qvars = ivs; q_ineq = ivar_pairs; is_eq = is_eq; poly = poly }
 
@@ -366,7 +369,7 @@ let pp_poly fmt poly =
 
 let pp_constr fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq } =
   if qinqs<>[] then
-    F.fprintf fmt "@[<hov 2>%a(%a) %a %s 0@]\n"
+    F.fprintf fmt "@[<hov 2>%a(%a) %a %s 0@]"
 	      (pp_binder "forall") qvs
 	      (pp_list ", " pp_ivar_pair) qinqs
 	       pp_poly p

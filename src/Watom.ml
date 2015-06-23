@@ -70,6 +70,7 @@ type atom =
   | Param of param
   | Rvar  of rvar
   | Hvar  of hvar
+  | Nqueries
   with compare, sexp
 
 (* data structures with atoms *)
@@ -157,3 +158,4 @@ let pp_atom fmt = function
   | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
+  | Nqueries  -> F.fprintf fmt "|Q|"

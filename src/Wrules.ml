@@ -124,8 +124,8 @@ let keep_from_pairs (i : ivar) (pairs : ivar_pair list) =
 	   
 (* ----------------------------------------------------------------------- *)
 (* Split forall and sum quantification as follows:
-   split(i', forall i. e) = split(i',e)[i -> i'] /\ (forall i. (split(i',e)))
-   split(i', sum i. e) = split(i',e)[i -> i'] + (sum i. (split(i',e)))
+   split(i', forall i. e) = split(i',e)[i -> i'] /\ (forall i\{i'}. (split(i',e)))
+   split(i', sum i. e) = split(i',e)[i -> i'] + (sum i\{i'}. (split(i',e)))
 *)
 
 let not_qineq_contradiction (c : constr) =
@@ -137,9 +137,9 @@ let split_sum (iv : ivar) (sum : sum) =
     match s.ivars with      
     | [] -> [s]
     | i::is ->
-       let (i_pairs, rest_pairs) = (keep_from_pairs i s.i_ineq), (rm_from_pairs i s.i_ineq) in       
+       let (i_pairs, rest_pairs) = (keep_from_pairs i s.i_ineq), (rm_from_pairs i s.i_ineq) in      
        let sums = do_split (mk_sum is rest_pairs s.monom) in       
-       let sums1 = L.map ~f:(fun s -> mk_sum (i::s.ivars) i_pairs s.monom) sums in       
+       let sums1 = L.map ~f:(fun s -> mk_sum (i::s.ivars) ((i,iv)::i_pairs) s.monom) sums in       
        let sums2 = L.map ~f:(subst_idx_sum i iv) sums in       
        sums1 @ sums2
   in  
@@ -155,11 +155,11 @@ let split_poly (iv : ivar) (p : poly) =
       
 let split_constr (iv : ivar) (constr : constr) =
   let rec do_split c =
-    match c.qvars with      
+    match c.qvars with
     | [] -> [ mk_constr [] c.q_ineq c.is_eq (split_poly iv c.poly) ]
     | i::is ->
       let constrs = do_split (mk_constr is c.q_ineq c.is_eq c.poly) in
-      let constrs1 = L.map ~f:(fun x -> mk_constr (i::x.qvars) x.q_ineq x.is_eq x.poly) constrs in
+      let constrs1 = L.map ~f:(fun x -> mk_constr (i::x.qvars) ((i,iv)::x.q_ineq) x.is_eq x.poly) constrs in
       let constrs2 = L.map ~f:(subst_idx_constr i iv) constrs in
       L.filter ~f:not_qineq_contradiction (constrs1 @ constrs2)
   in
