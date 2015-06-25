@@ -4,7 +4,7 @@
 open Abbrevs
 open Core.Std
 
-module WS = Websocket_lwt
+module WS = Websocket
 module YS = Yojson.Safe
 
 (*
@@ -73,7 +73,7 @@ let split_proof_script s =
 (*i ----------------------------------------------------------------------- i*)
 (* \hd{Handlers for different commands} *)
 
-let frame_of_string s = WS.Frame.create ~content:s ()
+let frame_of_string s = WS.Frame.of_string ~content:s ()
 
 let process_unknown s =
   F.printf "unknown command: %s\n%!" s;
@@ -160,9 +160,9 @@ let process_eval _fname proofscript =
 (* \hd{Frame processing and server setup} *)
 
 let process_frame frame =
-  let inp = let s = WS.Frame.( frame.content ) in
-	    if s = "" then failwith "frame error"
-	    else s 
+  let inp = match WS.Frame.content frame with
+    | Some s -> s
+    | None   -> failwith "frame error"
   in
   F.printf "Command: ``%s''\n%!" inp;
   match YS.from_string inp with
@@ -197,28 +197,6 @@ let sockaddr_of_dns node service =
     | []   -> Lwt.fail Not_found)
 
 let run_server node service =
-  let rec _zoocrypt_serve id uri stream push =
-    Lwt_stream.next stream >>= fun frame ->
-    process_frame frame >>= fun frame' ->
-    Lwt.wrap (fun () -> push (Some frame')) >>= fun () ->
-    _zoocrypt_serve id uri stream push
-  in
-
-  let echo_fun _id _req recv send =
-    let react _fr =
-      send @@ WS.Frame.create ~opcode:WS.Frame.Opcode.Pong ~content:"asdf\n" ()
-    in
-    let rec react_forever () = recv () >>= react >>= react_forever
-    in
-    react_forever ()
-  in
-  let uri = Uri.of_string ("ws://" ^ node ^ ":" ^ service) in
-  Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system >>= fun endp ->
-  Conduit_lwt_unix.(endp_to_server ~ctx:default_ctx endp >>= fun server ->
-  WS.establish_server ~ctx:default_ctx ~mode:server echo_fun)
- 
-(*
-let run_server node service =
   let rec zoocrypt_serve uri (stream, push) =
     Lwt_stream.next stream >>= fun frame ->
     process_frame frame >>= fun frame' ->
@@ -226,8 +204,7 @@ let run_server node service =
     zoocrypt_serve uri (stream, push)
   in
   sockaddr_of_dns node service >>= fun sa ->
-  Lwt.return (WS.establish_server ~ctx:default_ctx sa zoocrypt_serve)
-*)  
+  Lwt.return (WS.establish_server sa zoocrypt_serve)
 
 let rec wait_forever () =
   Lwt_unix.sleep 1000.0 >>= wait_forever
@@ -254,6 +231,6 @@ let main =
   print_endline "Open the following URL in your browser (websocket support required):\n";
   print_endline ("    file://"^Sys.getcwd ()^"/web/index.html\n\n");
   if Sys.file_exists !ps_file = `Yes
-  then print_endline ("Files: " ^ (String.concat ~sep:", " !ps_files))
-  else failwith (F.sprintf "File ``%s'' does not exist." !ps_file);
+    then print_endline ("Files: " ^ (String.concat ~sep:", " !ps_files))
+    else failwith (F.sprintf "File ``%s'' does not exist." !ps_file);
   Lwt_main.run (run_server !server_name "9999" >>= fun _ -> wait_forever ())
