@@ -50,6 +50,7 @@ let atom2name = function
   | Rvar (name, _) -> name
   | Param (name,_) -> name
   | Hvar hv -> hv.hv_name
+  | _ -> ""
 
 let ensure_oracle_valid estate ovarnames used =
   if not (unique ovarnames ~equal:String.equal)
