@@ -145,12 +145,16 @@ function markLocked(c) {
 /* Goal and message editor and resizing                             */
 /* ******************************************************************/
 
-var editorGoal = ace.edit("editor-goal");
-editorGoal.setTheme("ace/theme/eclipse");
-editorGoal.setHighlightActiveLine(false);
-editorGoal.setShowPrintMargin(false);
-editorGoal.setDisplayIndentGuides(false);
-editorGoal.renderer.setShowGutter(false)
+/* TEXOUT: We create an ACE editor instance here and attach it to the
+     div "editor-goal".
+     If we comment this out, there will just be a div and we can directly
+     write content into the div. */
+// var editorGoal = ace.edit("editor-goal");
+// editorGoal.setTheme("ace/theme/eclipse");
+// editorGoal.setHighlightActiveLine(false);
+// editorGoal.setShowPrintMargin(false);
+// editorGoal.setDisplayIndentGuides(false);
+// editorGoal.renderer.setShowGutter(false)
 
 var editorMessage = ace.edit("editor-message");
 editorMessage.setTheme("ace/theme/eclipse");
@@ -230,7 +234,8 @@ function evalLocked() {
   if (lockedText() !== "") {
     sendZoocrypt({'cmd':'eval','arg':lockedText(),'filename':currentFile});
   } else {
-    editorGoal.setValue("");
+    /* TEXTOUT: here, we would have cleaned the goal editor */
+    // editorGoal.setValue("");
     editorMessage.setValue("");
   }
 }

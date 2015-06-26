@@ -14,10 +14,14 @@ webSocket.onmessage = function (evt) {
         }
         setFirstUnlocked(m.ok_upto);
         markLocked('locked');
-        editorGoal.setValue(m.arg);
-        editorGoal.clearSelection();
-        var pos = editorGoal.getSession().getDocument().indexToPosition(0, 0);
-        editorGoal.moveCursorToPosition(pos);
+        document.getElementById('editor-goal').innerHTML = "<pre>" + m.arg + "</pre>";
+        // editorGoal.setValue(m.arg);
+        /* TEXOUT: m.arg is the string received from ocaml, we set the value of
+             editorGoal here */
+        // editorGoal.clearSelection();
+        /* TEXOUT: and clear the selection. */
+        // var pos = editorGoal.getSession().getDocument().indexToPosition(0,0);
+        // editorGoal.moveCursorToPosition(pos);
         if (m.err) {
             editorMessage.setValue(m.err);
         }
