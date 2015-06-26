@@ -1,6 +1,9 @@
 /** @jsx React.DOM */
 
-var goalStyle = { overflowY: 'scroll', backgroundColor: 'white' }
+var reportStyle = {
+  overflowY: 'scroll', backgroundColor: 'white',
+  color: 'black'
+}
 
 /* TEXOUT: This is the layout of the editor buffers, there are three
    divs for the proof editor, the goal, and the error messages. */
@@ -16,9 +19,9 @@ var Editors = React.createClass({
                   <div className="editor" id="editor-proof"></div>
                 </td>
                 <td>
-                  <div className="editor" style={goalStyle}
+                  <div className="editor" style={reportStyle}
                        id="editor-goal"></div>
-                  <div className="editor"
+                  <div className="editor" style={reportStyle}
                        id="editor-message"></div>
                 </td>
               </tr>

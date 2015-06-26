@@ -14,25 +14,17 @@ webSocket.onmessage = function (evt) {
         }
         setFirstUnlocked(m.ok_upto);
         markLocked('locked');
-        document.getElementById('editor-goal').innerHTML = "<pre>" + m.arg + "</pre>";
-        // editorGoal.setValue(m.arg);
-        /* TEXOUT: m.arg is the string received from ocaml, we set the value of
-             editorGoal here */
-        // editorGoal.clearSelection();
-        /* TEXOUT: and clear the selection. */
-        // var pos = editorGoal.getSession().getDocument().indexToPosition(0,0);
-        // editorGoal.moveCursorToPosition(pos);
+        setGoalHtml("$\alpha = \omega$" + m.arg);
         if (m.err) {
-            editorMessage.setValue(m.err);
+            setMessageHtml(m.err);
         }
         else {
-            editorMessage.setValue(m.msgs.length > 0 ? m.msgs[m.msgs.length - 1] : "No message received.");
+            var msg = m.msgs.length > 0 ? m.msgs[m.msgs.length - 1] : "No message received.";
+            setMessageHtml(msg);
         }
-        editorMessage.clearSelection();
     }
     else if (m.cmd == 'setDebug') {
-        editorMessage.setValue(m.arg);
-        editorMessage.clearSelection();
+        setMessageHtml(m.arg);
     }
     else if (m.cmd == 'setFiles') {
         files = (m.arg);
@@ -44,17 +36,14 @@ webSocket.onmessage = function (evt) {
         editorProof.setValue(m.arg);
         editorProof.clearSelection();
         editorProof.scrollPageUp();
-        editorMessage.setValue("Proofscript loaded.");
-        editorMessage.clearSelection();
+        setMessageHtml("Proofscript loaded.");
         var pos = editorProof.getSession().getDocument().indexToPosition(firstUnlocked, 0);
         editorProof.moveCursorToPosition(pos);
     }
     else if (m.cmd == "saveOK") {
-        editorMessage.setValue("Proofscript saved.");
-        editorMessage.clearSelection();
+        setMessageHtml("Proofscript saved.");
     }
     else if (m.cmd == "saveFAILED") {
-        editorMessage.setValue("Save of proofscript failed.");
-        editorMessage.clearSelection();
+        setMessageHtml("Save of proofscript failed.");
     }
 };

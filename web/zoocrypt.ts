@@ -1,5 +1,6 @@
 /// <reference path="ace.d.ts" />
 /// <reference path="jquery.d.ts" />
+/// <reference path="mathjax.d.ts" />
 
 declare var ReconnectingWebSocket
 
@@ -156,12 +157,24 @@ function markLocked(c) {
 // editorGoal.setDisplayIndentGuides(false);
 // editorGoal.renderer.setShowGutter(false)
 
-var editorMessage = ace.edit("editor-message");
-editorMessage.setTheme("ace/theme/eclipse");
-editorMessage.setHighlightActiveLine(false);
-editorMessage.setDisplayIndentGuides(false);
-editorMessage.setShowPrintMargin(false);
-editorMessage.renderer.setShowGutter(false);
+function setGoalHtml(s : string) {
+  document.getElementById('editor-goal').innerHTML = "<p>\\(\\alpha = \\omega\\)</p><pre>"+s+"</pre>";
+  // translate mathjax content
+  MathJax.Hub.Queue(["Typeset",MathJax.Hub,'editor-goal']); 
+}
+
+function setMessageHtml(s : string) {
+  document.getElementById('editor-message').innerHTML = "<pre>"+s+"</pre>";
+  // translate mathjax content
+  MathJax.Hub.Queue(["Typeset",MathJax.Hub,'editor-message']); 
+}
+
+// var editorMessage = ace.edit("editor-message");
+// editorMessage.setTheme("ace/theme/eclipse");
+// editorMessage.setHighlightActiveLine(false);
+// editorMessage.setDisplayIndentGuides(false);
+// editorMessage.setShowPrintMargin(false);
+// editorMessage.renderer.setShowGutter(false);
 
 // resize windows
 function resizeAce() : void {
@@ -234,9 +247,8 @@ function evalLocked() {
   if (lockedText() !== "") {
     sendZoocrypt({'cmd':'eval','arg':lockedText(),'filename':currentFile});
   } else {
-    /* TEXTOUT: here, we would have cleaned the goal editor */
-    // editorGoal.setValue("");
-    editorMessage.setValue("");
+    setGoalHtml("");
+    setMessageHtml("");
   }
 }
 

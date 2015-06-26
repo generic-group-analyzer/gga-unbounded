@@ -4,32 +4,40 @@
 <head>
   <link rel="stylesheet" href="css/bootstrap.css">
   <meta charset="utf-8">
-    <title>UBT</title>
-    <style type="text/css" media="screen">
-        .editor {
-            width: 600px;
-            height: 800px;
-            margin-right: 1em;
-            margin-top: 1em;
-        }
-        .locked {
-            background: rgba(50, 255, 50, 0.3);
-            position: absolute;
-        }
-        .processing {
-          background: rgba(50, 255, 50, 0.1);
-          position: absolute;
-        }
-        /* Reset the container */
-        .container {
-          max-width: none !important;
-          min-width: 95%;
-          max-height: 70% !important;
-          padding-left: 0px;
-          padding-top: 5px;
-          /*border: 5px solid green;*/
-        }
+  <title>UBT</title>
+  <style type="text/css" media="screen">
+    .editor {
+      width: 600px;
+      height: 800px;
+      margin-right: 1em;
+      margin-top: 1em;
+    }
+    .locked {
+      background: rgba(50, 255, 50, 0.3);
+      position: absolute;
+    }
+    .processing {
+      background: rgba(50, 255, 50, 0.1);
+      position: absolute;
+    }
+    /* Reset the container */
+    .container {
+      max-width: none !important;
+      min-width: 95%;
+      max-height: 70% !important;
+      padding-left: 0px;
+      padding-top: 5px;
+      /*border: 5px solid green;*/
+    }
     </style>
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+      tex2jax: {
+        inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+        processEscapes: true
+      }
+    });
+    </script>
 </head>
 <body style="background-color: rgba(35, 35, 35, 0.84);">
   <div class="container">
@@ -53,6 +61,7 @@
   <script src="imported/bootstrap.min.js"></script>
   <script src="imported/react-0.11.1.js"></script>
   <script src="imported/reconnecting-websocket.js"></script>
+  <script src="imported/mathjax/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
   <script src="editorView.js"></script>
   <script src="zoocrypt.js"></script>
   <script src="buttonView.js"></script>
