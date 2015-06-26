@@ -164,9 +164,9 @@ function setGoalHtml(s : string) {
   var markdown =
     "# Nice output\n" +
     "\n"+
-    '<p><script type="math/tex" mode="display">foo = \\alpha + \\beta</script></p>\n' +
+    '* <script type="math/tex">foo = \\alpha + \\beta</script>\n' +
     "\n"+
-    '<p><script type="math/tex" mode="display">bar = \\sum_{i=0}^{k} a_i + \\forall j. j = i</script></p>\n' +
+    '<script type="math/tex" mode="display">bar = \\sum_{i=0}^{k} a_i + \\forall j. j = i</script>\n' +
     "\n" +
     "## Old output\n";
   var converter = new showdown.Converter();
