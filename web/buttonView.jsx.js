@@ -60,7 +60,7 @@ var OpenDialog = React.createClass({
 });
 
 function renderOpenDialog(files) {
-  React.renderComponent(
+  React.render(
     <OpenDialog files={files}/>
   , document.getElementById('open-dialog')
   );
@@ -119,7 +119,7 @@ var NewDialog = React.createClass({
 });
 
 function renderNewDialog() {
-  React.renderComponent(
+  React.render(
     <NewDialog/>
   , document.getElementById('new-dialog')
   );
@@ -163,7 +163,7 @@ var Toolbar = React.createClass({
   }});
 
 function renderToolbar(fn) {
-  React.renderComponent(
+  React.render(
     <Toolbar curFile={fn}/>
     , document.getElementById('toolbar-buttons')
   );

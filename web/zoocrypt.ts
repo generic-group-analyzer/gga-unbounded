@@ -1,6 +1,7 @@
-/// <reference path="ace.d.ts" />
-/// <reference path="jquery.d.ts" />
-/// <reference path="mathjax.d.ts" />
+/// <reference path="typedefs/ace.d.ts" />
+/// <reference path="typedefs/jquery.d.ts" />
+/// <reference path="typedefs/mathjax.d.ts" />
+/// <reference path="typedefs/showdown.d.ts" />
 
 declare var ReconnectingWebSocket
 
@@ -158,7 +159,17 @@ function markLocked(c) {
 // editorGoal.renderer.setShowGutter(false)
 
 function setGoalHtml(s : string) {
-  document.getElementById('editor-goal').innerHTML = "<p>\\(\\alpha = \\omega\\)</p><pre>"+s+"</pre>";
+  var markdown =
+    "# Nice output\n" +
+    "\n"+
+    "$$ foo = \\alpha + \\beta$$\n" +
+    "\n"+
+    "$$bar = \\Sum_{i=0}^{k} a_i + \\forall j. j = i$$\n" +
+    "\n" +
+    "## Old output\n";
+  var converter = new showdown.Converter();
+  var html = converter.makeHtml(markdown);
+  document.getElementById('editor-goal').innerHTML = html+"<pre>"+s+"</pre>";
   // translate mathjax content
   MathJax.Hub.Queue(["Typeset",MathJax.Hub,'editor-goal']); 
 }

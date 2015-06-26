@@ -33,7 +33,7 @@ var Editors = React.createClass({
 });
 
 function renderEditors() {
-  React.renderComponent(
+  React.render(
       <Editors/>
     , document.getElementById('content')
   );

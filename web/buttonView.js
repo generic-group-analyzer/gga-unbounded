@@ -4,7 +4,7 @@
 /* Open Dialog                                                      */
 /* ******************************************************************/
 
-var FileButton = React.createClass({displayName: 'FileButton',
+var FileButton = React.createClass({displayName: "FileButton",
   render: function() {
     var file = this.props.file;
     var closeDialog = this.props.closeDialog;
@@ -12,22 +12,22 @@ var FileButton = React.createClass({displayName: 'FileButton',
       loadBuffer(file);
       closeDialog();
     };
-    return React.DOM.button({type: "button", className: "btn btn-default", style: {textAlign: "left"}, onClick: hclick}, file);
+    return React.createElement("button", {type: "button", className: "btn btn-default", style: {textAlign: "left"}, onClick: hclick}, file);
   }
 });
 
-var FileButtons = React.createClass({displayName: 'FileButtons',
+var FileButtons = React.createClass({displayName: "FileButtons",
  render: function() {
      var closeDialog = this.props.closeDialog;
      var files = this.props.files;
      return (
-      React.DOM.div({className: "btn-group-vertical", style: {paddingBottom: "10px"}}, 
-         files.map(function (fn) { return FileButton({key: fn, file: fn, closeDialog: closeDialog}) })
+      React.createElement("div", {className: "btn-group-vertical", style: {paddingBottom: "10px"}}, 
+         files.map(function (fn) { return React.createElement(FileButton, {key: fn, file: fn, closeDialog: closeDialog}) })
       ));extr
  }
 });
 
-var OpenDialog = React.createClass({displayName: 'OpenDialog',
+var OpenDialog = React.createClass({displayName: "OpenDialog",
  render: function() {
    var files = this.props.files;
    var closeDialog = (function(_this) {
@@ -38,18 +38,18 @@ var OpenDialog = React.createClass({displayName: 'OpenDialog',
    })(this);
    
    return (
-     React.DOM.div({id: "open-file-modal", className: "modal"}, 
-       React.DOM.div({className: "modal-dialog"}, 
-         React.DOM.div({className: "modal-content"}, 
-           React.DOM.div({className: "modal-header", style: {textAlign: "center"}}, 
-             React.DOM.h3({className: "modal-title"}, "Open file")
+     React.createElement("div", {id: "open-file-modal", className: "modal"}, 
+       React.createElement("div", {className: "modal-dialog"}, 
+         React.createElement("div", {className: "modal-content"}, 
+           React.createElement("div", {className: "modal-header", style: {textAlign: "center"}}, 
+             React.createElement("h3", {className: "modal-title"}, "Open file")
            ), 
-           React.DOM.div({className: "modal-body", style: {textAlign: "center"}}, 
-             FileButtons({files: files, closeDialog: closeDialog})
+           React.createElement("div", {className: "modal-body", style: {textAlign: "center"}}, 
+             React.createElement(FileButtons, {files: files, closeDialog: closeDialog})
            ), 
-           React.DOM.div({className: "modal-footer"}, 
-             React.DOM.div({className: "btn-group"}, 
-               React.DOM.button({type: "button", className: "btn btn-primary btn-default", 
+           React.createElement("div", {className: "modal-footer"}, 
+             React.createElement("div", {className: "btn-group"}, 
+               React.createElement("button", {type: "button", className: "btn btn-primary btn-default", 
                   onClick: closeDialog}, "Cancel")
              )
            )
@@ -60,15 +60,15 @@ var OpenDialog = React.createClass({displayName: 'OpenDialog',
 });
 
 function renderOpenDialog(files) {
-  React.renderComponent(
-    OpenDialog({files: files})
+  React.render(
+    React.createElement(OpenDialog, {files: files})
   , document.getElementById('open-dialog')
   );
 }
 
 renderOpenDialog(["no files available"]);
 
-var NewDialog = React.createClass({displayName: 'NewDialog',
+var NewDialog = React.createClass({displayName: "NewDialog",
   getInitialState: function() {
     return {filename: 'test.zc'};
   },
@@ -95,20 +95,20 @@ var NewDialog = React.createClass({displayName: 'NewDialog',
 
    var filename = this.state.filename;
    return (
-     React.DOM.div({id: "new-file-modal", className: "modal"}, 
-       React.DOM.div({className: "modal-dialog"}, 
-         React.DOM.div({className: "modal-content"}, 
-           React.DOM.div({className: "modal-header", style: {textAlign: "center"}}, 
-             React.DOM.h3({className: "modal-title"}, "Visit New File")
+     React.createElement("div", {id: "new-file-modal", className: "modal"}, 
+       React.createElement("div", {className: "modal-dialog"}, 
+         React.createElement("div", {className: "modal-content"}, 
+           React.createElement("div", {className: "modal-header", style: {textAlign: "center"}}, 
+             React.createElement("h3", {className: "modal-title"}, "Visit New File")
            ), 
-           React.DOM.div({className: "modal-body", style: {textAlign: "center"}}, 
-              React.DOM.input({type: "test", value: filename, onChange: this.handleChange})
+           React.createElement("div", {className: "modal-body", style: {textAlign: "center"}}, 
+              React.createElement("input", {type: "test", value: filename, onChange: this.handleChange})
            ), 
-           React.DOM.div({className: "modal-footer"}, 
-             React.DOM.div({className: "btn-group"}, 
-               React.DOM.button({type: "button", className: "btn btn-primary btn-default", 
+           React.createElement("div", {className: "modal-footer"}, 
+             React.createElement("div", {className: "btn-group"}, 
+               React.createElement("button", {type: "button", className: "btn btn-primary btn-default", 
                   onClick: closeDialog}, "Cancel"), 
-               React.DOM.button({type: "button", className: "btn btn-primary btn-default", 
+               React.createElement("button", {type: "button", className: "btn btn-primary btn-default", 
                   onClick: openFile}, "Open")
              )
            )
@@ -119,8 +119,8 @@ var NewDialog = React.createClass({displayName: 'NewDialog',
 });
 
 function renderNewDialog() {
-  React.renderComponent(
-    NewDialog(null)
+  React.render(
+    React.createElement(NewDialog, null)
   , document.getElementById('new-dialog')
   );
 }
@@ -131,7 +131,7 @@ renderNewDialog();
 /* Toolbar                                                          */
 /* ******************************************************************/
 
-var Toolbar = React.createClass({displayName: 'Toolbar',
+var Toolbar = React.createClass({displayName: "Toolbar",
   getInitialState: function() {
     // this is static and does not change
     return { ctrl: navigator.appVersion.indexOf('Mac') != -1 ? "Cmd" : "Ctrl" }
@@ -151,20 +151,20 @@ var Toolbar = React.createClass({displayName: 'Toolbar',
     };
 
     return (
-      React.DOM.div({className: "btn-toolbar"}, 
-        React.DOM.button({className: "btn btn-primary btn-default", onClick: openDialog}, "Open file"), 
-        React.DOM.button({className: "btn btn-primary btn-default", onClick: newDialog}, "New file"), 
-        React.DOM.button({className: "btn btn-primary btn-default", onClick: saveBuffer}, "Save (", ctrl, "-s)"), 
-        React.DOM.button({className: "btn btn-primary btn-default", onClick: evalNext}, "Eval next (Ctrl-n)"), 
-        React.DOM.button({className: "btn btn-primary btn-default", onClick: evalCursor}, "Eval up to cursor (Ctrl-return)"), 
-        React.DOM.button({className: "btn btn-primary btn-default", onClick: evalPrev}, "Undo eval (Ctrl-p)"), 
-        React.DOM.span({style: {paddingLeft: "10px"}}, "Editing ", fn==""?"<none>":fn)
+      React.createElement("div", {className: "btn-toolbar"}, 
+        React.createElement("button", {className: "btn btn-primary btn-default", onClick: openDialog}, "Open file"), 
+        React.createElement("button", {className: "btn btn-primary btn-default", onClick: newDialog}, "New file"), 
+        React.createElement("button", {className: "btn btn-primary btn-default", onClick: saveBuffer}, "Save (", ctrl, "-s)"), 
+        React.createElement("button", {className: "btn btn-primary btn-default", onClick: evalNext}, "Eval next (Ctrl-n)"), 
+        React.createElement("button", {className: "btn btn-primary btn-default", onClick: evalCursor}, "Eval up to cursor (Ctrl-return)"), 
+        React.createElement("button", {className: "btn btn-primary btn-default", onClick: evalPrev}, "Undo eval (Ctrl-p)"), 
+        React.createElement("span", {style: {paddingLeft: "10px"}}, "Editing ", fn==""?"<none>":fn)
       ));
   }});
 
 function renderToolbar(fn) {
-  React.renderComponent(
-    Toolbar({curFile: fn})
+  React.render(
+    React.createElement(Toolbar, {curFile: fn})
     , document.getElementById('toolbar-buttons')
   );
 }
