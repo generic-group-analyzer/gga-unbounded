@@ -142,11 +142,13 @@ function markLocked(c) {
 // editorGoal.setDisplayIndentGuides(false);
 // editorGoal.renderer.setShowGutter(false)
 function setGoalHtml(s) {
+    // we use <script ..> .. </script> instead of $..$ or $$..$$ to ensure
+    // that showdown does not touch our formulas.
     var markdown = "# Nice output\n" +
         "\n" +
-        "$$ foo = \\alpha + \\beta$$\n" +
+        '<p><script type="math/tex" mode="display">foo = \\alpha + \\beta</script></p>\n' +
         "\n" +
-        "$$bar = \\Sum_{i=0}^{k} a_i + \\forall j. j = i$$\n" +
+        '<p><script type="math/tex" mode="display">bar = \\sum_{i=0}^{k} a_i + \\forall j. j = i</script></p>\n' +
         "\n" +
         "## Old output\n";
     var converter = new showdown.Converter();
@@ -154,10 +156,12 @@ function setGoalHtml(s) {
     document.getElementById('editor-goal').innerHTML = html + "<pre>" + s + "</pre>";
     // translate mathjax content
     MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-goal']);
+    MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-goal']);
 }
 function setMessageHtml(s) {
     document.getElementById('editor-message').innerHTML = "<pre>" + s + "</pre>";
     // translate mathjax content
+    MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-message']);
     MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-message']);
 }
 // var editorMessage = ace.edit("editor-message");
