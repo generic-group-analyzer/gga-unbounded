@@ -14,7 +14,7 @@ webSocket.onmessage = function (evt) {
         }
         setFirstUnlocked(m.ok_upto);
         markLocked('locked');
-        setGoalHtml("$\alpha = \omega$" + m.arg);
+        setGoalHtml(m.arg);
         if (m.err) {
             setMessageHtml(m.err);
         }

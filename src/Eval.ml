@@ -139,7 +139,7 @@ let ipoly_to_opoly es_gs params p =
 
 let fresh_params n used =
   let rec go k used =
-    let p = "p" ^ (string_of_int k) in
+    let p = "p^{(" ^ (string_of_int k) ^ ")}" in
     if (L.mem used p ~equal:String.equal) then go (k+1) used
     else p
   in

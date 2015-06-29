@@ -13,11 +13,11 @@ let analyze_unbounded cmds instrs =
   Unix.dup2 shell Unix.stdout;
   
   if (L.length system = 0) then
-    F.printf "Proven!\n(Group order >= %d)@\n" (Big_int.int_of_big_int !group_order_bound)
+    F.printf "# Proven!\n(Group order >= %d)@\n" (Big_int.int_of_big_int !group_order_bound)
 
   else
     let constraints = L.nth_exn system (nth-1) in
-    F.printf "\nWorking on goal %d out of %d." nth (L.length system);  
+    F.printf "Working on goal %d out of %d." nth (L.length system);  
     F.printf "%s(Group order >= %d)@\n\n" ("       ") (Big_int.int_of_big_int !group_order_bound);
     F.printf "%a" pp_constr_conj constraints;
     if Wrules.contradictions constraints then
@@ -37,9 +37,10 @@ let analyze_unbounded_ws cmds instrs =
     F.fprintf fbuf "Proven!\n(Group order >= %s)@\n" (string_of_big_int !group_order_bound)
   | _::_ ->
     let constraints = L.nth_exn system (nth-1) in
-    F.fprintf fbuf "\nWorking on goal %d out of %d." nth (L.length system);  
-    F.fprintf fbuf "    (Group order >= %s)@\n\n" (string_of_big_int !group_order_bound);
-    F.fprintf fbuf "%a" pp_constr_conj constraints;
+    F.fprintf fbuf 
+       "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
+       nth (L.length system) (string_of_big_int !group_order_bound);  
+    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
     if Wrules.contradictions constraints then F.fprintf fbuf "Contradiction!\n\n"
   end;
   F.pp_print_flush fbuf ();

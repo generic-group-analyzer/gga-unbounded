@@ -144,24 +144,24 @@ function markLocked(c) {
 function setGoalHtml(s) {
     // we use <script ..> .. </script> instead of $..$ or $$..$$ to ensure
     // that showdown does not touch our formulas.
-    var markdown = "# Nice output\n" +
-        "\n" +
-        '* <script type="math/tex">foo = \\alpha + \\beta</script>\n' +
-        "\n" +
-        '<script type="math/tex" mode="display">bar = \\sum_{i=0}^{k} a_i + \\forall j. j = i</script>\n' +
-        "\n" +
-        "## Old output\n";
+    // var markdown =
+    //  "# Nice output\n" +
+    //  "\n"+
+    //  '1. <p><script type="math/tex" mode="display">foo = \\alpha + \\beta</script></p>\n' +
+    //  "\n"+
+    //  '2. <p><script type="math/tex" mode="display">bar = \\sum_{i=0}^{k} a_i + \\forall j. j = i</script></p>\n' +
+    //  "\n" +
+    //  "## Old output\n"; 
+    //var html = converter.makeHtml(markdown);
     var converter = new showdown.Converter();
-    var html = converter.makeHtml(markdown);
-    document.getElementById('editor-goal').innerHTML = html + "<pre>" + s + "</pre>";
+    var latex = converter.makeHtml(s);
+    document.getElementById('editor-goal').innerHTML = latex;
     // translate mathjax content
-    MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-goal']);
     MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-goal']);
 }
 function setMessageHtml(s) {
     document.getElementById('editor-message').innerHTML = "<pre>" + s + "</pre>";
     // translate mathjax content
-    MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-message']);
     MathJax.Hub.Queue(["Typeset", MathJax.Hub, 'editor-message']);
 }
 // var editorMessage = ace.edit("editor-message");
