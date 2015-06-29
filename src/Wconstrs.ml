@@ -183,17 +183,17 @@ let sum2Q unused ivs ivs_pairs =
 		    )
 	      )
   in
-  b, L.length exceptions
+  b, BI.of_int (- (L.length exceptions))
 
 let mk_sum ivs ivs_dist mon =
   let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
   let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
   let unused_ivars = Set.diff (Ivar.Set.of_list ivs) (ivars_monom mon) in
   let again_ivs, qpart = 
-    L.fold_left unsuded_ivars 
+    L.fold_left (Ivar.Set.to_list unused_ivars)
      ~init:([],[])
      ~f:(fun (idxs,qlist) i ->
-	 let b, n = sum2Q i ivs ivs_pairs in
+	 let b, n = sum2Q i ivs ivar_pairs in
 	 if b then (idxs, Nqueries(n) :: qlist)
 	 else (i :: idxs, qlist)
 	)
@@ -201,7 +201,7 @@ let mk_sum ivs ivs_dist mon =
   let ivs = (Ivar.Set.to_list (Set.diff (Ivar.Set.of_list ivs) unused_ivars)) @ again_ivs in
   let new_mon = L.fold_left (list2multiplicity qpart ~equal:Atom.equal)
                  ~init:mon
-                 ~f:(fun m (q,n) -> Map.add m ~key:m ~data:n)
+                 ~f:(fun m (q,n) -> Map.add m ~key:q ~data:(BI.of_int n))
   in
   { ivars = ivs; i_ineq = ivar_pairs; monom = new_mon }
 

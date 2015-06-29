@@ -494,12 +494,29 @@ let simplify constraints =
 
 (* ----------------------------------------------------------------------- *)
 (* Find contradictions *)	   
-       
+
+let q_violation c =
+  let is_constant s =
+    (s.ivars = []) && (s.i_ineq = []) && 
+    not(L.exists (Map.to_alist s.monom) ~f:(fun (a,_) -> (is_hvar a) || (is_rvar a) || (is_param a)))
+  in
+  not(L.exists (Map.to_alist c.poly) ~f:(fun (s,_c) -> not (is_constant s))) && (c.is_eq = Eq)
+
 let contradictions (constraints : constr_conj) =
   let f c = (equal_poly c.poly SP.zero && c.is_eq = InEq) ||
-	    (known_not_null c.poly constraints && c.is_eq = Eq)
+	    (known_not_null c.poly constraints && c.is_eq = Eq) ||
+	    (q_violation c)
   in
   L.exists constraints ~f
+
+let contradictions_msg (constraints : constr_conj) =
+  let f c = (equal_poly c.poly SP.zero && c.is_eq = InEq) ||
+	    (known_not_null c.poly constraints && c.is_eq = Eq) ||
+	    (q_violation c)
+  in
+  match L.find constraints ~f with
+    | None -> false, (mk_constr [] [] Eq SP.zero)
+    | Some c -> true, c
       
 (* ----------------------------------------------------------------------- *)
 (* Overlap *)

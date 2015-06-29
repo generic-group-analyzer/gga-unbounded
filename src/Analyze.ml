@@ -20,8 +20,9 @@ let analyze_unbounded cmds instrs =
     F.printf "Working on goal %d out of %d." nth (L.length system);  
     F.printf "%s(Group order >= %d)@\n\n" ("       ") (Big_int.int_of_big_int !group_order_bound);
     F.printf "%a" pp_constr_conj constraints;
-    if Wrules.contradictions constraints then
-      print_string "Contradiction!\n\n"
+    let (contradiction, c) = Wrules.contradictions_msg constraints in
+    if contradiction then
+      F.printf "Contradiction!\n%a" pp_constr c
     else ()
 
 
@@ -34,14 +35,18 @@ let analyze_unbounded_ws cmds instrs =
   let fbuf = F.formatter_of_buffer buf in
   begin match system with
   | [] ->
-    F.fprintf fbuf "Proven!\n(Group order >= %s)@\n" (string_of_big_int !group_order_bound)
+    F.fprintf fbuf "<p>Proven!\n(Group order >= %s)\n</p>" (string_of_big_int !group_order_bound)
   | _::_ ->
     let constraints = L.nth_exn system (nth-1) in
     F.fprintf fbuf 
        "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
        nth (L.length system) (string_of_big_int !group_order_bound);  
     F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
-    if Wrules.contradictions constraints then F.fprintf fbuf "<p>Contradiction!</p>\n"
+    let (contradiction, c) = Wrules.contradictions_msg constraints in
+    if contradiction then
+      let () = F.fprintf fbuf "\n<p>Contradiction!\n</p>" in
+      F.fprintf fbuf "<script type=\"math/tex\" mode=\"display\">%a</script>" PPLatex.pp_constr_latex c
+    else ()
   end;
   F.pp_print_flush fbuf ();
   Buffer.contents buf

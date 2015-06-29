@@ -35,7 +35,7 @@ let pp_atom_latex fmt = function
   | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar_latex vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param_latex vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar_latex hv
-  | Nqueries(_n) ->
+  | Nqueries(n) ->
      if BI.is_zero n then F.fprintf fmt "|{\\cal Q}|"
      else if BI.(compare n zero) < 0 then F.fprintf fmt "(|{\\cal Q}|-%s)" (BI.to_string (BI.abs(n)))
      else if BI.(compare n zero) > 0 then F.fprintf fmt "(|{\\cal Q}|+%s)" (BI.to_string n)
