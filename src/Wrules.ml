@@ -158,10 +158,11 @@ let split_constr (iv : ivar) (constr : constr) =
     match c.qvars with
     | [] -> [ mk_constr [] c.q_ineq c.is_eq (split_poly iv c.poly) ]
     | i::is ->
-      let constrs = do_split (mk_constr is c.q_ineq c.is_eq c.poly) in
-      let constrs1 = L.map ~f:(fun x -> mk_constr (i::x.qvars) ((i,iv)::x.q_ineq) x.is_eq x.poly) constrs in
-      let constrs2 = L.map ~f:(subst_idx_constr i iv) constrs in
-      L.filter ~f:not_qineq_contradiction (constrs1 @ constrs2)
+       let (i_pairs, rest_pairs) = (keep_from_pairs i c.q_ineq), (rm_from_pairs i c.q_ineq) in   
+       let constrs = do_split (mk_constr is rest_pairs c.is_eq c.poly) in
+       let constrs1 = L.map ~f:(fun x -> mk_constr (i::x.qvars) ((i,iv)::i_pairs) x.is_eq x.poly) constrs in
+       let constrs2 = L.map ~f:(subst_idx_constr i iv) constrs in
+       L.filter ~f:not_qineq_contradiction (constrs1 @ constrs2)
   in
   if L.mem constr.qvars iv
   then failwith (fsprintf "split_constr: given index variable %a not fresh" pp_ivar iv)

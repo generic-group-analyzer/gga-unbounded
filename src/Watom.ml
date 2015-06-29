@@ -70,7 +70,7 @@ type atom =
   | Param of param
   | Rvar  of rvar
   | Hvar  of hvar
-  | Nqueries
+  | Nqueries of BI.t
   with compare, sexp
 
 (* data structures with atoms *)
@@ -158,4 +158,7 @@ let pp_atom fmt = function
   | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
-  | Nqueries  -> F.fprintf fmt "|Q|"
+  | Nqueries(n) -> 
+     if BI.is_zero n then F.fprintf fmt "|Q|"
+     else if BI.(compare n zero) < 0 then F.fprintf fmt "(|Q|-%s)" (BI.to_string (BI.abs(n)))
+     else if BI.(compare n zero) > 0 then F.fprintf fmt "(|Q|+%s)" (BI.to_string n)

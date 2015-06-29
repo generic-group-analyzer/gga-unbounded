@@ -41,7 +41,7 @@ let analyze_unbounded_ws cmds instrs =
        "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
        nth (L.length system) (string_of_big_int !group_order_bound);  
     F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
-    if Wrules.contradictions constraints then F.fprintf fbuf "Contradiction!\n\n"
+    if Wrules.contradictions constraints then F.fprintf fbuf "<p>Contradiction!</p>\n"
   end;
   F.pp_print_flush fbuf ();
   Buffer.contents buf

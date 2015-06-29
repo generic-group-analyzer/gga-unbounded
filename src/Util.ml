@@ -98,6 +98,15 @@ let rec unique xs ~equal =
   match xs with
   | y::ys -> if L.mem ~equal ys y then false else unique ys ~equal
   | []    -> true
+
+let list2multiplicity list ~equal =
+  let distinct a b = not (equal a b) in
+  let rec aux output = function
+    | [] -> output
+    | a :: rest -> aux ((a, L.count rest ~f:(equal a)) :: output)
+		       (L.filter rest ~f:(distinct a))
+  in
+  aux [] list
 		    
 (* ======================================================================= *)
 (* Pretty printing *)

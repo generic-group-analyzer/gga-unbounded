@@ -61,7 +61,7 @@ val hvar_of_sexp : Sexplib.Type.t -> hvar
 val sexp_of_hvar : hvar -> Sexplib.Type.t
 val compare_hvar : hvar -> hvar -> int
 
-type atom = Param of param | Rvar of param | Hvar of hvar | Nqueries
+type atom = Param of param | Rvar of param | Hvar of hvar | Nqueries of BI.t
 val atom_of_sexp : Sexplib.Type.t -> atom
 val sexp_of_atom : atom -> Sexplib.Type.t
 val compare_atom : atom -> atom -> int

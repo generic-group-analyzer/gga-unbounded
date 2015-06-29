@@ -156,13 +156,52 @@ let mk_monom atoms =
     ~init:Atom.Map.empty
     ~f:(fun m (inv,a) -> mult_monom_atom m (bi_of_inv inv,a))
 
+
+let sum2Q unused ivs ivs_pairs =
+  let exceptions =
+    L.fold_left ivs_pairs 
+     ~init:[]
+     ~f:(fun l (x,y) -> if equal_ivar unused x then y :: l
+			else if equal_ivar unused y then x :: l
+			else l)
+  in
+  let bound_exceptions = L.filter exceptions ~f:(fun x -> L.mem ivs x ~equal:equal_ivar) in
+  let free_exceptions = L.filter exceptions ~f:(fun x -> not (L.mem ivs x ~equal:equal_ivar)) in
+  let b = L.fold_left bound_exceptions
+           ~init:true
+	   ~f:(fun b i ->
+	       let exceptions_i = 
+		 L.fold_left ivs_pairs
+                  ~init:[]
+		  ~f:(fun l (x,y) -> if equal_ivar i x then y :: l
+				     else if equal_ivar i y then x :: l
+				     else l)
+	       in
+	       b && (L.fold_left free_exceptions
+                      ~init:true
+		      ~f:(fun b' j -> b' && (L.mem exceptions_i j ~equal:equal_ivar))
+		    )
+	      )
+  in
+  b, L.length exceptions
+
 let mk_sum ivs ivs_dist mon =
   let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
   let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
   let unused_ivars = Set.diff (Ivar.Set.of_list ivs) (ivars_monom mon) in
-  let ivs = Ivar.Set.to_list (Set.diff (Ivar.Set.of_list ivs) unused_ivars) in
-  let new_mon = if (Set.length unused_ivars) = 0 then mon
-		else Map.add mon ~key:Nqueries ~data:(BI.of_int (Set.length unused_ivars))
+  let again_ivs, qpart = 
+    L.fold_left unsuded_ivars 
+     ~init:([],[])
+     ~f:(fun (idxs,qlist) i ->
+	 let b, n = sum2Q i ivs ivs_pairs in
+	 if b then (idxs, Nqueries(n) :: qlist)
+	 else (i :: idxs, qlist)
+	)
+  in
+  let ivs = (Ivar.Set.to_list (Set.diff (Ivar.Set.of_list ivs) unused_ivars)) @ again_ivs in
+  let new_mon = L.fold_left (list2multiplicity qpart ~equal:Atom.equal)
+                 ~init:mon
+                 ~f:(fun m (q,n) -> Map.add m ~key:m ~data:n)
   in
   { ivars = ivs; i_ineq = ivar_pairs; monom = new_mon }
 
