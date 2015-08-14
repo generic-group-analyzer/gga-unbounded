@@ -53,6 +53,7 @@ rule lex = parse
   | "case_distinction"  { CASE_DIST }
   | "goto"     { GOTO }
   | "admit"    { ADMIT }
+  | "contradiction" { CONTRADICTION }
   | "simplify" { SIMPLIFY }
   | "simplify_vars" { SIMPLIFYVARS }
 

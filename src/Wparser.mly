@@ -53,6 +53,7 @@
 %token CASE_DIST
 %token GOTO
 %token ADMIT
+%token CONTRADICTION
 %token SIMPLIFY
 %token SIMPLIFYVARS
        
@@ -193,6 +194,8 @@ instr :
 | GOTO; n = INT; DOT;
   { GoTo(n) }
 | ADMIT; DOT;
+  { Admit }
+| CONTRADICTION; DOT;
   { Admit }
 | SIMPLIFY; DOT;
   { Simplify }

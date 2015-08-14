@@ -139,7 +139,7 @@ let ipoly_to_opoly es_gs params p =
 
 let fresh_params n used =
   let rec go k used =
-    let p = "p^{(" ^ (string_of_int k) ^ ")}" in
+    let p = "p" ^ (string_of_int k) in
     if (L.mem used p ~equal:String.equal) then go (k+1) used
     else p
   in
@@ -364,7 +364,7 @@ let eval_instr (k1,k2) system nth instr =
   match instr with
   | Extract((idxs,mon), n) ->
      let f constraints = extract_stable_nth constraints (idxs,mon) k1 k2 n
-		         |> simplify
+		         (*|> simplify*)
      in
      (list_map_nth system nth f, nth)
 		  
@@ -376,8 +376,8 @@ let eval_instr (k1,k2) system nth instr =
        | _ -> failwith "eval_instr: input should be a random variable"
      in
      let cases = (case_dist (L.nth_exn system (nth-1) ) par) in
-     let case1 = simplify (L.nth_exn cases 0) in
-     let case2 = simplify (L.nth_exn cases 1) in
+     let case1 = (*simplify*) (L.nth_exn cases 0) in
+     let case2 = (*simplify*) (L.nth_exn cases 1) in
      ((list_map_nth system nth (fun _ -> case1)) @ [case2], nth)
 
   | GoTo(n) ->
@@ -391,7 +391,7 @@ let eval_instr (k1,k2) system nth instr =
      (list_map_nth system nth simplify, nth)
 
   | SimplifyVars ->
-     (list_map_nth system nth (fun constrs -> simplify (simplify_vars constrs)), nth)
+     (list_map_nth system nth (fun constrs -> (*simplify*) (simplify_vars constrs)), nth)
 
 let eval_instrs instrs (k1,k2) system nth =
   L.fold_left instrs

@@ -49,6 +49,8 @@ module Ivar_Pair = struct
   include T
   include Comparable.Make(T)
 end
+
+let equal_ivar_pair = (fun pair1 pair2 -> compare_ivar_pair pair1 pair2 = 0)
 		
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp

@@ -69,6 +69,8 @@ val ivars_conj : constr list -> Ivar.Set.t
 val free_ivars_poly : poly -> Ivar.Set.t
 val bound_ivars_poly : poly -> Ivar.Set.t				 
 val free_ivars_constr : constr -> Ivar.Set.t
+val free_ivars_constr_conj : constr_conj -> Ivar.Set.t
+val bound_ivars_constr_conj : constr_conj -> Ivar.Set.t
 				    
 val renaming_away_from : Ivar.Set.t -> Ivar.Set.t ->  ivar Ivar.Map.t * Ivar.Set.t
 val apply_renaming : ivar Ivar.Map.t -> ivar -> ivar
@@ -89,6 +91,7 @@ val mk_sum : ivar list -> ivar_pair list -> monom -> sum
 val mk_poly : (BI.t * sum) list -> BI.t Sum.Map.t
 val mk_constr : ivar list -> ivar_pair list -> is_eq -> poly -> constr
 
+val all_pairs: ivar list -> ivar_pair list
 val all_ivar_distinct_poly : poly -> poly
 
 (* ----------------------------------------------------------------------- *)
@@ -120,10 +123,10 @@ end
 (* ----------------------------------------------------------------------- *)
 (* pretty printing *)
 
-val is_eq_to_string : is_eq -> bytes
+val is_eq_to_string : is_eq -> string
 val pp_atom_pow : Format.formatter -> atom * BI.t -> unit
 val pp_monom : Format.formatter -> (atom, BI.t, 'a) Core_kernel.Core_map.t -> unit
-val pp_binder : bytes -> Format.formatter -> ivar list -> unit
+val pp_binder : string -> Format.formatter -> ivar list -> unit
 val pp_sum : Format.formatter -> sum -> unit
 val pp_term : Format.formatter -> sum * BI.t -> unit
 val pp_poly : Format.formatter -> poly -> unit

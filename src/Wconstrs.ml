@@ -66,6 +66,11 @@ let equal_constr_disj a b = compare_constr_disj a b = 0
 (* ----------------------------------------------------------------------- *)
 (* variable occurences *)
 
+let ivars_pairs pairs =
+  L.fold_left pairs
+   ~init:Ivar.Set.empty
+   ~f:(fun s (i,j) -> Set.union s (Ivar.Set.of_list [i;j]))
+
 let ivars_monom mon =
   Map.fold mon
     ~init:Ivar.Set.empty
@@ -73,6 +78,7 @@ let ivars_monom mon =
 
 let ivars_sum sum =
   Set.union (ivars_monom sum.monom) (Ivar.Set.of_list sum.ivars)
+  |> Set.union (ivars_pairs sum.i_ineq)
 
 let ivars_poly poly =
   L.fold_left (Map.keys poly)
@@ -110,17 +116,29 @@ let free_ivars_sum s =
   (Set.diff (ivars_sum s) (Ivar.Set.of_list s.ivars))
 
 let free_ivars_poly p =
-  Map.fold p 
+  Map.fold p
     ~init:Ivar.Set.empty
     ~f:(fun ~key:s ~data:_c se -> Set.union se (free_ivars_sum s))
 
 let free_ivars_constr c =
   Set.diff (free_ivars_poly c.poly) (Ivar.Set.of_list c.qvars)
 
+let free_ivars_constr_conj constraints =
+  L.fold_left constraints
+   ~init:Ivar.Set.empty
+   ~f:(fun s c -> Set.union s (free_ivars_constr c))
+
 let bound_ivars_poly p =
   Map.fold p 
     ~init:Ivar.Set.empty
     ~f:(fun ~key:s ~data:_c se -> Set.union se (Ivar.Set.of_list s.ivars))
+
+let bound_ivars_constr_conj constraints =
+  L.fold_left constraints
+   ~init:Ivar.Set.empty
+   ~f:(fun se c -> Set.union se (bound_ivars_poly c.poly)
+		   |> Set.union (Ivar.Set.of_list c.qvars)
+      )
     
 let all_pairs (ivars : ivar list) =
   L.filter (L.cartesian_product ivars ivars) ~f:(fun (x,y) -> x <> y)
@@ -156,7 +174,7 @@ let mk_monom atoms =
     ~init:Atom.Map.empty
     ~f:(fun m (inv,a) -> mult_monom_atom m (bi_of_inv inv,a))
 
-
+(* Converts sum(i,j; a_i) into Q*sum(i; a_i) *)
 let sum2Q unused ivs ivs_pairs =
   let exceptions =
     L.fold_left ivs_pairs 
@@ -186,7 +204,9 @@ let sum2Q unused ivs ivs_pairs =
   b, BI.of_int (- (L.length exceptions))
 
 let mk_sum ivs ivs_dist mon =
-  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
+  (*let ivs_monom = Set.to_list (ivars_monom mon) in*)
+  (*let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem (ivs@ivs_monom) x || L.mem (ivs@ivs_monom) y) in*)
+  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x ~equal:equal_ivar || L.mem ivs y ~equal:equal_ivar) in
   let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
   let unused_ivars = Set.diff (Ivar.Set.of_list ivs) (ivars_monom mon) in
   let again_ivs, qpart = 
@@ -237,12 +257,10 @@ let mk_poly terms =
   L.fold_left ~init:Sum.Map.empty ~f:add_poly_term terms |> all_ivar_distinct_poly
 							      
 let mk_constr ivs ivs_dist is_eq poly =
-  let iv_occs = ivars_poly poly in
-  let ivs = L.filter ~f:(fun iv -> Set.mem iv_occs iv) ivs
-	    |> L.dedup ~compare:compare_ivar
-  in
-  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
-  let ivar_pairs = L.dedup ~compare:compare_ivar_pair ivs_dist in
+  let ivs = L.dedup ~compare:compare_ivar ivs in
+  let ivs = L.filter ivs ~f:(fun i -> Set.mem (ivars_poly poly) i) in
+  let ivar_pairs = L.dedup ~compare:Ivar_Pair.compare ivs_dist in
+  let ivar_pairs = L.filter ivar_pairs ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
   { qvars = ivs; q_ineq = ivar_pairs; is_eq = is_eq; poly = poly }
 
 (* ----------------------------------------------------------------------- *)
@@ -429,7 +447,7 @@ let pp_constr_conj fmt conj =
 (* ----------------------------------------------------------------------- *)	      
 (* isomorphic constraints *)
 
-let rename_sum s rn =  
+let rename_sum s rn =
   let ivars = L.map s.ivars ~f:(apply_renaming rn) in
   let i_ineq = L.map s.i_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y)) in
   let monom = map_idx_monom ~f:(apply_renaming rn) s.monom in
@@ -506,6 +524,7 @@ let matching_constr c1 c2 =
   L.filter (matching_poly c1.poly c2.poly) ~f:(valid_rn)
 
 let isomorphic_sum s1 s2 = L.length (matching_term (BI.one,s1) (BI.one,s2) Ivar.Map.empty) > 0 
-let isomorphic_constr c1 c2 = L.length (matching_constr c1 c2) > 0 ||
-			      L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0
+let isomorphic_constr c1 c2 = (L.length (matching_constr c1 c2) > 0 ||
+			      L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0) &&
+                              c1.is_eq = c2.is_eq
 let isomorphic_poly p1 p2 = L.length (matching_constr (mk_constr [] [] Eq p1) (mk_constr [] [] Eq p2)) > 0	  

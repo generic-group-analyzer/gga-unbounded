@@ -107,7 +107,29 @@ let list2multiplicity list ~equal =
 		       (L.filter rest ~f:(distinct a))
   in
   aux [] list
-		    
+	
+let repeat_string s n =
+  let rec aux output k =
+    if (k = 0) then output
+    else aux (output ^ s) (k-1)
+  in
+  if (n > 0) then aux "" n
+  else ""
+
+(* Take first n elements in a list *)
+let first_n list n =
+  let rec aux output k = function
+    | [] -> output
+    | a :: rest -> if (k = 0) then output
+		   else aux (output @ [a]) (k-1) rest
+  in
+  aux [] n list
+	    
+let sub_list list1 list2 ~equal =
+  L.fold_left list1
+     ~init:true
+     ~f:(fun b a -> b && (L.mem list2 a ~equal))
+
 (* ======================================================================= *)
 (* Pretty printing *)
 

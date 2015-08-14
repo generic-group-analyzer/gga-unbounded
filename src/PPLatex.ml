@@ -44,7 +44,7 @@ let pp_atom_pow_latex fmt (a,e) =
   if BI.is_one e then
     pp_atom_latex fmt a
   else
-    F.fprintf fmt "%a^{%s}" pp_atom_latex a (BI.to_string e)
+    F.fprintf fmt "{%a}^{%s}" pp_atom_latex a (BI.to_string e)
 
 let pp_monom_latex fmt mon =
   if (Map.to_alist mon)<>[] then

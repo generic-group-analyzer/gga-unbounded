@@ -45,7 +45,7 @@ let analyze_unbounded_ws cmds instrs =
     let (contradiction, c) = Wrules.contradictions_msg constraints in
     if contradiction then
       let () = F.fprintf fbuf "\n<p>Contradiction!\n</p>" in
-      F.fprintf fbuf "<script type=\"math/tex\" mode=\"display\">%a</script>" PPLatex.pp_constr_latex c
+      F.fprintf fbuf "<p><script type=\"math/tex\" mode=\"display\">%a\n</script></p>" PPLatex.pp_constr_latex c
     else ()
   end;
   F.pp_print_flush fbuf ();

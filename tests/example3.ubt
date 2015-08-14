@@ -1,0 +1,15 @@
+map G1 * G1 -> GT.
+
+oracle o1(m:Fp) =
+  return [] in G1.
+
+win (a:Fp, b:Fp, c:Fp) = 
+   
+   ( forall i:  a_i^2 = b_i + 2 + c     /\
+     (sum j: a_j^2) = (sum i: b_i)
+   ).
+	                	
+proof.
+
+simplify.
+
