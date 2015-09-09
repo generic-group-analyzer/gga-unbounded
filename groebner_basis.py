@@ -30,11 +30,12 @@ def interp(req):
     polylist = ast.literal_eval(req["equations"])
     if polylist == []:    return ""
     n_variables = len(polylist[0][0]) - 1 # The first element is the coefficient.
+    if (n_variables == 0): return ""
     R = PolynomialRing(QQ, n_variables, 'x')
     x = R.gens()
     polynomials = []
     for p in polylist:
-      new_poly = 0
+      new_poly = 0*x[0]
       for term in p:
         new_term = term[0]
         for i in range(n_variables):
@@ -138,6 +139,7 @@ def main():
     while True:
       #polylist = ast.literal_eval(sys.argv[1])
       inp = sys.stdin.readline()
+      if (inp == ''): break
       cmd = ast.literal_eval(inp)
       result = interp(cmd)
       o = json.dumps(result)

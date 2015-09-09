@@ -4,6 +4,7 @@ open Abbrevs
 open Watom
 open Wconstrs
 open Sage
+open Z3
 
 (* ----------------------------------------------------------------------- *)
 (* Extract parameter polynomials from poly *)
@@ -174,12 +175,6 @@ let split_constr (iv : ivar) (constr : constr) =
        let constrs2 = L.map ~f:(subst_idx_constr i iv) constrs in
        if (L.mem c.q_ineq ~equal:Ivar_Pair.equal (i,iv)) then constrs1
        else
-	 let () = () in
-	 F.printf "constr -> %a@\n" pp_constr constr;
-	 F.printf "constr %a -> %a@\n" pp_ivar i pp_constr_conj constrs;
-	 F.printf "constr1 -> %a@\n" pp_constr_conj constrs1;
-	 F.printf "constr2 -> %a@\n" pp_constr_conj constrs2;
-	 F.print_flush();
 	 L.filter ~f:not_qineq_contradiction (constrs1 @ constrs2)
   in
   if L.mem constr.qvars iv
@@ -457,7 +452,7 @@ let remove_canceled_params constraints =
 	| Param(_name, Some i) as param :: [] ->
 	   if (L.mem c.qvars i ~equal:equal_ivar) then
 	     subst_bound constrs param (exceptions_from_pairs c.q_ineq i) SP.zero  (* Consider idxs ineq !!! *)
-	   else constrs
+	   else subst constrs param SP.zero
 	| _ -> constrs
 	end
      | sum :: [] when sum.ivars = [] && c.is_eq = InEq ->
@@ -466,7 +461,8 @@ let remove_canceled_params constraints =
 	| _ -> constrs
 	end
      | _ -> constrs
-      )
+   )
+  
 
 (* ----------------------------------------------------------------------- *)
 (* Groebner Basis *)
@@ -551,7 +547,7 @@ let permute_qvars constraints =
 let groebner_polys constraints =
   (*let constraints = uniform_bound (all_ivar_distinct_constr_conj constraints) in*)
   (* We consider the equations in every combination of bound indices *)
-  let constraints = permute_qvars constraints in
+  let constraints = L.filter ~f:(not_qineq_contradiction) (permute_qvars constraints) in
   let (sums, vars), (qvars, q_ineq) = groebner_variables constraints in
   let rec aux polynomials = function
     | [] -> polynomials
@@ -561,10 +557,10 @@ let groebner_polys constraints =
 
 let groebner_basis system =
   let () = () in
-    F.printf "\n\n\n%s\n\n\n" ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':[[[]]]}\n");
+   (* F.printf "\n\n\n%s\n\n\n" ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':[[[]]]}\n");
     F.printf "\n%s\n" (call_Sage ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':[[[]]]}\n"));
-    F.print_flush();
-  call_Sage ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':[[[]]]}\n")
+    F.print_flush();*)
+  call_Sage ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':'[[[]]]'}\n")
   |> String.filter ~f:(fun c -> c <> '\n')
   |> String.filter ~f:(fun c -> c <> ' ')
   |> String.filter ~f:(fun c -> c <> '"')
@@ -573,13 +569,19 @@ let gbpolys2string polys =
   let rec singlepoly2string output = function
     | [] -> "[" ^ output ^ "]"
     | (c, coeffs) :: [] ->
-       let new_list = "[" ^ BI.to_string c ^ ", " ^
-		       (String.concat ~sep:", " (L.map coeffs ~f:BI.to_string)) ^ "]" in
-       singlepoly2string (output ^ new_list) []
+       if (L.length coeffs > 0) then
+	 let new_list = "[" ^ BI.to_string c ^ ", " ^
+                        (String.concat ~sep:", " (L.map coeffs ~f:BI.to_string)) ^ "]" in
+	 singlepoly2string (output ^ new_list) []
+       else
+	 singlepoly2string (output ^ "[" ^ BI.to_string c ^ ", 0]") []
     | (c, coeffs) :: rest ->
-       let new_list = "[" ^ BI.to_string c ^ ", " ^
-		       (String.concat ~sep:", " (L.map coeffs ~f:BI.to_string)) ^ "]" in
-       singlepoly2string (output ^ new_list ^ ", ") rest
+       if (L.length coeffs > 0) then
+	 let new_list = "[" ^ BI.to_string c ^ ", " ^
+		         (String.concat ~sep:", " (L.map coeffs ~f:BI.to_string)) ^ "]" in
+	 singlepoly2string (output ^ new_list ^ ", ") rest
+       else
+	 singlepoly2string (output ^ "[" ^ BI.to_string c ^ ", 0], ") []
   in  
   let rec aux output = function
     | [] -> output
@@ -610,7 +612,7 @@ let constraints_of_groebner_polys polys sums vars qvars q_ineq =
        aux SP.(p *! (power_poly (of_a v) exp)) rest_exps [] rest_vars
     | exp :: rest_exps, s :: rest_sums, _ ->
        aux SP.(p *! (power_poly (mk_poly [(BI.one, s)]) exp)) rest_exps rest_sums vars
-    | _, [], [] -> assert false
+    | _, [], [] -> p
   in
   L.map polys ~f:(fun p -> L.fold_left p
                             ~init:SP.zero
@@ -668,7 +670,7 @@ let filter_constraints_gb_rest constraints =
     c.is_eq = Eq && 
     Map.fold c.poly
        ~init:true
-       ~f:(fun ~key:s ~data:_c b -> b && (rvars s.monom) = [] )
+       ~f:(fun ~key:s ~data:_c b -> b && (rvars s.monom) = [] && (hvars s.monom) = [])
   in
   L.filter constraints ~f, L.filter constraints ~f:(fun c -> not (f c))
 
@@ -698,7 +700,7 @@ let summations2poly summations =
         let new_p = Map.fold p
                        ~init:SP.zero
                        ~f:(fun ~key:s ~data:c new_p ->
-                          SP.(new_p +! mk_poly [(c, mk_sum idxs ineq s.monom)])
+                          SP.(new_p +! mk_poly [(c, mk_sum (idxs@s.ivars) (ineq@s.i_ineq) s.monom)])
                           )
 	in
         SP.(p' +! new_p)
@@ -764,19 +766,15 @@ let opening constraints =
 let simplify constraints =
   let constraints = clear_equations (uniform_bound (all_ivar_distinct_constr_conj constraints)) in
   let constraints = opening constraints in
-  F.printf "%a@\n" pp_constr_conj constraints;
-  F.print_flush();
   let gb_constraints, rest_constraints = filter_constraints_gb_rest constraints in
   let polys, sums, vars, qvars, q_ineq = groebner_polys gb_constraints in
   let simplified_polys = string2gbpoly (groebner_basis (gbpolys2string polys)) in
   let simplified_constraints = constraints_of_groebner_polys simplified_polys sums vars qvars q_ineq in
-  F.printf "%a@\n" pp_constr_conj simplified_constraints;
-  F.print_flush();
   let with_sums, without_sums = filter_constraints_with_without_sums simplified_constraints in
   let with_sums = L.map with_sums ~f:(simplify_sums_in_param_constr without_sums) in
-  (L.map rest_constraints ~f:(simplify_sums_in_vars_constr gb_constraints)) @ with_sums @ without_sums
+  ((L.map rest_constraints ~f:(simplify_sums_in_vars_constr gb_constraints)) @ with_sums @ without_sums)
+  |> uniform_bound  
   |> remove_canceled_params
-  |> uniform_bound    
   |> clear_equations
   |> L.dedup ~compare:(fun c1 c2 -> if (isomorphic_constr c1 c2) then 0 else compare_constr c1 c2)
   
@@ -917,6 +915,7 @@ let simplify_params (constraints : constr_conj) =
   in
   aux [] constraints
 *)
+
 let simplify_vars_constr c v =  (* Let's think of this rule!!! *)
   let pairs = poly2pairs c.poly v in
   let minimum = f_pairs BI.min pairs in
@@ -939,6 +938,8 @@ let simplify_vars (constraitns : constr_conj) =
        aux (output @ [new_c]) rest_c
   in
   aux [] constraitns
+  |> remove_canceled_params
+  |> clear_equations
  (*     
 let simplify2 constraints =
   uniform_bound constraints
@@ -959,7 +960,10 @@ let q_violation c =
 let contradictions (constraints : constr_conj) =
   let f c = (equal_poly c.poly SP.zero && c.is_eq = InEq) ||
 	    (known_not_null c.poly constraints && c.is_eq = Eq) ||
-	    (q_violation c)
+	    (q_violation c) ||
+	    (L.mem constraints (mk_constr c.qvars c.q_ineq (if c.is_eq = Eq then InEq else Eq) c.poly)
+	      ~equal:(isomorphic_constr)
+	    )
   in
   L.exists constraints ~f
 
@@ -979,18 +983,11 @@ let contradictions_msg (constraints : constr_conj) =
 (* Overlap *)
 	   
 let smt_solver system =
-  let syscall cmd =
-    let ic, oc = Unix.open_process cmd in
-    let buf = Buffer.create 16 in
-    (try while true do Buffer.add_channel buf ic 1 done
-     with End_of_file -> ());
-    let _ = Unix.close_process (ic, oc) in Buffer.contents buf
-  in
-  let result = syscall ("python smt_solver.py " ^ system) in
+  let result = call_z3 (system ^ "\n") in
   match result with
-  | "True\n" -> true
-  | "False\n" -> false
-  | _ -> failwith "Communication with python failed"
+  | "true" -> true
+  | "false" -> false
+  | s -> failwith ("Communication with python failed, got ``"^s^"''")
 	   
 (* Computes m1/m2 for all possible combinaions of indices between them *)
 let join_monomials m1 m2 =
@@ -1151,7 +1148,7 @@ let overlap m p k1 k2 =
 		~f:(fun se hm -> Set.union se (system_handle_term m hm k1 k2))
   in
   (* F.printf "%s\n\n\n" (list2string (Set.to_list system) ", " "\"[" "]\"");*)
-  smt_solver (list2string (Set.to_list system) ", " "\"[" "]\"")
+  smt_solver (list2string (Set.to_list system) ", " "[" "]")
 
 (* ----------------------------------------------------------------------- *)
 (* stable terms *)
@@ -1165,7 +1162,7 @@ let distinct_pairs idxs =
   aux [] idxs
 	     
 let extract_stable (eq : constr) (idxs, mon) k1 k2 =
-  if (eq.qvars = [] && eq.is_eq = Eq) then
+  if (eq.is_eq = Eq) then
     if (overlap mon eq.poly k1 k2)
     then failwith (fsprintf "the monomial %a is not stable (overlap exists)" pp_monom mon) (* [eq] *)
     else
@@ -1178,10 +1175,11 @@ let extract_stable (eq : constr) (idxs, mon) k1 k2 =
 				  (mk_sum (Set.to_list (Ivar.Set.diff (ivars_monom (rvars_monom s_eq.monom)) free_ivars )) [] (rvars_monom s_eq.monom))
 		   && hvars s_eq.monom = []))
       in
-      let constr1 = mk_constr [] [] Eq poly1 in
-      let constr2 = mk_constr idxs (distinct_pairs idxs) Eq (coeff eq.poly (idxs, mon)) in
+      let constr1 = mk_constr eq.qvars eq.q_ineq Eq poly1 in
+      let constr2 = mk_constr (idxs@eq.qvars) ((distinct_pairs idxs)@eq.q_ineq) Eq (coeff eq.poly (idxs, mon)) in
       [ constr1; constr2 ]
-  else failwith "impossible to extract terms from inequalities"
+  else
+    failwith "impossible to extract terms from inequalities"
 
 let extract_stable_nth constraints (idxs, mon) k1 k2 nth =
   let rec aux header tail n =

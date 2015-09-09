@@ -17,8 +17,12 @@ let input_file filename =
        
 let main =
   if Array.length Sys.argv <> 3 then
-    output_string stderr (F.sprintf "usage: %s <definition_file> <instructions_file> \n" Sys.argv.(0))
+    output_string stderr (F.sprintf "usage: %s <definition_file> <instructions_file / 'automatic'> \n" Sys.argv.(0))
   else
     let scmds = input_file Sys.argv.(1) in
-    let instrs = input_file Sys.argv.(2) in
-    Analyze.analyze_unbounded scmds instrs
+    if (String.compare Sys.argv.(2) "automatic") == 0 then
+      let filename = Str.string_before Sys.argv.(1) ((String.length Sys.argv.(1)) - 4) in
+      Analyze.automatic_tool scmds (filename ^ ".prf")
+    else
+      let instrs = input_file Sys.argv.(2) in
+      Analyze.analyze_unbounded scmds instrs

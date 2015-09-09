@@ -78,12 +78,13 @@ let ivars_monom mon =
 
 let ivars_sum sum =
   Set.union (ivars_monom sum.monom) (Ivar.Set.of_list sum.ivars)
-  |> Set.union (ivars_pairs sum.i_ineq)
+  (*|> Set.union (ivars_pairs sum.i_ineq)*)
 
 let ivars_poly poly =
   L.fold_left (Map.keys poly)
     ~init:Ivar.Set.empty
-    ~f:(fun se1 t -> Set.union se1 (ivars_sum t))
+    ~f:(fun se1 t -> Set.union se1 (ivars_sum t)
+           |> Set.union (ivars_pairs t.i_ineq))
 
 let ivars_constr constr =
   Set.union (ivars_poly constr.poly) (Ivar.Set.of_list constr.qvars)
@@ -443,6 +444,11 @@ let pp_constr_conj fmt conj =
        F.fprintf f "%t" (aux (n+1) rest)
   in
   aux 1 conj fmt
+
+(*
+let pp_int fmt i =
+  F.fprintf fmt "%i" i
+*)
 
 (* ----------------------------------------------------------------------- *)	      
 (* isomorphic constraints *)

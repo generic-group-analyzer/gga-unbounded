@@ -65,9 +65,12 @@ def _parseJSON(obj):
 
 def main():
     try:
-        systems_list = ast.literal_eval(sys.argv[1])
+      while True:
+        inp = sys.stdin.readline()
+	if (inp == ''): break
+	systems_list = ast.literal_eval(inp)
 	result = False
-	
+
 	for system in systems_list:
             cmd = ast.literal_eval(system)
             M = cmd["matrix"]
@@ -83,9 +86,9 @@ def main():
 	    if result:
 	       break
 
-        print(result)
+        print(json.dumps(result))
         sys.stdout.flush()
-	
+	    
     except Exception:
         traceback.print_exc()
       

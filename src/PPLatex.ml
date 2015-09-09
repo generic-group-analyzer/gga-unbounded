@@ -125,10 +125,10 @@ let pp_constr_conj_latex fmt conj =
 let pp_constr_conj_latex fmt conj =
   let rec aux n list f =
     match list with
-    | [] -> F.fprintf f "\\end{align}\n</script></p>"
+    | [] -> F.fprintf f ""
     | c :: rest ->
-       F.fprintf f "%s.& \\ \\ %a \\\\" (string_of_int n) pp_constr_latex c;
+       F.fprintf f "<p><script type=\"math/tex\" mode=\"display\">\n%s. \\ \\ %a \n</script></p>\n" (string_of_int n) pp_constr_latex c;
        F.fprintf f "%t" (aux (n+1) rest)
   in
-  F.fprintf fmt "<p><script type=\"math/tex\" mode=\"display\">\n\\begin{align}";
+  F.fprintf fmt "";
   aux 1 conj fmt

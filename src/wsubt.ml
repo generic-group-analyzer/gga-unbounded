@@ -126,14 +126,35 @@ let process_load s =
                     ("filename", `String !ps_file) ] in
   Lwt.return (frame_of_string (YS.to_string res))
 
+let cache = ref String.Map.empty
 
 let process_eval _fname proofscript =
   let res = 
     try
       let add_dots l = L.map ~f:(fun s -> s^".") l |> String.concat in
       let def_cmds, proof_cmds = split_proof_script proofscript in
-      let s = Analyze.analyze_unbounded_ws (add_dots def_cmds) (add_dots proof_cmds) in
-      Result.Ok s
+      let constraints, (k1,k2) = Wparse.p_cmds (add_dots def_cmds) |> Eval.eval_cmds in
+      let istate = ([constraints], 1) in
+      let cmds = ref (add_dots def_cmds) in
+      (* start with cmds and try lookup, then drop last cmd, try lookup *)
+      let st = 
+	List.fold_left proof_cmds
+            ~init:istate
+	    ~f:(fun (st_system, st_nth) cmd ->
+                  let new_cmds = !cmds^cmd^"." in
+                  try
+                    let new_st = Map.find_exn !cache new_cmds in
+		    cmds := new_cmds;
+		    new_st
+                  with
+                    Not_found ->
+		      let st = Eval.eval_instrs (Wparse.p_instrs (cmd^ ".")) (k1,k2) st_system st_nth in
+		      cache := Map.add !cache ~key:(new_cmds) ~data:st;
+		      cmds := new_cmds;
+		      st
+               )
+      in
+      Result.Ok (Analyze.string_of_state st)
     with
     | e ->
       Result.Error

@@ -130,6 +130,27 @@ let sub_list list1 list2 ~equal =
      ~init:true
      ~f:(fun b a -> b && (L.mem list2 a ~equal))
 
+let partition_double gt list aux_list =
+  let rec aux left right aux_left aux_right list aux_list =
+    match list, aux_list with
+    | ([],[]) -> left, right, aux_left, aux_right
+    | (x::xs, u::us) ->
+       if (gt x) then aux left (right @ [x]) aux_left (aux_right @ [u]) xs us
+       else aux (left @ [x]) right (aux_left @ [u]) aux_right xs us
+    | _ -> failwith "lists must have the same length"
+  in
+  aux [] [] [] [] list aux_list
+
+let rec quicksort_double gt list aux_list =
+  match list, aux_list with
+  | ([],[]) -> ([],[])
+  | (x::xs, u::us) ->
+      let ys, zs, vs, ws = partition_double (gt x) xs us in
+      let s1, aux_s1 = quicksort_double gt ys vs in
+      let s2, aux_s2 = quicksort_double gt zs ws in
+      s1 @ [x] @ s2, aux_s1 @ [u] @ aux_s2      
+  | _ -> failwith "lists must have the same length"
+
 (* ======================================================================= *)
 (* Pretty printing *)
 
