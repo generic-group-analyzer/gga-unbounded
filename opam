@@ -1,0 +1,22 @@
+opam-version: "1.2"
+name: "generic-group-unbounded"
+version: "0.1"
+maintainer: "Miguel Ambrona <Miguel.Ambrona@imdea.org>"
+authors: [ "Benedikt Schmidt <beschmi@gmail.com>" "Miguel Ambrona <Miguel.Ambrona@imdea.org>" ]
+homepage: "http://www.easycrypt.info/GGA"
+bug-reports: ""
+license: "GPL"
+ocaml-version: [>= "4.02.0"]
+build: [
+  [make]
+]
+install: [make "install"]
+depends: [
+  "core_kernel"
+  "ctypes"
+  "ctypes-foreign"
+  "cryptokit"
+  "yojson"
+  "menhir"
+  "websocket"
+]

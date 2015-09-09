@@ -2,9 +2,10 @@
 
 (*i*)
 open Abbrevs
-open Core.Std
+open Core_kernel.Std
+open Lwt.Infix
 
-module WS = Websocket
+module WS = Websocket_lwt
 module YS = Yojson.Safe
 
 (*
@@ -18,7 +19,6 @@ open TheoryState
 module PU = ParserUtil
 (*i*)
 *)
-let (>>=) = Lwt.bind
 
 let ps_file  = ref ""
 let ps_files = ref []
@@ -73,43 +73,39 @@ let split_proof_script s =
 (*i ----------------------------------------------------------------------- i*)
 (* \hd{Handlers for different commands} *)
 
-let frame_of_string s = WS.Frame.of_string ~content:s ()
+let frame_of_string s = WS.Frame.create ~content:s ()
 
 let process_unknown s =
   F.printf "unknown command: %s\n%!" s;
-  Lwt.return (frame_of_string "Unknown command")
+  frame_of_string "Unknown command"
 
 
 let process_list_files () =
-  Lwt.return
-    (frame_of_string
-       (YS.to_string
-          (`Assoc [("cmd", `String "setFiles");
-                   ("arg", `List (List.map ~f:(fun s -> `String s) !ps_files))])))
+  frame_of_string
+    (YS.to_string
+      (`Assoc [("cmd", `String "setFiles");
+               ("arg", `List (List.map ~f:(fun s -> `String s) !ps_files))]))
 
 
 let process_get_debug () =
-  Lwt.return
-    (frame_of_string
-       (YS.to_string
-          (`Assoc [("cmd", `String "setDebug");
-                   ("arg", `String "FIXME: add debugging information")])))
+  frame_of_string
+    (YS.to_string
+      (`Assoc [("cmd", `String "setDebug");
+               ("arg", `String "FIXME: add debugging information")]))
 
 
 let process_save filename content =
   F.printf "Save %s: %s\n%!" filename content;
-  Lwt.return (
-    if (Sys.file_exists !ps_file = `Yes && List.mem !ps_files filename
-         && not !disallow_save) then (
-      Out_channel.write_all filename ~data:content;
-      frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveOK")]))
-    ) else if (!new_dir <> "") then (
-      Out_channel.write_all (!new_dir^"/"^filename) ~data:content;
-      ps_files := (!new_dir^"/"^filename) :: !ps_files;
-      frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveOK")]))
-    ) else (
-        frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveFAILED")]))
-    )
+  if (Sys.file_exists !ps_file && List.mem !ps_files filename
+      && not !disallow_save) then (
+    Out_channel.write_all filename ~data:content;
+    frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveOK")]))
+  ) else if (!new_dir <> "") then (
+    Out_channel.write_all (!new_dir^"/"^filename) ~data:content;
+    ps_files := (!new_dir^"/"^filename) :: !ps_files;
+    frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveOK")]))
+  ) else (
+    frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveFAILED")]))
   )
 
 let process_load s =
@@ -117,14 +113,14 @@ let process_load s =
   ps_file := if s = "" then !ps_file else s;
   F.printf "Loading %s\n%!" !ps_file;
   let s =
-    if Sys.file_exists !ps_file = `Yes(* && List.mem !ps_file !ps_files *)
+    if Sys.file_exists !ps_file (* && List.mem !ps_file !ps_files *)
     then In_channel.read_all !ps_file
     else "(* Enter proof script below *)"
   in
   let res = `Assoc [("cmd", `String "setProof");
                     ("arg", `String s);
                     ("filename", `String !ps_file) ] in
-  Lwt.return (frame_of_string (YS.to_string res))
+  frame_of_string (YS.to_string res)
 
 let cache = ref String.Map.empty
 
@@ -175,57 +171,75 @@ let process_eval _fname proofscript =
              ("msgs", `List [`String "some message"]);
              ("arg", `String goal) ]
   in
-  Lwt.return (frame_of_string (YS.to_string res))
+  frame_of_string (YS.to_string res)
 
 (*i ----------------------------------------------------------------------- i*)
 (* \hd{Frame processing and server setup} *)
 
 let process_frame frame =
-  let inp = match WS.Frame.content frame with
-    | Some s -> s
-    | None   -> failwith "frame error"
-  in
-  F.printf "Command: ``%s''\n%!" inp;
-  match YS.from_string inp with
-  | `Assoc l ->
-     begin
-       try
-         let get k = List.Assoc.find_exn l k in
-         match get "cmd", get "arg" with
-         | `String cmd, `String arg when cmd = "eval" || cmd = "save" ->
-           begin match get "filename" with
-           | `String fname ->
-             begin match cmd with
-             | "eval" -> process_eval fname arg
-             | "save" -> process_save fname arg
-             | _ -> assert false
-             end
-           | _ -> process_unknown inp
-           end
-         | `String "load", `String fname -> process_load fname
-         | `String "listFiles", _        -> process_list_files ()
-         | `String "getDebug", _         -> process_get_debug ()
-         | _                             -> process_unknown inp
-       with Not_found -> process_unknown inp
-     end
-  | _ -> process_unknown inp
+  let open WS in
+  let open Frame in
+  match frame.opcode with
+  | Opcode.Ping -> 
+    Some (Frame.create ~opcode:Opcode.Pong ~content:frame.content ())
 
-let sockaddr_of_dns node service =
-  Lwt_unix.(
-    getaddrinfo node service [AI_FAMILY(PF_INET); AI_SOCKTYPE(SOCK_STREAM)] >>= fun s ->
-    match s with
-    | h::_ -> Lwt.return h.Lwt_unix.ai_addr
-    | []   -> Lwt.fail Not_found)
+  | Opcode.Close ->
+    (* Immediately echo and pass this last message to the user *)
+    if String.length frame.content >= 2 then
+        Some (Frame.create ~opcode:Opcode.Close
+                ~content:(String.sub frame.content ~pos:0 ~len:2) ())
+    else None
+ 
 
-let run_server node service =
-  let rec zoocrypt_serve uri (stream, push) =
-    Lwt_stream.next stream >>= fun frame ->
-    process_frame frame >>= fun frame' ->
-    Lwt.wrap (fun () -> push (Some frame')) >>= fun () ->
-    zoocrypt_serve uri (stream, push)
+  | Opcode.Pong -> None
+
+  | Opcode.Text
+  | Opcode.Binary ->
+    let inp = frame.content in
+    F.printf "Command: ``%s''\n%!" inp;
+    begin match YS.from_string inp with
+    | `Assoc l ->
+      begin try
+        let get k = List.Assoc.find_exn l k in
+        match get "cmd", get "arg" with
+        | `String cmd, `String arg when cmd = "eval" || cmd = "save" ->
+          begin match get "filename" with
+          | `String fname ->
+            begin match cmd with
+            | "eval" -> Some (process_eval fname arg)
+            | "save" -> Some (process_save fname arg)
+            | _ -> assert false
+            end
+          | _ -> Some (process_unknown inp)
+          end
+        | `String "load", `String fname -> Some (process_load fname)
+        | `String "listFiles", _        -> Some (process_list_files ())
+        | `String "getDebug", _         -> Some (process_get_debug ())
+        | _                             -> Some (process_unknown inp)
+      with Not_found -> Some (process_unknown inp)
+      end
+    | _ ->
+      Some (process_unknown inp)
+    end
+  | _ ->
+    None
+
+
+let run_server _node _service =
+  let rec agp_serve id req recv send =
+    recv () >>= fun frame ->
+    begin match process_frame frame with
+    | Some frame' ->
+      send frame' >>= fun () ->
+      agp_serve id req recv send
+    | None ->
+      failwith ""
+    end
   in
-  sockaddr_of_dns node service >>= fun sa ->
-  Lwt.return (WS.establish_server sa zoocrypt_serve)
+  let uri = Uri.of_string "http://127.0.0.1:9999" in
+  Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system >>= fun endp ->
+  Conduit_lwt_unix.(endp_to_server ~ctx:default_ctx endp >>= fun server ->
+  WS.establish_server ~ctx:default_ctx ~mode:server agp_serve)
 
 let rec wait_forever () =
   Lwt_unix.sleep 1000.0 >>= wait_forever
@@ -251,7 +265,7 @@ let main =
   (* start server *)
   print_endline "Open the following URL in your browser (websocket support required):\n";
   print_endline ("    file://"^Sys.getcwd ()^"/web/index.html\n\n");
-  if Sys.file_exists !ps_file = `Yes
+  if Sys.file_exists !ps_file
     then print_endline ("Files: " ^ (String.concat ~sep:", " !ps_files))
     else failwith (F.sprintf "File ``%s'' does not exist." !ps_file);
   Lwt_main.run (run_server !server_name "9999" >>= fun _ -> wait_forever ())

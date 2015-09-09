@@ -1,5 +1,0 @@
-true: bin_annot, debug
-
-<src>: include
-<src/*>: package(num), thread, package(core), syntax(camlp4o)
-<src/Util> or <src/Parser> or <src/Poly>: include

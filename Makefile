@@ -1,19 +1,30 @@
 OCAMLBUILDFLAGS=-cflags "-w +a-e-9-44-48" -use-menhir -menhir "menhir -v" -classic-display -use-ocamlfind -quiet -ocamlc ocamlc -ocamlopt ocamlopt
-COREFLAGS=-pkg core \
+COREFLAGS=-pkg core_kernel \
     -pkg sexplib.syntax,comparelib.syntax,fieldslib.syntax,variantslib.syntax \
     -pkg bin_prot.syntax \
     -tag short_paths \
     -cflags -strict-sequence
 
-.PHONY: ubt wsubt
+DESTDIR    =
+PREFIX     ?= /usr/local
+INSTALL    := scripts/install/install-sh
 
-all: wsubt # ubt
+BINDIR := $(DESTDIR)$(PREFIX)/bin
+LIBDIR := $(DESTDIR)$(PREFIX)/lib/generic-unbounded
+SHRDIR := $(DESTDIR)$(PREFIX)/share/generic-unbounded
 
-ubt:
+.PHONY: install wsubt.native ubt.native
+
+all: wsubt.native ubt.native
+
+ubt.native:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./ubt.native
-	./ubt.native
 
-wsubt:
+wsubt.native:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./wsubt.native
-	killall wsubt.native
+
+install: ubt.native wsubt.native
+	$(INSTALL) -m 0755 -d $(BINDIR)
+	$(INSTALL) -m 0755 -T ubt.native $(BINDIR)/generic-group-unbounded
+	$(INSTALL) -m 0755 -T wsubt.native $(BINDIR)/generic-group-unbounded-ws
 

@@ -2,4 +2,4 @@ S src
 
 B _build/src
 
-PKG core websocket yojson
+PKG core_kernel websocket.lwt yojson lwt
