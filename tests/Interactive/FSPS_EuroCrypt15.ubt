@@ -1,0 +1,354 @@
+map G1 * G2 -> GT.
+
+sample u,p,d, t1,t2,t3,y,a,b,c.
+sample A.
+
+input [u,p,d] in G1.
+input [u,p,d] in G2.
+input [y] in G1.
+input [b, a, a*b, t1+a*t2, b*(t1+a*t2), t3, c*b*y^-1] in G2.
+
+oracle o1(M1:G2, M2:G2, M3:G2) = 
+  sample r1,r2,z;
+  return [r1*(t3+M3)] in G2,
+         [c+t1*(r1+r2), t2*(r1+r2)-z, b*z, b*r2, r1] in G1.
+
+win (wM1:G2, wM2:G2, wM3:G2, wS0:G2, wS1:G1, wS2:G1, wS3:G1, wS4:G1, wS5:G1 ) = 
+  (forall i: wM1 - M1_i + A*(wM2 - M2_i) + A^2*(wM3 - M3_i) <> 0 /\ 
+   wS0 = wS5*(t3+wM3) /\ wS1*b + wS2*b*a + wS3*a = wS4*(t1+a*t2) + wS5*b*(t1+a*t2) + y*c*b*y^-1 /\
+   p*wM3 = u*wM1 /\ d*wM3 = u*wM2
+  ).
+ 
+proof.
+
+extract (i; b * r2_i * t3) 2.
+extract (i; b * t3 * z_i) 2.
+extract (i; t3 * z_i) 2.
+extract (i; r2_i * t2 * t3) 2.
+extract (i; r1_i * t2 * t3) 2.
+extract (i; r2_i * t1 * t3) 2.
+extract (i; r1_i * t1 * t3) 2.
+extract (; c * t3) 2.
+extract (i; b^2 * c * r2_i * y^-1) 2.
+extract (i; b^2 * c * y^-1 * z_i) 2.
+extract (i; b * c * y^-1 * z_i) 2.
+extract (i; b * c * r2_i * t2 * y^-1) 2.
+extract (i; b * c * r1_i * t2 * y^-1) 2.
+extract (; b * c^2 * y^-1) 2.
+extract (i; b * c * r2_i * t1 * y^-1) 2.
+extract (i; b * c * r1_i * t1 * y^-1) 2.
+extract (i; b^2 * r2_i * t1) 2.
+extract (i; a * b^2 * r2_i * t2) 2.
+extract (i; b^2 * t1 * z_i) 2.
+extract (i; a * b^2 * t2 * z_i) 2.
+extract (i; b * t1 * z_i) 2.
+extract (i; b * r2_i * t1 * t2) 2.
+extract (i; b * r1_i * t1 * t2) 2.
+extract (i; a * b * t2 * z_i) 2.
+extract (i; a * b * r2_i * t2^2) 2.
+extract (i; a * b * r1_i * t2^2) 2.
+extract (i; b * r2_i * t1^2) 2.
+extract (i; b * r1_i * t1^2) 2.
+extract (; b * c * t1) 2.
+extract (i; a * b * r2_i * t1 * t2) 2.
+extract (i; a * b * r1_i * t1 * t2) 2.
+extract (; a * b * c * t2) 2.
+extract (i; b * r2_i * t1) 2.
+extract (i; a * b * r2_i * t2) 2.
+extract (i; t1 * z_i) 2.
+extract (i; r2_i * t1 * t2) 2.
+extract (i; r1_i * t1 * t2) 2.
+extract (i; a * t2 * z_i) 2.
+extract (i; a * r2_i * t2^2) 2.
+extract (i; a * r1_i * t2^2) 2.
+extract (i; r2_i * t1^2) 2.
+extract (i; r1_i * t1^2) 2.
+extract (; c * t1) 2.
+extract (i; a * r2_i * t1 * t2) 2.
+extract (i; a * r1_i * t1 * t2) 2.
+extract (; a * c * t2) 2.
+extract (i; a * b^2 * r2_i) 2.
+extract (i; a * b^2 * z_i) 2.
+extract (i; a * b * z_i) 2.
+extract (i; a * b * r2_i * t1) 2.
+extract (i; a * b * r1_i * t1) 2.
+extract (; a * b * c) 2.
+extract (i; a * b * r2_i) 2.
+extract (i; a * z_i) 2.
+extract (i; a * r2_i * t2) 2.
+extract (i; a * r2_i * t1) 2.
+extract (i; a * r1_i * t1) 2.
+extract (; a * c) 2.
+extract (i; b^2 * r2_i) 2.
+extract (i; b^2 * z_i) 2.
+extract (i; b * z_i) 2.
+extract (i; b * r2_i * t2) 2.
+extract (i; b * r1_i * t2) 2.
+extract (; b * c) 2.
+extract (i; b * d * r2_i) 2.
+extract (i; b * d * z_i) 2.
+extract (i; d * z_i) 2.
+extract (i; d * r2_i * t2) 2.
+extract (i; d * r1_i * t2) 2.
+extract (i; d * r2_i * t1) 2.
+extract (; c * d) 2.
+extract (i; b * p * r2_i) 2.
+extract (i; b * p * z_i) 2.
+extract (i; p * z_i) 2.
+extract (i; p * r2_i * t2) 2.
+extract (i; p * r1_i * t2) 2.
+extract (i; p * r2_i * t1) 2.
+extract (; c * p) 2.
+extract (i; b * r2_i * u) 2.
+extract (i; b * u * z_i) 2.
+extract (i; u * z_i) 2.
+extract (i; r2_i * t2 * u) 2.
+extract (i; r1_i * t2 * u) 2.
+extract (i; r2_i * t1 * u) 2.
+extract (; c * u) 2.
+extract (i; b * r2_i) 2.
+extract (i; z_i) 2.
+extract (i; r2_i * t2) 2.
+extract (i; r1_i * t2) 2.
+extract (i; r2_i * t1) 2.
+extract (; c) 2.
+extract (; t3 * y) 2.
+extract (; d * t3) 2.
+extract (; p * t3) 2.
+extract (; t3 * u) 2.
+extract (; t3) 2.
+extract (; b * c * y^-1) 2.
+extract (; b * t1) 2.
+extract (; a * b * t2) 2.
+extract (; t1) 2.
+extract (; a * t2) 2.
+extract (; a * b) 2.
+extract (; a) 2.
+extract (; b) 2.
+extract (; d) 2.
+extract (; p) 2.
+extract (; u) 2.
+extract (;) 2.
+extract (; b * c * d * y^-1) 2.
+extract (; b * c * p * y^-1) 2.
+extract (; b * c * u * y^-1) 2.
+extract (; b * t1 * y) 2.
+extract (; a * b * t2 * y) 2.
+extract (; b * d * t1) 2.
+extract (; a * b * d * t2) 2.
+extract (; b * p * t1) 2.
+extract (; a * b * p * t2) 2.
+extract (; b * t1 * u) 2.
+extract (; a * b * t2 * u) 2.
+extract (; t1 * y) 2.
+extract (; a * t2 * y) 2.
+extract (; d * t1) 2.
+extract (; a * d * t2) 2.
+extract (; p * t1) 2.
+extract (; a * p * t2) 2.
+extract (; t1 * u) 2.
+extract (; a * t2 * u) 2.
+extract (; a * b * y) 2.
+extract (; a * b * d) 2.
+extract (; a * b * p) 2.
+extract (; a * b * u) 2.
+extract (; a * y) 2.
+extract (; a * d) 2.
+extract (; a * p) 2.
+extract (; a * u) 2.
+extract (; b * y) 2.
+extract (; b * d) 2.
+extract (; b * p) 2.
+extract (; b * u) 2.
+extract (; d * y) 2.
+extract (; d^2) 2.
+extract (; d * p) 2.
+extract (; d * u) 2.
+extract (; p * y) 2.
+extract (; p^2) 2.
+extract (; p * u) 2.
+extract (; u * y) 2.
+extract (; u^2) 2.
+extract (; y) 2.
+extract (i; b * r1_i * t1) 152.
+extract (i; a * b * r1_i * t2) 152.
+extract (i; b^2 * r2_i * t1) 152.
+extract (i; a * b^2 * r2_i * t2) 152.
+extract (i; b^2 * t1 * z_i) 152.
+extract (i; a * b^2 * t2 * z_i) 152.
+extract (i; b * t1 * z_i) 152.
+extract (i; b * r2_i * t1 * t2) 152.
+extract (i; b * r1_i * t1 * t2) 152.
+extract (i; a * b * t2 * z_i) 152.
+extract (i; a * b * r2_i * t2^2) 152.
+extract (i; a * b * r1_i * t2^2) 152.
+extract (i; b * r2_i * t1^2) 152.
+extract (i; b * r1_i * t1^2) 152.
+extract (; b * c * t1) 152.
+extract (i; a * b * r2_i * t1 * t2) 152.
+extract (i; a * b * r1_i * t1 * t2) 152.
+extract (; a * b * c * t2) 152.
+extract (i; r1_i * t1) 152.
+extract (i; a * r1_i * t2) 152.
+extract (i; b * r2_i * t1) 152.
+extract (i; a * b * r2_i * t2) 152.
+extract (i; t1 * z_i) 152.
+extract (i; r2_i * t1 * t2) 152.
+extract (i; r1_i * t1 * t2) 152.
+extract (i; a * t2 * z_i) 152.
+extract (i; a * r2_i * t2^2) 152.
+extract (i; a * r1_i * t2^2) 152.
+extract (i; r2_i * t1^2) 152.
+extract (i; r1_i * t1^2) 152.
+extract (; c * t1) 152.
+extract (i; a * r2_i * t1 * t2) 152.
+extract (i; a * r1_i * t1 * t2) 152.
+extract (; a * c * t2) 152.
+extract (i; a * r1_i) 152.
+extract (i; a * b * r2_i) 152.
+extract (i; a * b * z_i) 152.
+extract (i; a * z_i) 152.
+extract (i; a * r2_i * t2) 152.
+extract (i; a * r2_i * t1) 152.
+extract (i; a * r1_i * t1) 152.
+extract (; a * c) 152.
+extract (i; a * b * r1_i) 152.
+extract (i; a * b^2 * r2_i) 152.
+extract (i; a * b^2 * z_i) 152.
+extract (i; a * b * r2_i * t1) 152.
+extract (i; a * b * r1_i * t1) 152.
+extract (; a * b * c) 152.
+extract (i; b * r1_i) 152.
+extract (i; b^2 * r2_i) 152.
+extract (i; b^2 * z_i) 152.
+extract (i; b * z_i) 152.
+extract (i; b * r2_i * t2) 152.
+extract (i; b * r1_i * t2) 152.
+extract (; b * c) 152.
+extract (; b * t1 * y) 152.
+extract (; a * b * t2 * y) 152.
+extract (; b * d * t1) 152.
+extract (; a * b * d * t2) 152.
+extract (; b * p * t1) 152.
+extract (; a * b * p * t2) 152.
+extract (; b * t1 * u) 152.
+extract (; a * b * t2 * u) 152.
+extract (; b * t1) 152.
+extract (; a * b * t2) 152.
+extract (; t1 * y) 152.
+extract (; a * t2 * y) 152.
+extract (; d * t1) 152.
+extract (; a * d * t2) 152.
+extract (; p * t1) 152.
+extract (; a * p * t2) 152.
+extract (; t1 * u) 152.
+extract (; a * t2 * u) 152.
+extract (; t1) 152.
+extract (; a * t2) 152.
+extract (; a * y) 152.
+extract (; a * d) 152.
+extract (; a * p) 152.
+extract (; a * u) 152.
+extract (; a) 152.
+extract (; a * b * y) 152.
+extract (; a * b * d) 152.
+extract (; a * b * p) 152.
+extract (; a * b * u) 152.
+extract (; a * b) 152.
+extract (; b * y) 152.
+extract (; b * d) 152.
+extract (; b * p) 152.
+extract (; b * u) 152.
+extract (; b) 152.
+extract (; b * t1 * u) 243.
+extract (; a * b * t2 * u) 243.
+extract (; t1 * u) 243.
+extract (; a * t2 * u) 243.
+extract (; a * b * u) 243.
+extract (; a * u) 243.
+extract (; b * u) 243.
+extract (; d * u) 243.
+extract (; b * c * p * y^-1) 243.
+extract (; p * t3) 243.
+extract (; b * p * t1) 243.
+extract (; a * b * p * t2) 243.
+extract (; p * t1) 243.
+extract (; a * p * t2) 243.
+extract (; a * b * p) 243.
+extract (; a * p) 243.
+extract (; p * u) 243.
+extract (; b * p) 243.
+extract (; d * p) 243.
+extract (; p^2) 243.
+extract (; p) 243.
+extract (; u^2) 243.
+extract (; b * c * u * y^-1) 243.
+extract (; t3 * u) 243.
+extract (; u) 243.
+extract (; b * c * d * y^-1) 269.
+extract (; d * t3) 269.
+extract (; b * d * t1) 269.
+extract (; a * b * d * t2) 269.
+extract (; d * t1) 269.
+extract (; a * d * t2) 269.
+extract (; a * b * d) 269.
+extract (; a * d) 269.
+extract (; b * d) 269.
+extract (; d^2) 269.
+extract (; d * p) 269.
+extract (; d * u) 269.
+extract (; d) 269.
+extract (; b * c * u * y^-1) 269.
+extract (; t3 * u) 269.
+extract (; b * t1 * u) 269.
+extract (; a * b * t2 * u) 269.
+extract (; t1 * u) 269.
+extract (; a * t2 * u) 269.
+extract (; a * b * u) 269.
+extract (; a * u) 269.
+extract (; b * u) 269.
+extract (; p * u) 269.
+extract (; u^2) 269.
+extract (; u) 269.
+simplify_vars.
+simplify_vars.
+simplify.
+case_distinction p36_i.
+  simplify_vars.
+  simplify_vars.
+  simplify.
+  case_distinction p98_i.
+    simplify_vars.
+    simplify_vars.
+    simplify.
+    case_distinction p24_i.
+      contradiction.
+    simplify_vars.
+    simplify_vars.
+    simplify.
+    simplify_vars.
+    simplify_vars.
+    simplify.
+    case_distinction p98_i.
+      simplify_vars.
+      simplify_vars.
+      simplify.
+      case_distinction p24_i.
+        contradiction.
+      simplify_vars.
+      simplify_vars.
+      simplify.
+      contradiction.
+    simplify_vars.
+    simplify_vars.
+    simplify.
+    contradiction.
+  simplify_vars.
+  simplify_vars.
+  simplify.
+  contradiction.
+simplify_vars.
+simplify_vars.
+simplify.
+contradiction.
+

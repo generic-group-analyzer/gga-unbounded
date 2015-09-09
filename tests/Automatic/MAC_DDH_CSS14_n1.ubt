@@ -1,0 +1,11 @@
+sample z,x0,y0,x1,y1.
+
+input [x1,y1] in G.
+
+oracle o1(m1:Fp) =
+  sample r;
+  return [r, r*(x0 + x1*m1), r*(y0 + y1*m1), z*r] in G.
+
+win (wm1:Fp, wW:G, wX:G, wY:G, wZ:G) = 
+  (forall i: wm1 <> m1_i /\ wW <> 0 /\ wX = wW*(x0 + x1*wm1) /\ wY = wW*(y0 + y1*wm1) /\ wZ = wW * z).
+

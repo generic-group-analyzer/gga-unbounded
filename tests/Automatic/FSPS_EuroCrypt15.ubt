@@ -1,0 +1,21 @@
+map G1 * G2 -> GT.
+
+sample u,p,d, t1,t2,t3,y,a,b,c.
+sample A.
+
+input [u,p,d] in G1.
+input [u,p,d] in G2.
+input [y] in G1.
+input [b, a, a*b, t1+a*t2, b*(t1+a*t2), t3, c*b*y^-1] in G2.
+
+oracle o1(M1:G2, M2:G2, M3:G2) = 
+  sample r1,r2,z;
+  return [r1*(t3+M3)] in G2,
+         [c+t1*(r1+r2), t2*(r1+r2)-z, b*z, b*r2, r1] in G1.
+
+win (wM1:G2, wM2:G2, wM3:G2, wS0:G2, wS1:G1, wS2:G1, wS3:G1, wS4:G1, wS5:G1 ) = 
+  (forall i: wM1 - M1_i + A*(wM2 - M2_i) + A^2*(wM3 - M3_i) <> 0 /\ 
+   wS0 = wS5*(t3+wM3) /\ wS1*b + wS2*b*a + wS3*a = wS4*(t1+a*t2) + wS5*b*(t1+a*t2) + y*c*b*y^-1 /\
+   p*wM3 = u*wM1 /\ d*wM3 = u*wM2
+  ).
+ 

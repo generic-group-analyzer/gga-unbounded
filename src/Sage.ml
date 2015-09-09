@@ -1,6 +1,8 @@
 module YS = Yojson.Safe
 
-let sage_script = "sage -python groebner_basis.py"
+
+(* Set the env variable UBT_PATH *)
+let sage_script = Format.sprintf "sage -python %s/groebner_basis.py" (Sys.getenv "UBT_PATH")
 (* let sage_script = "tee -a log-stdin | sage -python groebner_basis.py 2>&1 | tee -a log-stdout" *)
 
 type st_sage = {

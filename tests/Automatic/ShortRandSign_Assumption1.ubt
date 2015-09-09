@@ -10,3 +10,4 @@ oracle o1(M:Fp) =
   return [H, H*X + H*M*Y] in G1.
 
 win (wM:Fp, wH:G1, wK:G1) = (forall i: wM <> M_i /\ wH <> 0 /\ wK = wH*X + wH*wM*Y).
+

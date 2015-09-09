@@ -1,0 +1,45 @@
+map G1 * G2 -> GT.
+
+sample U,V,W,Z.
+
+input [U] in G1.
+input [V,W,Z] in G2.
+
+oracle o1(M:G1, N:G2) =
+  sample R;
+  return [R, Z-R*V-M*W] in G1,
+         [(1-U*N)*R^-1] in G2.
+
+win (wM:G1, wN:G2, wR:G1, wS:G1, wT:G2) = 
+  (forall i: wM <> M_i   /\ 
+   forall i: wN <> N_i   /\ 
+   wR*V + wS + wM*W = Z  /\
+   wR*wT + U*wN = 1
+  ).
+  
+proof.
+
+extract(; V) 3.
+extract(; U*V) 3.
+extract(; U) 3.
+extract(i; R_i*V) 3.
+extract(; V*Z) 3.
+extract(i; R_i) 3.
+extract(; Z) 3.
+extract(i; R_i*V^2) 3.
+extract(;) 3.
+simplify_vars.
+simplify.
+extract(; R_i) 2.
+extract(; V*R_i) 2.
+extract(; W*R_i) 2.
+extract(; Z*R_i) 2.
+extract(;) 2.
+extract(i; R_i) 2.
+extract(i; R_i*V) 2.
+extract(i; R_i*W) 2.
+extract(i; R_i*Z) 2.
+simplify.
+case_distinction p17_i.
+  contradiction.
+simplify.

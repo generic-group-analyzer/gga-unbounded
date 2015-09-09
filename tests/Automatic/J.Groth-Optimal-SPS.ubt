@@ -1,0 +1,18 @@
+map G1 * G2 -> GT.
+
+sample U,V,W,Z.
+
+input [U] in G1.
+input [V,W,Z] in G2.
+
+oracle o1(M:G1, N:G2) =
+  sample R;
+  return [R, Z-R*V-M*W] in G1,
+         [(1-U*N)*R^-1] in G2.
+
+win (wM:G1, wN:G2, wR:G1, wS:G1, wT:G2) = 
+  (forall i: wM <> M_i   /\ 
+   forall i: wN <> N_i   /\ 
+   wR*V + wS + wM*W = Z  /\
+   wR*wT + U*wN = 1
+  ).

@@ -1,0 +1,11 @@
+sample x0,x1,x2.
+sample X.
+
+input [x1,x2] in G.
+
+oracle o1(m1:Fp, m2:Fp) =
+  sample u;
+  return [u, u*(x0 + x1*m1 + x2*m2)] in G.
+
+win (wm1:Fp, wm2:Fp, wu:G, wU:G) = (forall i: wm1 - m1_i <> X*(wm2 - m2_i) /\ wu <> 0 /\ wU = wu*(x0 + x1*wm1 + x2*wm2)).
+
