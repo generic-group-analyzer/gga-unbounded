@@ -44,6 +44,17 @@ let rec insert x list =
   | [] -> [[x]]
   | hd::tl -> (x::list) :: (L.map ~f:(fun l -> hd::l) (insert x tl))
 
+(* Given a list of elements and a number k < list.length, returns all the possible
+ sublists of k elements from the list (the order matters) *)
+let nchoosek_perm list k ~compare =
+    let rec aux output list k =
+    if k = 0 then output
+    else
+      aux (L.concat ( L.map output ~f:(fun l -> L.map list ~f:(fun x -> x::l) ) )) list (k-1)
+  in
+  aux [[]] list k
+  |> L.filter ~f:(fun l -> L.length (L.dedup ~compare l) = L.length l)
+
 (* list of all permutations of a list *)
 let rec perms = function
   | [] -> [[]]

@@ -378,7 +378,7 @@ let eval_instr (k1,k2) system nth instr =
      let cases = (case_dist (L.nth_exn system (nth-1) ) par) in
      let case1 = (*simplify*) (L.nth_exn cases 0) in
      let case2 = (*simplify*) (L.nth_exn cases 1) in
-     ((list_map_nth system nth (fun _ -> case1)) @ [case2], nth)
+     (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> [case1] @ [case2])), nth)
 
   | GoTo(n) ->
      if (n >= 0 && n <= L.length system) then (system, n)

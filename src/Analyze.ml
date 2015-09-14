@@ -58,7 +58,7 @@ let all_parameters constraints =
 
 let all_parameters_filtered constraints = 
   all_parameters constraints
-  (*|> Set.filter ~f:(fun p -> not(known_not_null SP.(of_a p) constraints))*)
+  |> Map.filter ~f:(fun ~key:p ~data:_ -> not(known_not_null SP.(of_a p) constraints))
 
 let extract_everything_equation constraints depth (k1,k2) counter _oc =
   let free_ivars = free_ivars_constr_conj constraints in
@@ -76,7 +76,7 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
       | [] -> constraints
       | mon :: rest_monoms ->
 	 if not(overlap mon eq.poly k1 k2) then
-	   let idxs = Set.to_list (Set.diff (ivars_monom mon) free_ivars) in
+	   let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
 	   F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter;
 	   F.print_flush ();
 	   any_extracted := true;
@@ -113,7 +113,7 @@ let automatic_algorithm system (k1,k2) oc =
 	let used_parameters_list = L.tl_exn used_parameters_list in
 	let (contradiction_next, _) = Wrules.contradictions_msg (clear_equations constraints) in
 	if (contradiction_next) then
-	  constraints :: rest_goals, depth-1, used_parameters_list
+	  constraints :: rest_goals, depth, used_parameters_list
 	else
 	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
 	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
@@ -137,26 +137,60 @@ let automatic_algorithm system (k1,k2) oc =
 	constraints
     in
 
-    (*F.printf "%a@\n" pp_constr_conj constraints;*)
+    (*F.printf "%a@\n" pp_constr_conj constraints;
+    F.print_flush(); *)
+
+    let (contradiction, _) = Wrules.contradictions_msg (clear_equations constraints) in
+    if contradiction then constraints :: rest_goals, depth, used_parameters_list
+    else
 
     let used_parameters = L.hd_exn used_parameters_list in
     let rest_used_parameters = L.tl_exn used_parameters_list in
+    let parameters = all_parameters constraints in
+    let max_count = L.fold_left (Map.data parameters) ~init: 0 ~f:(fun m x -> if x > m then x else m) in
+    let free_idxs = free_ivars_constr_conj constraints in
     let parameters = Map.filter (all_parameters constraints) 
                         ~f:(fun ~key:p ~data:_ ->
 			  not (L.mem used_parameters p 
 				 ~equal:(fun p1 p2 ->
 				     match p1, p2 with
-				     | Param(name1,_), Param(name2,_) -> name1 = name2
+				     | Param(name1,i), Param(name2,j) ->
+					if (name1 = name2) then
+					  (match i,j with
+					  | Some i, Some j -> 
+					     if (Set.mem free_idxs i) then equal_ivar i j
+					     else false
+					  | _ -> true
+					  )
+					else false
 				     | _ -> false
 				 )
 			  )
 			)
     in
+    let parameters = (* If previous case_distinction in a parameter, put it in the end of the queue *)
+      Map.fold parameters 
+	~init:Atom.Map.empty
+        ~f:(fun ~key:p ~data:d m ->
+	  if (L.mem used_parameters p 
+		 ~equal:(fun p1 p2 ->
+		   match p1, p2 with
+		   | Param(name1,_), Param(name2,_) -> name1 = name2
+		   | _ -> false
+		 )
+	     ) then
+	    Map.add m ~key:p ~data:(d-max_count)
+	  else
+	    Map.add m ~key:p ~data:d
+	)
+    in
     let keys = Map.keys parameters in
     let data = Map.data parameters in
     let _data, parameters = quicksort_double (>) data keys in
-    (*let () = F.printf "[%a]@\n" (pp_list ", " pp_atom) parameters in
-    let () = F.printf "[%a]@\n" (pp_list ", " pp_int) _data in*)
+    (*let () = F.printf "[%a]@\n" (pp_list ", " pp_atom) used_parameters in
+    let () = F.printf "[%a]@\n" (pp_list ", " pp_atom) parameters in
+    F.print_flush();*)
+    (*let () = F.printf "[%a]@\n" (pp_list ", " pp_int) _data in*)
       match parameters with
       | [] -> (constraints :: rest_goals), depth+1, used_parameters_list
       | p :: _rest_parameters ->
@@ -165,9 +199,10 @@ let automatic_algorithm system (k1,k2) oc =
 	 let case2 = L.nth_exn cases 1 in
 	 let () = F.printf "%scase_distinction %a.\n" (repeat_string "  " depth) pp_atom p in
 	 F.print_flush ();
-	 ([case1] @ rest_goals @ [case2]), depth+1,
-	 [p :: used_parameters] @ rest_used_parameters @ [p :: used_parameters]
+	 ([case1] @ [case2] @ rest_goals), depth+1,
+	 [p :: used_parameters] @ [p :: used_parameters] @ rest_used_parameters
   in
+
   let rec aux goals depth used_parameters_list =
     if (L.length goals = 0) then true
     else if (depth = 50) then false
