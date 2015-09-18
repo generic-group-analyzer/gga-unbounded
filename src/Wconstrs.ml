@@ -59,6 +59,7 @@ let equal_sum a b = Set.equal (Ivar.Set.of_list a.ivars) (Ivar.Set.of_list b.iva
 let equal_poly a b = compare_poly a b = 0
 let equal_constr a b = Set.equal (Ivar.Set.of_list a.qvars) (Ivar.Set.of_list b.qvars) &&
 		       Set.equal (Ivar_Pair.Set.of_list a.q_ineq) (Ivar_Pair.Set.of_list b.q_ineq) &&
+		       equal_is_eq a.is_eq b.is_eq &&
 		       equal_poly a.poly b.poly
 let equal_constr_conj a b = compare_constr_conj a b = 0
 let equal_constr_disj a b = compare_constr_disj a b = 0
@@ -207,7 +208,7 @@ let sum2Q unused ivs ivs_pairs =
 let mk_sum ivs ivs_dist mon =
   (*let ivs_monom = Set.to_list (ivars_monom mon) in*)
   (*let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem (ivs@ivs_monom) x || L.mem (ivs@ivs_monom) y) in*)
-  let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x ~equal:equal_ivar || L.mem ivs y ~equal:equal_ivar) in
+  (*let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x ~equal:equal_ivar || L.mem ivs y ~equal:equal_ivar) in *)
   let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
   let unused_ivars = Set.diff (Ivar.Set.of_list ivs) (ivars_monom mon) in
   let again_ivs, qpart = 
@@ -256,12 +257,12 @@ let all_ivar_distinct_poly p =
     
 let mk_poly terms =
   L.fold_left ~init:Sum.Map.empty ~f:add_poly_term terms |> all_ivar_distinct_poly
-							      
+					      
 let mk_constr ivs ivs_dist is_eq poly =
   let ivs = L.dedup ~compare:compare_ivar ivs in
   let ivs = L.filter ivs ~f:(fun i -> Set.mem (ivars_poly poly) i) in
   let ivar_pairs = L.dedup ~compare:Ivar_Pair.compare ivs_dist in
-  let ivar_pairs = L.filter ivar_pairs ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in
+  (* let ivar_pairs = L.filter ivar_pairs ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in *)
   { qvars = ivs; q_ineq = ivar_pairs; is_eq = is_eq; poly = poly }
 
 (* ----------------------------------------------------------------------- *)
@@ -398,6 +399,10 @@ let pp_sum fmt sum =
       F.fprintf fmt "@[<hov 2>(%a%a)@]"
       (pp_binder "sum") sum.ivars
       pp_monom sum.monom
+  else if sum.i_ineq <> [] then
+      F.fprintf fmt "@[<hov 2>(%a)%a@]"
+      (pp_list ", " pp_ivar_pair) sum.i_ineq
+      pp_monom sum.monom
   else
     F.fprintf fmt "@[<hov 2>%a@]"
       pp_monom sum.monom
@@ -519,7 +524,7 @@ let matching_poly p1 p2 =
   if (Map.length p1) <> (Map.length p2) then []
   else aux (Map.to_alist p1) (Map.to_alist p2) (Ivar.Map.empty)
 
-let matching_constr c1 c2 =
+let matching_constr c1 c2 = (* This does not check the q_ineq *)
   let valid_rn rn =
     let (ivars1, ivars2) = L.unzip (Map.to_alist rn) in
     L.map2_exn ivars1 ivars2
@@ -530,7 +535,11 @@ let matching_constr c1 c2 =
   L.filter (matching_poly c1.poly c2.poly) ~f:(valid_rn)
 
 let isomorphic_sum s1 s2 = L.length (matching_term (BI.one,s1) (BI.one,s2) Ivar.Map.empty) > 0 
-let isomorphic_constr c1 c2 = (L.length (matching_constr c1 c2) > 0 ||
-			      L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0) &&
-                              c1.is_eq = c2.is_eq
+let isomorphic_constr c1 c2 = 
+(*let () = F.printf "%a [%a] [%a] ?=? %a [%a] [%a] -> %b %b\n" pp_constr c1 (pp_list "," pp_ivar) c1.qvars (pp_list "," pp_ivar_pair) c1.q_ineq pp_constr c2 (pp_list "," pp_ivar) c2.qvars (pp_list "," pp_ivar_pair) c2.q_ineq (equal_is_eq c1.is_eq c2.is_eq) ((L.length (matching_constr c1 c2) > 0 ||
+   L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0)) in
+  F.print_flush();*)
+ equal_is_eq c1.is_eq c2.is_eq && 
+  (L.length (matching_constr c1 c2) > 0 ||
+   L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0)
 let isomorphic_poly p1 p2 = L.length (matching_constr (mk_constr [] [] Eq p1) (mk_constr [] [] Eq p2)) > 0	  

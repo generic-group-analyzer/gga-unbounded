@@ -54,6 +54,7 @@ rule lex = parse
   | "goto"     { GOTO }
   | "admit"    { ADMIT }
   | "contradiction" { CONTRADICTION }
+  | "uniform" { UNIFORM }
   | "simplify" { SIMPLIFY }
   | "simplify_vars" { SIMPLIFYVARS }
 

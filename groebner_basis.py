@@ -43,6 +43,8 @@ def interp(req):
         new_poly += new_term
       polynomials.append(new_poly)
   
+#    for i in range(len(polynomials)):
+#      print (i+1), polynomials[i]
     reduced = ideal(polynomials).groebner_basis()
   
     # Make integer every constant. (Return this information!!!)
@@ -133,6 +135,73 @@ def interp(req):
       if (i < len(reduced_polylist)-1):    output += "p"
   
     return output
+
+  elif cmd == "NumDen":
+    num = ast.literal_eval(req["num"])
+    den = ast.literal_eval(req["den"])
+
+    if num == []:  return "C0"
+    n_variables = len(num[0]) - 1 # The first element is the coefficient.
+
+    if n_variables == 0:    return "C0"
+
+    R = PolynomialRing(QQ, n_variables, 'x')
+    x = R.gens()
+    polynomials = []
+    for p in [num,den]:
+      new_poly = 0*x[0]
+      for term in p:
+        new_term = term[0]
+        for i in range(n_variables):
+          new_term *= x[i]**(term[i+1])
+        new_poly += new_term
+      polynomials.append(new_poly)
+ 
+    num, den = polynomials
+    num_num = num.numerator()
+    num_den = num.denominator()
+    den_num = den.numerator()
+    den_den = den.denominator()
+    num = num_num * den_den
+    den = num_den * den_num
+
+    if (num % den == 0):
+      msg = "C"  #Cocient
+      p = num / den
+    else:
+      msg = "M"  #Modulo
+      p = num % den
+
+    # Make integer every constant. (Return this information!!!)
+    try:
+      denominators = [t.denominator() for t in p.coefficients()]
+    except Exception:
+      p = p*p.denominator()
+      return msg + str(p) + ",0"*len(x)
+    p = p*lcm(denominators)
+
+    poly = []
+    coeffs = p.coefficients()
+    mons = p.monomials()
+    for i in range(len(mons)):
+      term = [coeffs[i]]
+      for j in range(len(x)):
+        term.append(mons[i].degree(mons[i].parent()(x[j])))
+      poly.append(term)
+
+    if poly == []:
+      poly = [[0*x[0]]*(len(x)+1)]
+
+    # Print the output in Ocaml format.
+    output = ""
+    for j in range(len(poly)):
+      for k in range(len(poly[j])):
+        output += str(poly[j][k])
+        if (k < len(poly[j])-1):    output += ","
+      if (j < len(poly)-1):    output += "t"
+  
+    return msg + output
+
 
 def main():
   try:

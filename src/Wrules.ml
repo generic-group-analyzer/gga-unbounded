@@ -1,3 +1,4 @@
+
 (* * Load modules *)
 
 open Core_kernel.Std
@@ -7,7 +8,7 @@ open Watom
 open Wconstrs
 open Sage
 open Z3
-   
+    
 (* * "Split" rule *)
 (* ** Substitute free occurence of index variable *)
 
@@ -49,23 +50,27 @@ let not_iineq_absurd (s : sum) =
 let not_qineq_absurd (c : constr) =
   let f (i,j) = equal_ivar i j in
   not (L.exists ~f c.q_ineq)
+
+let clear_absurd_iineq_constr (c : constr) =
+  mk_constr c.qvars c.q_ineq c.is_eq (Map.filter c.poly ~f:(fun ~key:s ~data:_c -> not_iineq_absurd s))
 	   
 let split_sum (iv : ivar) (sum : sum) =
   let rec do_split s =
     match s.ivars with      
-    | [] -> [s]
+    | [] -> L.filter ~f:not_iineq_absurd [s]
     | i::is -> 
        let sums = do_split (mk_sum is s.i_ineq s.monom) in
        let sums1 = L.map ~f:(fun s' -> mk_sum (i::s'.ivars) ((i,iv)::(s'.i_ineq@s.i_ineq)) s'.monom) sums in
        let sums2 = L.map ~f:(subst_idx_sum i iv) sums in
-       if (L.mem s.i_ineq ~equal:Ivar_Pair.equal (i,iv)) then sums1
+       if (L.mem s.i_ineq ~equal:Ivar_Pair.equal (i,iv)) then
+	 L.filter ~f:not_iineq_absurd sums1
        else
 	 L.filter ~f:not_iineq_absurd (sums1 @ sums2)
   in  
   if L.mem sum.ivars iv
   then failwith "split_sum: given index variable must be fresh"
   else do_split sum
-         
+      
 let split_poly (iv : ivar) (p : poly) =
   Map.fold p ~init:SP.zero
 	     ~f:(fun ~key:s ~data:c p1 ->
@@ -75,14 +80,15 @@ let split_poly (iv : ivar) (p : poly) =
 let split_constr (iv : ivar) (constr : constr) =
   let rec do_split c =
     match c.qvars with
-    | [] -> [ mk_constr [] c.q_ineq c.is_eq (split_poly iv c.poly) ]
+    | [] -> L.filter ~f:not_qineq_absurd [ mk_constr [] c.q_ineq c.is_eq (split_poly iv c.poly) ]
     | i::is -> 
        let constrs = do_split (mk_constr is c.q_ineq c.is_eq c.poly) in
        let constrs1 = L.map ~f:(fun x -> mk_constr (i::x.qvars) ((i,iv)::(x.q_ineq@c.q_ineq)) x.is_eq x.poly) constrs in
        let constrs2 = L.map ~f:(subst_idx_constr i iv) constrs in
-       if (L.mem c.q_ineq ~equal:Ivar_Pair.equal (i,iv)) then constrs1
+       if (L.mem c.q_ineq ~equal:Ivar_Pair.equal (i,iv)) then 
+	 L.filter ~f:not_qineq_absurd constrs1
        else
-	 L.filter ~f:not_qineq_absurd (constrs1 @ constrs2)
+	 L.filter ~f:not_qineq_absurd (L.map ~f:clear_absurd_iineq_constr (constrs1 @ constrs2))
   in
   if L.mem constr.qvars iv
   then failwith (fsprintf "split_constr: given index variable %a not fresh" pp_ivar iv)
@@ -121,7 +127,8 @@ let params_monom (mon : monom) = monom_filter_vars is_param mon
 let bound_by_sum (s : sum) = function
   | Rvar (_, None)   | Param(_, None)   -> false
   | Rvar (_, Some i) | Param(_, Some i) -> L.mem ~equal:equal_ivar s.ivars i
-  | _ -> failwith "bound_by_sum: expected rvar or param as second argument"
+  | Hvar hv -> L.mem ~equal:equal_ivar s.ivars hv.hv_ivar
+  | _ -> assert false
 						   
 let not_bound_sum_params (s : sum) = 
   let (parameters, _) = L.unzip (params s.monom) in
@@ -145,9 +152,14 @@ let coeff_sum (c : BI.t) (s : sum) (idxs, mon) =
     let idx_perms = nchoosek_perm s.ivars (L.length idxs) ~compare:compare_ivar in
     let renamings = L.map idx_perms ~f:(fun l -> Ivar.Map.of_alist_exn (L.zip_exn l idxs)) in
     let monomials = L.map renamings ~f:(fun rn -> map_idx_monom ~f:(apply_renaming rn) s.monom) in
+    let s_i_ineqs = L.map renamings ~f:(fun rn -> 
+      L.map s.i_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y))
+                                       )
+    in
     let new_ivars = L.map idx_perms ~f:(fun l -> L.filter s.ivars
 						 ~f:(fun i -> not (L.mem ~equal:equal_ivar l i))) in
-    L.map2_exn monomials new_ivars ~f:(fun m ivs -> coeff_term c (mk_sum ivs s.i_ineq m) mon)
+    L.map2_exn (L.zip_exn monomials s_i_ineqs) new_ivars ~f:(fun (m,ineq) ivs -> 
+      coeff_term c (mk_sum ivs ineq m) mon)
     |> L.fold_left ~init:(SP.zero) ~f:SP.(+!)
 
 (* We asume the indices in idxs are distinct *)
@@ -163,11 +175,14 @@ let mons (p : poly) =
       (Map.filter s.monom ~f:(fun ~key:v ~data:_e -> not (is_param v))) :: list)
 
 let mons_hvar_free (p : poly) =
+  let monomials = mons p in
+  L.filter monomials ~f:(fun m -> Map.fold m ~init:true ~f:(fun ~key:v ~data:_ b -> b && not(is_hvar v)))
+(*
   Map.fold p
     ~init:[]
     ~f:(fun ~key:s ~data:_c list -> 
       (Map.filter s.monom ~f:(fun ~key:v ~data:_e -> not (is_param v) && not(is_hvar v))) :: list)
-
+*)
 let degree (v : atom) (m : monom) =
   Option.value ~default:BI.zero (Map.find m v)
 
@@ -189,8 +204,7 @@ let smt_solver system =
   | s -> failwith ("Communication with python failed, got <<" ^ s ^ ">>")
 	   
 (* Computes m1/m2 for all possible combinaions of indices between them *)
-let join_monomials m1 m2 =
-  let indices1 = ivars_monom m1 in
+let join_monomials indices1 m1 m2 =
   let indices2 = ivars_monom m2 in
   let (_,indices) = renaming_away_from indices2 indices1 in
   let idx_perms = nchoosek_perm (Set.to_list indices) (Set.length indices1) ~compare:compare_ivar in
@@ -271,9 +285,8 @@ let smt_case_MiMj mon (initial, idxs) i j k1 k2 =
    ", \\\"lambda\\\" : "   ^ (string_of_int (L.length (k1.recur @ k2.recur))) ^
    ", \\\"indices\\\" : "  ^ (string_of_int (L.length idxs)) ^ "}\'"
 												 
-let smt_system_Mi mon i k =
-  let indices = Set.to_list (ivars_monom mon) in
-  if (L.mem indices i) then String.Set.empty
+let smt_system_Mi (indices,mon) i k =
+  if (L.mem indices i ~equal:equal_ivar) then String.Set.empty
   else
     let initials = L.concat (L.map k.non_recur ~f:(fun m -> use_one_index m indices)) in
     L.fold_left initials
@@ -281,9 +294,8 @@ let smt_system_Mi mon i k =
      ~f:(fun se (initial,idxs) ->
          Set.union se (String.Set.singleton (smt_case_Mi mon (initial,idxs) k)) )
      
-let smt_system_MiMj mon i j k1 k2 =
-  let indices = Set.to_list (ivars_monom mon) in
-  if (equal_ivar i j) && (L.mem indices i) then String.Set.empty
+let smt_system_MiMj (indices,mon) i j k1 k2 =
+  if (equal_ivar i j) && (L.mem indices i ~equal:equal_ivar) then String.Set.empty
   else
     let indices1 = L.filter (j :: indices) ~f:(fun x -> not (equal_ivar x i))
 		  |> L.dedup ~compare:compare_ivar in
@@ -298,20 +310,21 @@ let smt_system_MiMj mon i j k1 k2 =
      ~f:(fun se (initial,idxs) ->
 	Set.union se (String.Set.singleton (smt_case_MiMj mon (initial,idxs) i j k1 k2)) )
      
-let monom_matches_hmonom m hm i_list k_list =
+let monom_matches_hmonom (idxs,m) hm i_list k_list =
   let f mon =
     match i_list, k_list with
-    | i :: [], k :: [] -> smt_system_Mi mon i k
-    | i :: j :: [], k1 :: k2 :: [] -> smt_system_MiMj mon i j k1 k2
+    | i :: [], k :: [] -> smt_system_Mi (idxs,mon) i k
+    | i :: j :: [], k1 :: k2 :: [] -> smt_system_MiMj (idxs,mon) i j k1 k2
     | _ -> assert false
   in
-  L.fold_left (join_monomials m hm)
+  L.fold_left (join_monomials (Ivar.Set.of_list idxs) m hm)
    ~init:String.Set.empty
    ~f:(fun se mon -> Set.union se (f mon))
 
-let system_handle_term m hm k1 k2 =
+let system_handle_term (idxs,m) hm k1 k2 =
   let (rn,_) = renaming_away_from (ivars_monom hm) (ivars_monom m) in
   let m = map_idx_monom m ~f:(apply_renaming rn) in
+  let idxs = L.map idxs ~f:(apply_renaming rn) in
   let handles_list =
     L.concat_map (hvars hm)
 	    ~f:(fun (v,e) ->
@@ -323,27 +336,27 @@ let system_handle_term m hm k1 k2 =
   match handles_list with
   | [h] ->
      begin match h.hv_gname with
-     | G1 -> monom_matches_hmonom m (rvars_monom hm) [h.hv_ivar] [k1]
-     | G2 -> monom_matches_hmonom m (rvars_monom hm) [h.hv_ivar] [k2]
+     | G1 -> monom_matches_hmonom (idxs,m) (rvars_monom hm) [h.hv_ivar] [k1]
+     | G2 -> monom_matches_hmonom (idxs,m) (rvars_monom hm) [h.hv_ivar] [k2]
      | Fp -> failwith "overlap: handle variable cannot be a field element"
      end     
   | [h1; h2] ->
      begin match h1.hv_gname, h2.hv_gname with
-     | G1, G1 -> monom_matches_hmonom m (rvars_monom hm) [h1.hv_ivar; h2.hv_ivar] [k1; k1]
-     | G2, G2 -> monom_matches_hmonom m (rvars_monom hm) [h1.hv_ivar; h2.hv_ivar] [k2; k2]
+     | G1, G1 -> monom_matches_hmonom (idxs,m) (rvars_monom hm) [h1.hv_ivar; h2.hv_ivar] [k1; k1]
+     | G2, G2 -> monom_matches_hmonom (idxs,m) (rvars_monom hm) [h1.hv_ivar; h2.hv_ivar] [k2; k2]
      | G1, G2 
-     | G2, G1 -> monom_matches_hmonom m (rvars_monom hm) [h1.hv_ivar; h2.hv_ivar] [k1; k2]
+     | G2, G1 -> monom_matches_hmonom (idxs,m) (rvars_monom hm) [h1.hv_ivar; h2.hv_ivar] [k1; k2]
      | _ -> failwith "overlap: handle variable cannot be a field element"
      end
   | _::_::_::_ | [] -> failwith "Not supported"
 			   
-let overlap m p k1 k2 =
+let overlap (idxs,m) p k1 k2 =
   let handle_mons = L.filter (mons p) ~f:(fun m -> hvars m <> [])
 		    |> L.dedup ~compare:compare_monom
   in
   let system = L.fold_left handle_mons
 		~init:String.Set.empty
-		~f:(fun se hm -> Set.union se (system_handle_term m hm k1 k2))
+		~f:(fun se hm -> Set.union se (system_handle_term (idxs,m) hm k1 k2))
   in
   smt_solver (list2string (Set.to_list system) ", " "[" "]")
 
@@ -367,7 +380,7 @@ let extract_stable (eq : constr) (idxs, mon) k1 k2 =
 		 ~f:(fun p i -> split_poly i p)
   in
   if (eq.is_eq = Eq) then
-    if (overlap mon eq_poly k1 k2)
+    if (overlap (idxs, mon) eq_poly k1 k2)
     then failwith (fsprintf "the monomial %a is not stable (overlap exists)" pp_monom mon)
     else
       (* let rvs = Atom.Map.of_alist_exn (rvars mon) in *)
@@ -526,21 +539,27 @@ let uniform_qvars_constraints (constraints : constr_conj) =
    ~f:(fun c -> nice_renaming_qvars c 105 (Set.union free sum_bound))		   
 
 let clear_non_used_idxs constraints =
-  let clear_poly p ivs =
+  let free = Set.to_list (free_ivars_constr_conj constraints) in
+  let clear_poly p ivs _qineq =
     Map.fold p
        ~init:SP.zero
        ~f:(fun ~key:s ~data:c p' -> 
 	 SP.(p' +! (mk_poly [(c, mk_sum s.ivars (L.filter s.i_ineq 
-                                                  ~f:(fun (x,y) -> L.mem (s.ivars @ ivs) x && L.mem (s.ivars @ ivs) y)) s.monom)]))
+                                                  ~f:(fun (x,y) ->
+						    L.mem (s.ivars @ ivs) x && L.mem (s.ivars @ ivs) y 
+(*						    && not(L.mem _qineq (x,y) ~equal:equal_ivar_pair) *)
+						    && (L.mem s.ivars x || L.mem s.ivars y)
+						  )) s.monom)]))
           
-)
+          )
   in
-  let free = Set.to_list (free_ivars_constr_conj constraints) in
   L.map constraints
    ~f:(fun c -> 
        let ivs = c.qvars @ free in
-       let new_q_ineq = L.filter c.q_ineq ~f:(fun (x,y) -> L.mem ivs x && L.mem ivs y) in
-       mk_constr c.qvars new_q_ineq c.is_eq (clear_poly c.poly (c.qvars @ free))
+       let new_q_ineq = L.filter c.q_ineq ~f:(fun (x,y) -> L.mem ivs x &&
+	                                                   L.mem ivs y &&
+	                                                   (L.mem c.qvars x || L.mem c.qvars y)) in
+       mk_constr c.qvars new_q_ineq c.is_eq (clear_poly c.poly (c.qvars @ free) c.q_ineq)
       )
 
 let uniform_bound constraints =
@@ -679,6 +698,8 @@ let extract_not_bound_from_sum s =
 	 match v with
 	 | Param (_, Some i) when L.mem s.ivars i ~equal:equal_ivar ->
 	    (Map.add new_monom ~key:v ~data:d, vars, degrees)
+	 | Rvar (_, Some i) when L.mem s.ivars i ~equal:equal_ivar ->
+	    (Map.add new_monom ~key:v ~data:d, vars, degrees)
 	 | _ -> (new_monom, vars @ [v], degrees @ [d])
 	)
   in
@@ -750,7 +771,9 @@ let permute_qvars constraints =
 
 let groebner_polys constraints =
   (* We consider the equations in every combination of bound indices *)
-  let constraints = L.filter ~f:(not_qineq_absurd) (permute_qvars constraints) in
+  let constraints = L.filter ~f:(not_qineq_absurd) (permute_qvars constraints) 
+                    |> L.dedup ~compare:compare_constr
+  in
   let (sums, vars), (qvars, q_ineq) = groebner_variables constraints in
   let rec aux polynomials = function
     | [] -> polynomials
@@ -789,19 +812,35 @@ let gbpolys2string polys =
   in
   "'[" ^ (aux "" polys) ^ "]'"
 
+let string2singlepoly p =
+  let terms = String.split p ~on:'t' in
+  L.map terms ~f:(fun t ->
+        	  let coeffs = String.split t ~on:',' in
+		  let coeffs = L.map coeffs ~f:(Big_int.big_int_of_string) in
+		  (L.hd_exn coeffs, L.tl_exn coeffs)
+		 )
+
 let string2gbpoly string =
-  let string2singlepoly p =
-    let terms = String.split p ~on:'t' in
-    L.map terms ~f:(fun t ->
-		    let coeffs = String.split t ~on:',' in
-		    let coeffs = L.map coeffs ~f:(Big_int.big_int_of_string) in
-		    (L.hd_exn coeffs, L.tl_exn coeffs)
-		   )
-  in
   if string = "" then []
   else
     let polynomials = String.split string ~on:'p' in
     L.map polynomials ~f:(fun p -> string2singlepoly p)
+
+let opening constraints =
+  let constraints = uniform_bound constraints in
+  let qvars = L.fold_left constraints
+               ~init:[]
+               ~f:(fun l c -> L.dedup (l @ c.qvars) ~compare:compare_ivar)
+  in
+  L.map constraints 
+   ~f:(fun c -> 
+     let p = L.fold_left qvars
+              ~init:c.poly
+	      ~f:(fun p i -> split_poly i p)
+     in       
+     mk_constr qvars c.q_ineq c.is_eq p)
+  |> uniform_qvars_constraints
+  |> uniform_bound
 
 let zeros_one list a ~equal =
 (* returns a string "0,0,0,...,0,1,0,...,0" with 1 where a equals the list element *)
@@ -814,16 +853,25 @@ let zeros_one list a ~equal =
 
 let simplify_gb_var_constraints constraints = 
  (* This function creates a gb variable from every different sum in constraints *)
-  let eq_without_qvars = L.filter constraints ~f:(fun c -> c.qvars = [] && c.is_eq = Eq) in
-  let rest_constraints = L.filter constraints ~f:(fun c -> c.qvars <> [] || c.is_eq = InEq) in
+  let equalities = L.filter constraints ~f:(fun c -> c.is_eq = Eq) in
+  let rest_constraints = L.filter constraints ~f:(fun c -> c.is_eq = InEq) in
+  let equalities = opening equalities in
+  let qvars = L.fold_left equalities
+               ~init:[]
+               ~f:(fun l c -> L.dedup (l @ c.qvars) ~compare:compare_ivar)
+  in
+  let q_pairs = L.fold_left equalities
+               ~init:[]
+               ~f:(fun l c -> L.dedup (l @ c.q_ineq) ~compare:compare_ivar_pair)
+  in
   let gb_variables =
-    L.fold_left eq_without_qvars
+    L.fold_left equalities
      ~init:Sum.Set.empty
      ~f:(fun gb c -> Set.union gb (Sum.Set.of_list (Map.keys c.poly)))
   |> Set.to_list
   in
   let output =
-    L.fold_left constraints
+    L.fold_left equalities
      ~init:""
      ~f:(fun output' c -> 
        let poly = 
@@ -844,11 +892,8 @@ let simplify_gb_var_constraints constraints =
     if (String.length output) > 0 then String.sub output ~pos:0 ~len:((String.length output)-1)
     else ""
   in
-  (*F.printf "%a\n" pp_constr_conj eq_without_qvars;
-  F.printf "%s\n" output;
-  F.print_flush();*)
   let new_constraints = 
-    if (L.length eq_without_qvars > 0) then
+    if (L.length equalities > 0) then
       let reduced_polys = call_Sage ("{'cmd':'GroebnerBasis', 'equations':'[" ^ output ^ "]', 'polynomials':'[[[]]]'}\n")
   |> String.filter ~f:(fun c -> c <> '\n')
   |> String.filter ~f:(fun c -> c <> ' ')
@@ -856,7 +901,7 @@ let simplify_gb_var_constraints constraints =
   |> string2gbpoly
       in
       let constr_from_poly p =
-	mk_constr [] [] Eq (
+	mk_constr qvars q_pairs Eq (
 	  L.fold_left p
 	   ~init:SP.zero
 	    ~f:(fun p' (c,degrees) -> SP.(p' +! ((SP.of_const c) *! 
@@ -885,7 +930,7 @@ let constraints_of_groebner_polys polys sums vars qvars q_ineq =
   in
   L.map polys ~f:(fun p -> L.fold_left p
                             ~init:SP.zero
-                            ~f:(fun p' (c,coeff) -> SP.(p' +! (of_const c) *! (aux SP.one coeff sums vars)) )
+                            ~f:(fun p' (c,coeff) -> SP.(p' +! ((of_const c) *! (aux SP.one coeff sums vars))) )
 		 )
   |> L.map ~f:(fun p -> mk_constr qvars q_ineq Eq p)
 
@@ -1010,22 +1055,6 @@ let simplify_sums_in_vars_constr gb_constraints c = (* Assume c is in unif form 
   in
   mk_constr c.qvars c.q_ineq c.is_eq new_p
 
-let opening constraints =
-  let constraints = uniform_bound constraints in
-  let qvars = L.fold_left constraints
-               ~init:[]
-               ~f:(fun l c -> L.dedup (l @ c.qvars) ~compare:compare_ivar)
-  in
-  L.map constraints 
-   ~f:(fun c -> 
-     let p = L.fold_left qvars
-              ~init:c.poly
-	      ~f:(fun p i -> split_poly i p)
-     in       
-     mk_constr qvars c.q_ineq c.is_eq p)
-  |> uniform_qvars_constraints
-  |> uniform_bound
-
 (* ** Simplify_vars *)
 
 let simplify_vars_constr c v =  (* Let's think of this rule!!! *)
@@ -1050,34 +1079,146 @@ let simplify_vars (constraitns : constr_conj) =
        aux (output @ [new_c]) rest_c
   in
   aux [] constraitns
+  |> uniform_bound
   |> remove_canceled_params
   |> clear_equations
- (*     
-let simplify2 constraints =
-  uniform_bound constraints
-  |> clear_equations
-  |> simplify_params
-  |> clear_equations
-*)
+
+(* * Building message *)
+
+let linear_single_handle_in_constraint c =
+  let free = Set.to_list (free_ivars_constr c) in
+  let handle_vars, degrees =
+    Map.fold c.poly
+       ~init:[]
+       ~f:(fun ~key:s ~data:_ l -> l @ (hvars s.monom))
+  |> L.unzip
+  |> (fun (l,d) -> L.dedup l ~compare:compare_atom, L.dedup d ~compare:BI.compare)
+  in
+  if ((L.length handle_vars) = 1 && (L.length degrees) = 1 && BI.is_one (L.hd_exn degrees) && (c.is_eq = Eq) && 
+      (L.mem free (Set.choose_exn (ivars_atom (L.hd_exn handle_vars)))) ) then
+    Some (L.hd_exn handle_vars)
+  else
+    None
+
+let poly2string summations variables poly =
+  Map.fold poly
+     ~init:" "
+     ~f:(fun ~key:s ~data:c output ->
+       let (new_s, vars, degrees) = extract_not_bound_from_sum s in
+       let new_term =
+	 L.fold_left summations
+	  ~init:(BI.to_string c)
+	  ~f:(fun t s -> 
+	    if (isomorphic_sum s new_s) then t ^ ",1"
+	    else t ^ ",0"
+	  )
+       in
+       let degree_map = Atom.Map.of_alist_exn (L.zip_exn vars degrees) in
+       let new_term =
+	 L.fold_left variables
+	  ~init:new_term
+	  ~f:(fun t v ->
+	    let d =
+	      match (Map.find degree_map v) with
+	      | None -> BI.zero
+	      | Some i -> i
+	    in
+	    t ^ "," ^ (BI.to_string d)
+	  )
+       in
+       output ^ "[" ^ new_term ^ "],"
+     )
+
+let simplify_single_handle_eqs c =
+  let rec aux p exponents sums vars =
+    match exponents, sums, vars with
+    | [], _, _ -> p
+    | exp :: rest_exps, [], v :: rest_vars ->
+       aux SP.(p *! (power_poly (of_a v) exp)) rest_exps [] rest_vars
+    | exp :: rest_exps, s :: rest_sums, _ ->
+       aux SP.(p *! (power_poly (mk_poly [(BI.one, s)]) exp)) rest_exps rest_sums vars
+    | _, [], [] -> p
+  in
+   match (linear_single_handle_in_constraint c) with
+   | None -> [c]
+   | Some h ->
+      let summations, variables = 
+	Map.fold c.poly
+	   ~init:([],[])
+	   ~f:(fun ~key:s ~data:_ (list_sums, list_vars) ->
+	       let (new_s,vars,_) = extract_not_bound_from_sum s in
+	       if (L.length new_s.ivars > 0) && not(L.exists list_sums ~f:(isomorphic_sum new_s)) then
+		 (list_sums @ [new_s]), (L.dedup ~compare:compare_atom (list_vars @ vars))
+	       else
+		 list_sums, (L.dedup ~compare:compare_atom (list_vars @ vars))
+	      )
+      in
+      let variables = L.filter variables ~f:(fun v -> not(is_hvar v)) in
+      let (numerator, denominator) =
+	Map.fold c.poly
+	   ~init:(SP.zero, SP.zero)
+	   ~f:(fun ~key:s ~data:k (num,den) ->
+	     let (hvars_monom, _) = L.unzip (hvars s.monom) in
+	     if (L.mem hvars_monom h ~equal:(fun a b -> compare_atom a b = 0) ) then
+	       (num, SP.(den +! mk_poly[(k,s)]) )
+	     else
+	       (SP.(num -! mk_poly[(k,s)]), den)
+	   )
+      in
+      let string_num = poly2string summations variables numerator
+                       |> (fun x -> String.sub x ~pos:0 ~len:((String.length x)-1) )
+      in
+      let string_den = poly2string summations variables denominator
+                       |> (fun x -> String.sub x ~pos:0 ~len:((String.length x)-1) )
+      in
+      let answer = call_Sage ("{'cmd':'NumDen', 'num':'[" ^ string_num ^ "]', 'den':'[" ^ string_den ^ "]'}\n")
+                   |> String.filter ~f:(fun c -> c <> '\n')
+		   |> String.filter ~f:(fun c -> c <> ' ')
+		   |> String.filter ~f:(fun c -> c <> '"')
+      in
+      let answer_type = String.sub answer ~pos:0 ~len:1 in
+      let answer_terms = String.split (String.sub answer ~pos:1 ~len:((String.length answer)-1) ) ~on:'t' in
+      let answer_poly = 
+	L.map answer_terms
+	 ~f:(fun t ->
+	   let coeffs = String.split t ~on:',' in
+	   let coeffs = L.map coeffs ~f:(Big_int.big_int_of_string) in
+	   (L.hd_exn coeffs, L.tl_exn coeffs)
+	 )
+      in	  
+      let poly = 
+	L.fold_left answer_poly
+	 ~init:SP.zero
+	 ~f:(fun p (k,coeff) -> SP.(p +! ((of_const k) *! (aux SP.one coeff summations variables)) ))
+      in
+      if (answer_type = "M") then 
+	[c; mk_constr c.qvars c.q_ineq Eq poly]
+      else if (answer_type = "C") then
+	[mk_constr c.qvars c.q_ineq Eq SP.((of_a h) -! poly)]
+      else assert false
 
 (* ** Simplify *)
 
 let simplify constraints =
   let constraints = clear_equations (uniform_bound (all_ivar_distinct_constr_conj constraints)) in
-  let constraints = opening constraints in
   let gb_constraints, rest_constraints = filter_constraints_gb_rest constraints in
+  let gb_constraints = opening gb_constraints in
   let rest_constraints = simplify_gb_var_constraints rest_constraints in
   let polys, sums, vars, qvars, q_ineq = groebner_polys gb_constraints in
   let simplified_polys = string2gbpoly (groebner_basis (gbpolys2string polys)) in
   let simplified_constraints = constraints_of_groebner_polys simplified_polys sums vars qvars q_ineq in
   let with_sums, without_sums = filter_constraints_with_without_sums simplified_constraints in
-  let with_sums = L.map with_sums ~f:(simplify_sums_in_param_constr without_sums) in
-  ((L.map rest_constraints ~f:(simplify_sums_in_vars_constr gb_constraints)) @ with_sums @ without_sums)
-  |> all_ivar_distinct_constr_conj
-  |> uniform_bound  
-  |> remove_canceled_params
-  |> clear_equations
-  |> L.dedup ~compare:(fun c1 c2 -> if (isomorphic_constr c1 c2) then 0 else compare_constr c1 c2)
+  let with_sums = L.map (uniform_bound with_sums) ~f:(simplify_sums_in_param_constr without_sums) in
+  let constraints =
+   ((L.map (uniform_bound rest_constraints) ~f:(simplify_sums_in_vars_constr  without_sums)) @ with_sums @ without_sums)
+   |> all_ivar_distinct_constr_conj
+   |> uniform_bound  
+   |> remove_canceled_params
+   |> clear_equations
+   |> L.dedup ~compare:(fun c1 c2 -> if (isomorphic_constr c1 c2) then 0 else compare_constr c1 c2)
+  in
+  L.concat (L.map constraints ~f:simplify_single_handle_eqs)
+
 
 (* * Find contradictions *)	   
 
@@ -1099,6 +1240,7 @@ let contradictions (constraints : constr_conj) =
   L.exists constraints ~f
 
 let contradictions_msg (constraints : constr_conj) =
+  let constraints = clear_non_used_idxs constraints in
   let f c = (equal_poly c.poly SP.zero && c.is_eq = InEq) ||
 	    (known_not_null c.poly constraints && c.is_eq = Eq) ||
 	    (q_violation c) ||
@@ -1109,4 +1251,5 @@ let contradictions_msg (constraints : constr_conj) =
   match L.find constraints ~f with
     | None -> false, (mk_constr [] [] Eq SP.zero)
     | Some c -> true, c
-      
+
+

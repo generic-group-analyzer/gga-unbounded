@@ -31,7 +31,7 @@ let eval_sage sts cmd =
 let stop_sage sts =
   if sts.sts_closed then failwith "sage process already closed";
   let (c_in, c_out) = sts.sts_cin, sts.sts_cout in
-  let cmd = YS.to_string (`Assoc [ ("cmd",`String "exit") ])^"\n" in
+  let cmd = YS.to_string (`Assoc [ ("cmd",`String"exit") ])^"\n" in
   output_string c_out cmd;
   flush c_out;
   let o = input_line c_in in

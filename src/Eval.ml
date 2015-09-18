@@ -357,6 +357,7 @@ type instr =
   | CaseDistinction of atom
   | GoTo            of int
   | Admit
+  | Uniform
   | Simplify
   | SimplifyVars
 
@@ -376,8 +377,8 @@ let eval_instr (k1,k2) system nth instr =
        | _ -> failwith "eval_instr: input should be a random variable"
      in
      let cases = (case_dist (L.nth_exn system (nth-1) ) par) in
-     let case1 = (*simplify*) (L.nth_exn cases 0) in
-     let case2 = (*simplify*) (L.nth_exn cases 1) in
+     let case1 = (*simplify*) clear_non_used_idxs (L.nth_exn cases 0) in
+     let case2 = (*simplify*) clear_non_used_idxs (L.nth_exn cases 1) in
      (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> [case1] @ [case2])), nth)
 
   | GoTo(n) ->
@@ -385,7 +386,10 @@ let eval_instr (k1,k2) system nth instr =
      else failwith "wrong identifier"
 
   | Admit ->
-     (list_remove system nth, 1)
+    (list_remove system nth, 1)
+
+  | Uniform ->
+     (list_map_nth system nth uniform_bound, nth)
 
   | Simplify ->
      (list_map_nth system nth simplify, nth)

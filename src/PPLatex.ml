@@ -62,6 +62,10 @@ let pp_sum_latex fmt sum =
     F.fprintf fmt "\\sum_{%a}\\left(%a\\right)"
       (pp_list ", " pp_ivar_latex) sum.ivars
       pp_monom_latex sum.monom
+  else if sum.i_ineq <> [] then
+    F.fprintf fmt "(%a)\\left(%a\\right)"
+      (pp_list ", " pp_ivar_pair_latex) sum.i_ineq
+      pp_monom_latex sum.monom
   else
     F.fprintf fmt "%a"
       pp_monom_latex sum.monom

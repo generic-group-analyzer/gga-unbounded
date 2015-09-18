@@ -66,7 +66,12 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
   let rec aux constraints monomials extracted =
     let eq = L.nth_exn constraints (counter-1) in
     let monomials =
-      if extracted then mons_hvar_free eq.poly
+      if extracted then
+	(*let () = F.printf "[%a]\n" (pp_list "," pp_monom) (mons_hvar_free eq.poly) in
+	F.printf "%a\n" pp_poly eq.poly;
+	F.print_flush();*)
+	L.dedup (mons_hvar_free eq.poly) ~compare:compare_monom
+      
       else monomials
     in
     if not(L.exists monomials ~f:(fun m -> not(Map.is_empty m))) then
@@ -75,9 +80,9 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
       match monomials with
       | [] -> constraints
       | mon :: rest_monoms ->
-	 if not(overlap mon eq.poly k1 k2) then
-	   let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
-	   F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter;
+	 let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
+	 if not(overlap (idxs,mon) eq.poly k1 k2) then
+	   let () = F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter in
 	   F.print_flush ();
 	   any_extracted := true;
 	   aux (extract_stable_nth constraints (idxs,mon) k1 k2 counter) [] true
@@ -113,7 +118,7 @@ let automatic_algorithm system (k1,k2) oc =
 	let used_parameters_list = L.tl_exn used_parameters_list in
 	let (contradiction_next, _) = Wrules.contradictions_msg (clear_equations constraints) in
 	if (contradiction_next) then
-	  constraints :: rest_goals, depth, used_parameters_list
+	  constraints :: rest_goals, depth-1, used_parameters_list
 	else
 	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
 	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
@@ -195,8 +200,8 @@ let automatic_algorithm system (k1,k2) oc =
       | [] -> (constraints :: rest_goals), depth+1, used_parameters_list
       | p :: _rest_parameters ->
 	 let cases = case_dist constraints p in
-	 let case1 = L.nth_exn cases 0 in
-	 let case2 = L.nth_exn cases 1 in
+	 let case1 = clear_non_used_idxs (L.nth_exn cases 0) in
+	 let case2 = clear_non_used_idxs (L.nth_exn cases 1) in
 	 let () = F.printf "%scase_distinction %a.\n" (repeat_string "  " depth) pp_atom p in
 	 F.print_flush ();
 	 ([case1] @ [case2] @ rest_goals), depth+1,

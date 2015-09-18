@@ -54,6 +54,7 @@
 %token GOTO
 %token ADMIT
 %token CONTRADICTION
+%token UNIFORM
 %token SIMPLIFY
 %token SIMPLIFYVARS
        
@@ -197,6 +198,8 @@ instr :
   { Admit }
 | CONTRADICTION; DOT;
   { Admit }
+| UNIFORM; DOT;
+  { Uniform }
 | SIMPLIFY; DOT;
   { Simplify }
 | SIMPLIFYVARS; DOT;
