@@ -166,8 +166,8 @@ def interp(req):
     den = num_den * den_num
 
     if (num % den == 0):
-      msg = "C"  #Cocient
-      p = gcd(num,den)
+      msg = "C"  #Quotient
+      p = num.quo_rem(den)[0]
     else:
       msg = "M"  #Modulo
       p = num % den
