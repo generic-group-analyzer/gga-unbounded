@@ -6,6 +6,7 @@ open Watom
 open Util
 
 type param_list = int Atom.Map.t with compare, sexp
+type idx_order_list = ivar list list with compare, sexp
 
 let any_extracted = ref false
 
@@ -102,7 +103,7 @@ let extract_everything constraints depth (k1,k2) oc =
   aux constraints 1
   
 let automatic_algorithm system (k1,k2) oc =
-  let step goals depth used_parameters_list =
+  let step goals depth used_parameters_list indices_order_list =
     let constraints = L.hd_exn goals in
     let rest_goals = L.tl_exn goals in
     
@@ -116,17 +117,18 @@ let automatic_algorithm system (k1,k2) oc =
 	let constraints = L.hd_exn rest_goals in
 	let rest_goals = L.tl_exn rest_goals in
 	let used_parameters_list = L.tl_exn used_parameters_list in
+	let indices_order_list = L.tl_exn indices_order_list in
 	let (contradiction_next, _) = Wrules.contradictions_msg (clear_equations constraints) in
 	if (contradiction_next) then
-	  constraints :: rest_goals, depth-1, used_parameters_list
+	  constraints :: rest_goals, depth-1, used_parameters_list, indices_order_list
 	else
 	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
 	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
 	  let () = F.printf "%ssimplify.\n" (repeat_string "  " (depth-1)) in
 	  F.print_flush ();
-	  (simplify (simplify_vars (simplify_vars constraints))) :: rest_goals, depth-1, used_parameters_list
+	  (simplify (simplify_vars (simplify_vars constraints))) :: rest_goals, depth-1, used_parameters_list, indices_order_list
       else
-	rest_goals, depth-1, used_parameters_list
+	rest_goals, depth-1, used_parameters_list, indices_order_list
     else
 
     let () = any_extracted := false in
@@ -142,11 +144,13 @@ let automatic_algorithm system (k1,k2) oc =
 	constraints
     in
 
+    let constraints = extract_every_handle_monomial_constraints constraints (L.hd_exn indices_order_list) in
+
     (*F.printf "%a@\n" pp_constr_conj constraints;
     F.print_flush(); *)
 
     let (contradiction, _) = Wrules.contradictions_msg (clear_equations constraints) in
-    if contradiction then constraints :: rest_goals, depth, used_parameters_list
+    if contradiction then constraints :: rest_goals, depth, used_parameters_list, indices_order_list
     else
 
     let used_parameters = L.hd_exn used_parameters_list in
@@ -197,7 +201,18 @@ let automatic_algorithm system (k1,k2) oc =
     F.print_flush();*)
     (*let () = F.printf "[%a]@\n" (pp_list ", " pp_int) _data in*)
       match parameters with
-      | [] -> (constraints :: rest_goals), depth+1, used_parameters_list
+      | [] -> 
+	 let indices_order = L.hd_exn indices_order_list in
+	 let free = Set.to_list (free_ivars_constr_conj constraints)
+                    |> L.filter ~f:(fun i -> not(L.mem indices_order i ~equal:equal_ivar))
+	 in
+	 begin match free with
+	 | [] -> (constraints :: rest_goals), depth+1, used_parameters_list, indices_order_list
+	 | i :: _ ->
+	    let new_indices = insert i indices_order in
+	    let k = L.length new_indices in
+	    (repeat_element constraints k) @ rest_goals, depth+k-1, (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list), new_indices @ (L.tl_exn indices_order_list)
+	 end
       | p :: _rest_parameters ->
 	 let cases = case_dist constraints p in
 	 let case1 = clear_non_used_idxs (L.nth_exn cases 0) in
@@ -205,17 +220,19 @@ let automatic_algorithm system (k1,k2) oc =
 	 let () = F.printf "%scase_distinction %a.\n" (repeat_string "  " depth) pp_atom p in
 	 F.print_flush ();
 	 ([case1] @ [case2] @ rest_goals), depth+1,
-	 [p :: used_parameters] @ [p :: used_parameters] @ rest_used_parameters
+	 [p :: used_parameters] @ [p :: used_parameters] @ rest_used_parameters,
+	 (L.hd_exn indices_order_list) :: indices_order_list
   in
 
-  let rec aux goals depth used_parameters_list =
+  let rec aux goals depth used_parameters_list (indices_order_list : idx_order_list ) =
     if (L.length goals = 0) then true
     else if (depth = 50) then false
     else 
-      let new_goals, new_depth, new_used_parameters_list = step goals depth used_parameters_list in
-      aux new_goals new_depth new_used_parameters_list
+      let new_goals, new_depth, new_used_parameters_list, new_indices_order_list = 
+	step goals depth used_parameters_list indices_order_list in
+      aux new_goals new_depth new_used_parameters_list new_indices_order_list
   in
-  aux system 0 [[]]
+  aux system 0 [[]] [[]]
 
 let automatic_tool cmds _file =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in

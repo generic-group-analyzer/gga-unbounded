@@ -1,4 +1,3 @@
-
 (* * Load modules *)
 
 open Core_kernel.Std
@@ -404,6 +403,78 @@ let extract_stable_nth constraints (idxs, mon) k1 k2 nth =
   in
   aux [] constraints nth
 
+
+(* ** New rule (Mon, 21 Sep 2015) Not tested *)
+let lower_idx i j indices_order =
+  let rec aux = function
+    | [] -> false
+    | a :: rest ->
+       if (equal_ivar a i) then true
+       else if (equal_ivar a j) then false
+       else aux rest
+  in
+  (L.mem indices_order i ~equal:equal_ivar) &&
+  (L.mem indices_order j ~equal:equal_ivar) &&
+  aux indices_order
+
+let extract_handle_monomial (eq : constr) mon indices_order =
+  (* mon is a handle monomial *)
+  let ivar_h h = Set.choose_exn (ivars_atom h) in
+  let (hvars_mon, _) = L.unzip (hvars mon) in
+  let rvars_mon = rvars_monom mon in
+  let ivars_mon = ivars_monom (rvars_mon) in
+  if ((L.length hvars_mon) = 1) && (Set.mem ivars_mon (ivar_h (L.hd_exn hvars_mon))) then
+    let rest_monoms = L.map (Map.keys eq.poly) ~f:(fun s -> s.monom)
+		      |> L.filter ~f:(fun x -> 
+			let (hvars_x, _) = L.unzip (hvars x) in
+			let rvars_x = rvars_monom x in
+			if (equal_monom (hvars_monom x) (hvars_monom mon)) then false
+			else
+			  let ivars_x = ivars_monom (rvars_x) in
+			  if ((L.length hvars_x) = 1) &&
+			    (lower_idx (ivar_h (L.hd_exn hvars_x)) (ivar_h (L.hd_exn hvars_mon)) indices_order) &&
+			    not(Set.mem ivars_x (ivar_h (L.hd_exn hvars_mon)))
+			  then
+			    false
+			  else
+			    (Set.mem ivars_x (ivar_h (L.hd_exn hvars_mon))) ||
+			    not (L.fold_left (L.map hvars_x ~f:(fun h -> ivar_h h))
+			          ~init:true
+				  ~f:(fun b i -> b && (Set.mem ivars_x i))
+			    )
+		      )
+    in
+    if (L.length rest_monoms = 0) then (* Independent monomial *)
+      let () = F.printf "Trick!!!\n" in
+      F.print_flush();
+      (* This is only if the message is not zero *)
+      let new_constr = mk_constr eq.qvars eq.q_ineq Eq (coeff eq.poly ([], mon)) in
+      [eq; new_constr]
+    else
+      [eq]
+  else
+    [eq]
+
+let extract_every_handle_monomial (eq : constr) indices_order=
+  let h_mons = L.map (Map.keys eq.poly) ~f:(fun s -> if s.ivars = [] then [s.monom] else [])
+               |> L.concat
+	       |> L.filter ~f:(fun m -> let (hvs,_) = L.unzip (hvars m) in hvs <> [])
+  in
+  L.fold_left h_mons
+   ~init:[eq]
+   ~f:(fun eqs mon -> 
+     let eq = L.hd_exn eqs in
+     let rest = L.tl_exn eqs in
+     (extract_handle_monomial eq mon indices_order) @ rest
+   )
+
+let extract_every_handle_monomial_constraints (constraints : constr_conj) indices_order =
+  L.map constraints 
+   ~f:(fun c -> 
+     if c.is_eq = Eq then extract_every_handle_monomial c indices_order
+     else [c]
+   )
+  |> L.concat
     
 (* * Case distinctions *)
 

@@ -167,7 +167,7 @@ def interp(req):
 
     if (num % den == 0):
       msg = "C"  #Cocient
-      p = num / den
+      p = gcd(num,den)
     else:
       msg = "M"  #Modulo
       p = num % den
