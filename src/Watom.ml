@@ -1,27 +1,29 @@
+(* * Atoms: Variables and parameters *)
+
+(* ** Imports *)
 open Core_kernel.Std
 open Util
 open Abbrevs
-       
-(* ======================================================================= *)
-(* Variables and parameters *)
-						  
-type inv = NoInv | Inv with compare, sexp					
-       
+
+(* ** Variables and parameters
+ * ----------------------------------------------------------------------- *)
+
+type inv = NoInv | Inv with compare, sexp
+
 (* group settings *)
 
 let group_order_bound = ref (BI.of_int 2)
 
-type group_name = G1 | G2 | Fp with compare, sexp
+type group_name = G1 | G2 with compare, sexp
 type group_setting = I | II | III with compare, sexp
-	   
+type ty = Fp | GroupName of group_name with compare, sexp
+
 (* index variables *)
 type ivar = {
   name : string;
   id : int;
 } with compare, sexp
 
-let equal_ivar = (fun i j -> compare_ivar i j = 0)
-		  
 (* data structures for ivar *)
 module Ivar = struct
   module T = struct
@@ -36,7 +38,7 @@ end
 
 (* index variables *)
 type ivar_pair = (ivar * ivar) with compare, sexp
-					     
+
 (* data structures for ivar pairs *)
 module Ivar_Pair = struct
   module T = struct
@@ -50,8 +52,6 @@ module Ivar_Pair = struct
   include Comparable.Make(T)
 end
 
-let equal_ivar_pair = (fun pair1 pair2 -> Ivar_Pair.compare pair1 pair2 = 0)
-		
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp
 
@@ -87,12 +87,19 @@ module Atom = struct
   include Comparable.Make(T)
 end
 
-(* ----------------------------------------------------------------------- *)
-(* Destructors, indicators *)
+let equal_inv x y = compare_inv x y = 0
+let equal_group_name x y = compare_group_name x y = 0
+let equal_group_setting x y = compare_group_setting x y = 0
+let equal_ty x y = compare_ty x y = 0
+let equal_ivar x y = compare_ivar x y = 0
+let equal_ivar_pair x y = compare_ivar_pair x y = 0
+let equal_rvar x y = compare_rvar x y = 0
+let equal_param x y = compare_param x y = 0
+let equal_hvar x y = compare_hvar x y = 0
+let equal_atom x y = compare_atom x y = 0
 
-let bi_of_inv = function
-  | Inv   -> BI.of_int (-1)
-  | NoInv -> BI.one
+(* ** Destructors, indicators
+ * ----------------------------------------------------------------------- *)
 
 let is_rvar = function Rvar _ -> true | _ -> false
 
@@ -100,14 +107,18 @@ let is_param = function Param _ -> true | _ -> false
 
 let is_hvar = function Hvar _ -> true | _ -> false
 
+let bi_of_inv = function
+  | Inv   -> BI.of_int (-1)
+  | NoInv -> BI.one
+
 let ivars_atom = function
   | Rvar (_,Some i)
   | Param (_,Some i) -> Ivar.Set.singleton i
   | Hvar hv          -> Ivar.Set.singleton hv.hv_ivar
   | _                -> Ivar.Set.empty
-		  
-(* ----------------------------------------------------------------------- *)
-(* Constructors *)
+
+(* ** Constructors
+ * ----------------------------------------------------------------------- *)
 
 let mk_rvar ?idx:(idx=None) name =
   Rvar (name,idx)
@@ -122,14 +133,13 @@ let map_idx ~f = function
   | Param (v,Some i) -> Param (v,Some (f i))
   | Hvar hv          -> Hvar { hv with hv_ivar = f hv.hv_ivar }
   | a                -> a
-  
-(* ----------------------------------------------------------------------- *)
-(* Pretty printing *)
+
+(* ** Pretty printing
+ * ----------------------------------------------------------------------- *)
 
 let pp_gname fmt = function
   | G1 -> pp_string fmt "G1"
   | G2 -> pp_string fmt "G2"
-  | Fp -> pp_string fmt "Fp"
 
 let pp_ivar fmt { name; id } =
   F.fprintf fmt "%s%s" name (String.make id '\'')
@@ -160,7 +170,8 @@ let pp_atom fmt = function
   | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
-  | Nqueries(n) -> 
-     if BI.is_zero n then F.fprintf fmt "|Q|"
-     else if BI.(compare n zero) < 0 then F.fprintf fmt "(|Q|-%s)" (BI.to_string (BI.abs(n)))
-     else if BI.(compare n zero) > 0 then F.fprintf fmt "(|Q|+%s)" (BI.to_string n)
+  | Nqueries(n) ->
+     let s = BI.sign n in
+     if      s = 0 then F.fprintf fmt "|Q|"
+     else if s < 0 then F.fprintf fmt "(|Q|-%s)" BI.(to_string (abs n))
+     else               F.fprintf fmt "(|Q|+%s)" (BI.to_string n)

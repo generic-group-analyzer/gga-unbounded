@@ -12,7 +12,7 @@
 %token IN
 %token COLON
 %token LAND
-%token TO
+%token GROUPSETTING
 
 %token LBRACK
 %token RBRACK
@@ -31,20 +31,18 @@
 %token ORACLE
 %token WIN
 %token RETURN
-%token EMAPS
-%token ISOS
 
 %token STAR
 %token PLUS
 %token MINUS
 %token EXP
 
-%token <string> GROUP
+%token <Watom.group_name> GROUP
 %token FIELD
 
 %token <int> INT
 %token <string> ID
-		       
+
 %token <string> RVAR
 %token <string> ONAME
 
@@ -57,28 +55,28 @@
 %token UNIFORM
 %token SIMPLIFY
 %token SIMPLIFYVARS
-       
+
 %token QUOTE
 
-/************************************************************************/       
+/************************************************************************/
 /* Priority & associativity */
 
 /* Multiplication has the highest precedence. */
 %left PLUS MINUS
-%left STAR       
+%left STAR
 
 /************************************************************************/
 /* Production types */
 
 %type <Eval.cmd list> cmds_t
 %type <Eval.instr list> instrs_t
-					       
+
 /************************************************************************/
 /* Start productions */
 
 %start cmds_t
 %start instrs_t
-       
+
 %%
 
 /************************************************************************/
@@ -89,23 +87,23 @@ ivar :
 			        else failwith "index 'k' is reserved" }
 | idx = ID; QUOTE;            { { name = idx; id = 1 } }
 | idx = ID; QUOTE; n = INT    { if n > 0 then { name = idx; id = n } else assert false }
-	
+
 atom :
 | s = RVAR UNDERSCORE idx = ivar            { mk_rvar s ~idx:(Some idx) }
 | s = RVAR                                  { mk_rvar s }
 
-oexp_atom:				
+oexp_atom:
 | a = atom;                            { [(NoInv,a)] };
 | a = atom; EXP; n = INT               { repeat_element ((if n < 0 then Inv else NoInv),a) (abs n) }
 | a = atom; EXP; LPAR; n = INT; RPAR   { repeat_element ((if n < 0 then Inv else NoInv),a) (abs n) }
 
-monom:				
+monom:
 | atoms=separated_list(STAR,oexp_atom) { mk_monom (L.concat atoms) };
 
 sum:
 | LPAR; SUM; ids=separated_list(COMMA,ID); COLON; m = monom; RPAR
    { mk_sum (L.map ~f:(fun s -> { name = s; id = 0}) ids ) [] m };
-    
+
 poly :
 | n = INT                    { SP.of_const (BI.of_int n) }
 | a = atom                   { SP.of_a a }
@@ -123,18 +121,18 @@ poly :
 
 qprefix :
 | FORALL; ids = separated_list(COMMA,ID); COLON { L.map ~f:(fun s -> { name = s; id = 0}) ids };
-  
+
 is_eq :
 | EQ   { Eq }
 | INEQ  { InEq };
-  
+
 constr :
 | qp = qprefix? f = poly sep = is_eq g = poly?
   { mk_constr (optional ~d:[] qp) [] sep SP.(f -! (optional ~d:zero g)) };
 
 param_type :
-| s = GROUP { s }
-| FIELD { "Fp" }
+| s = GROUP { GroupName(s) }
+| FIELD { Fp }
 ;
 
 samp_vars :
@@ -149,29 +147,16 @@ samp_vars_orcl :
 
 typed_var :
 | v = RVAR; COLON; ty = param_type;
-  { (mk_rvar v,ty) } 
+  { (mk_rvar v,ty) }
 ;
 
 polys_group:
 | LBRACK; ps = separated_list(COMMA,poly); RBRACK; IN; g = GROUP
 { List.map (fun p -> (p,g)) ps}
 
-emap :
-| dom = separated_nonempty_list(STAR,GROUP); TO; _codom = GROUP
-  { match dom with
-    | g1 :: g2 :: [] -> (g1,g2)
-    | _ -> failwith "emap: only bilinear maps supported" }
-;
-
-iso :
-| dom = GROUP; TO; codom = GROUP { (dom,codom) }
-;
-
 cmd :
-| EMAPS; emaps = separated_nonempty_list(COMMA,emap); DOT
-  { AddMaps emaps }
-| ISOS; isos = separated_nonempty_list(COMMA,iso); DOT
-  { AddIsos isos }
+| GROUPSETTING i = INT
+  { GroupSetting(match i with 1 -> I | 2 -> II | 3 -> III | _ -> failwith "invalid group setting") }
 | vs = samp_vars; DOT
   { AddSamplings(vs) }
 | INP; LBRACK; ps = separated_nonempty_list(COMMA,poly); RBRACK; IN; g = GROUP; DOT
@@ -206,5 +191,3 @@ instr :
   { SimplifyVars }
 
 instrs_t : instrs = list(instr); EOF; { instrs };
-
-	   

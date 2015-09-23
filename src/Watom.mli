@@ -1,104 +1,91 @@
+(* * Atoms: Variables and parameters *)
+
+(* ** Imports *)
 open Core_kernel.Std
 open Util
+open Abbrevs
 
-(* ======================================================================= *)
-(* Variables and parameters *)
+(* ** Variables and parameters
+ * ----------------------------------------------------------------------- *)
 
 val group_order_bound : BI.t ref
-       
-type inv = NoInv | Inv
-val inv_of_sexp : Sexplib.Type.t -> inv
-val sexp_of_inv : inv -> Sexplib.Type.t
-val compare_inv : inv -> inv -> int
 
-type group_name = G1 | G2 | Fp
-val group_name_of_sexp : Sexplib.Type.t -> group_name
-val sexp_of_group_name : group_name -> Sexplib.Type.t
-val compare_group_name : group_name -> group_name -> int
+type inv = NoInv | Inv with compare, sexp
 
-type group_setting = I | II | III
-val group_setting_of_sexp : Sexplib.Type.t -> group_setting
-val sexp_of_group_setting : group_setting -> Sexplib.Type.t
-val compare_group_setting : group_setting -> group_setting -> int						       
-type ivar = { name : string; id : int; }
-val ivar_of_sexp : Sexplib.Type.t -> ivar
-val sexp_of_ivar : ivar -> Sexplib.Type.t
-val compare_ivar : ivar -> ivar -> int
-val equal_ivar : ivar -> ivar -> bool
+type group_name = G1 | G2 with compare, sexp
+
+type group_setting = I | II | III with compare, sexp
+
+type ty = Fp | GroupName of group_name with compare, sexp
+
+type ivar = { name : string; id : int } with compare, sexp
 
 module Ivar : sig
   include Comparable.S with type t := ivar
 end
 
-type ivar_pair = ivar * ivar
-val ivar_pair_of_sexp : Sexplib.Type.t -> ivar * ivar
-val sexp_of_ivar_pair : ivar * ivar -> Sexplib.Type.t
-val compare_ivar_pair : ivar * ivar -> ivar * ivar -> int
-val equal_ivar_pair   : ivar * ivar -> ivar * ivar -> bool
+type ivar_pair = ivar * ivar with compare, sexp
 
 module Ivar_Pair : sig
   include Comparable.S with type t := ivar_pair
-end		
+end
 
-type name_oidx = string * ivar option
-val name_oidx_of_sexp : Sexplib.Type.t -> name_oidx
-val sexp_of_name_oidx : name_oidx -> Sexplib.Type.t
-val compare_name_oidx : name_oidx -> name_oidx -> int
+type name_oidx = string * ivar option with compare, sexp
 
-type rvar = name_oidx
-val rvar_of_sexp : Sexplib.Type.t -> rvar
-val sexp_of_rvar : rvar -> Sexplib.Type.t
-val compare_rvar : rvar -> rvar -> int
+type rvar = name_oidx with compare, sexp
 
-type param = name_oidx
-val param_of_sexp : Sexplib.Type.t -> param
-val sexp_of_param : param -> Sexplib.Type.t
-val compare_param : param -> param -> int
+type param = name_oidx with compare, sexp
 
-type hvar = {
-  hv_name : string; hv_ivar : ivar; hv_gname : group_name;
-}
-val hvar_of_sexp : Sexplib.Type.t -> hvar
-val sexp_of_hvar : hvar -> Sexplib.Type.t
-val compare_hvar : hvar -> hvar -> int
+type hvar = { hv_name : string; hv_ivar : ivar; hv_gname : group_name }
+  with compare, sexp
 
 type atom = Param of param | Rvar of param | Hvar of hvar | Nqueries of BI.t
-val atom_of_sexp : Sexplib.Type.t -> atom
-val sexp_of_atom : atom -> Sexplib.Type.t
-val compare_atom : atom -> atom -> int
+  with compare, sexp
 
 module Atom : sig
   include Comparable.S with type t := atom
 end
 
-(* ----------------------------------------------------------------------- *)
-(* Destructors, indicators *)
+val equal_inv : inv -> inv -> bool
+val equal_group_name : group_name -> group_name -> bool
+val equal_group_setting : group_setting -> group_setting -> bool
+val equal_ty : ty -> ty -> bool
+val equal_ivar : ivar -> ivar -> bool
+val equal_ivar_pair : ivar * ivar -> ivar * ivar -> bool
+val equal_rvar : rvar -> rvar -> bool
+val equal_param : param -> param -> bool
+val equal_hvar : hvar -> hvar -> bool
+val equal_atom : atom -> atom -> bool
+
+(* ** Destructors, indicators
+ * ----------------------------------------------------------------------- *)
+
+val is_rvar   : atom -> bool
+val is_param  : atom -> bool
+val is_hvar   : atom -> bool
 
 val bi_of_inv : inv -> BI.t
-val is_rvar : atom -> bool
-val is_param : atom -> bool
-val is_hvar : atom -> bool
 
 val ivars_atom : atom -> Ivar.Set.t
 
-(* ----------------------------------------------------------------------- *)
-(* Constructors *)
+(* ** Constructors
+ * ----------------------------------------------------------------------- *)
 
-val mk_rvar : ?idx:ivar option -> string -> atom
+val mk_rvar  : ?idx:ivar option -> string -> atom
 val mk_param : ?idx:ivar option -> string -> atom
-val mk_hvar : idx:ivar -> group_name -> string -> atom
-val map_idx : f:(ivar -> ivar) -> atom -> atom
+val mk_hvar  : idx:ivar -> group_name -> string -> atom
+val map_idx  : f:(ivar -> ivar) -> atom -> atom
 
-(* ----------------------------------------------------------------------- *)
-(* Pretty printing *)
+(* ** Pretty printing
+ * ----------------------------------------------------------------------- *)
 
-val pp_gname : Format.formatter -> group_name -> unit
-val pp_ivar : Format.formatter -> ivar -> unit
-val pp_name_idx : Format.formatter -> string * ivar -> unit
-val pp_name_oidx : Format.formatter -> string * ivar option -> unit
-val pp_ivar_pair : Format.formatter -> ivar_pair-> unit
-val pp_rvar : Format.formatter -> string * ivar option -> unit
-val pp_param : Format.formatter -> string * ivar option -> unit
-val pp_hvar : Format.formatter -> hvar -> unit
-val pp_inv : Format.formatter -> inv -> unit
-val pp_atom : Format.formatter -> atom -> unit
+val pp_gname     : F.formatter -> group_name -> unit
+val pp_ivar      : F.formatter -> ivar -> unit
+val pp_name_idx  : F.formatter -> string * ivar -> unit
+val pp_name_oidx : F.formatter -> string * ivar option -> unit
+val pp_ivar_pair : F.formatter -> ivar_pair-> unit
+val pp_rvar      : F.formatter -> string * ivar option -> unit
+val pp_param     : F.formatter -> string * ivar option -> unit
+val pp_hvar      : F.formatter -> hvar -> unit
+val pp_inv       : F.formatter -> inv -> unit
+val pp_atom      : F.formatter -> atom -> unit

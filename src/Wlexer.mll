@@ -1,5 +1,6 @@
 {
   open Wparser
+  open Watom
   exception Error of string
 
   let unterminated_comment () =
@@ -7,7 +8,7 @@
   let unterminated_string () =
     raise (Error "unterminated string")
 }
-  
+
 let blank = [' ' '\t' '\r' '\n']
 let newline = '\n'
 let chars = ['a'-'z' 'A'-'Z' '0'-'9']
@@ -21,27 +22,23 @@ rule lex = parse
   | "("     { LPAR }
   | ")"     { RPAR }
   | "="     { EQ }
-  | "->"    { TO }
   | "/\\"   { LAND }
   | "<>"    { INEQ }
   | "+"     { PLUS }
   | "-"     { MINUS }
   | "*"     { STAR }
-  | "^"     { EXP } 
+  | "^"     { EXP }
   | "["     { LBRACK }
   | "]"     { RBRACK }
   | ","     { COMMA }
   | ";"     { SEMICOLON }
   | ":"     { COLON }
   | "sample" { SAMP }
-  | "maps"   { EMAPS }
-  | "map"    { EMAPS }
-  | "isos"   { ISOS }
-  | "iso"    { ISOS }
   | "forall" { FORALL }
   | "sum"    { SUM }
   | "_"      { UNDERSCORE }
   | "'"      { QUOTE }
+  | "group_setting" { GROUPSETTING }
 
   | "return" { RETURN }
   | "input"  { INP }
@@ -58,14 +55,16 @@ rule lex = parse
   | "simplify" { SIMPLIFY }
   | "simplify_vars" { SIMPLIFYVARS }
 
-  | ['G']chars* as s { GROUP (String.sub s 1 (String.length s - 1)) }
+  | "G1"             { GROUP(G1) }
+  | "G2"             { GROUP(G2) }
+
   | "Fp"             { FIELD }
   | ['o']chars* as s { ONAME s }
-					   
+
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
   | ['i'-'k']chars* as s         { ID s}
   | chars* as s                  { RVAR s}
-				 
+
 and comment = parse
   | "*)"        { () }
   | "(*"        { comment lexbuf; comment lexbuf }

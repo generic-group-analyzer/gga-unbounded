@@ -7,7 +7,6 @@ open Wconstrs
 let pp_gname_latex fmt = function
   | G1 -> pp_string fmt "\\mathbb{G}_{1}"
   | G2 -> pp_string fmt "\\mathbb{G}_{2}"
-  | Fp -> pp_string fmt "\\mathbb{F}_{p}"
 
 let pp_ivar_latex fmt { name; id } =
   if (id = 0) then F.fprintf fmt "%s" name
