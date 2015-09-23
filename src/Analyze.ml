@@ -72,7 +72,7 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
 	F.printf "%a\n" pp_poly eq.poly;
 	F.print_flush();*)
 	L.dedup (mons_hvar_free eq.poly) ~compare:compare_monom
-      
+	  
       else monomials
     in
     if not(L.exists monomials ~f:(fun m -> not(Map.is_empty m))) then
@@ -86,11 +86,12 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
 	   let () = F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter in
 	   F.print_flush ();
 	   any_extracted := true;
-	   aux (extract_stable_nth constraints (idxs,mon) k1 k2 counter) [] true
+	   let new_constraints = extract_stable_nth constraints (idxs,mon) k1 k2 counter in
+
+	   aux new_constraints [] true
 	 else
 	   aux constraints rest_monoms false
   in
-
   let eq = L.nth_exn constraints (counter-1) in
   if eq.is_eq = InEq then constraints
   else aux constraints [] true
@@ -98,7 +99,8 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
 let extract_everything constraints depth (k1,k2) oc =
   let rec aux constraints counter =
     if (counter > L.length constraints) then constraints
-    else aux (extract_everything_equation constraints depth (k1,k2) counter oc) (counter+1)
+    else 
+      aux (extract_everything_equation constraints depth (k1,k2) counter oc) (counter+1)
   in
   aux constraints 1
   
@@ -237,7 +239,7 @@ let automatic_algorithm system (k1,k2) oc =
 let automatic_tool cmds _file =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let oc = 1234 in
-  let proven = automatic_algorithm [constraints] (k1,k2) oc in
+  let proven = automatic_algorithm [uniform_bound constraints] (k1,k2) oc in
   if proven then
     let () =  F.printf "Proven!\n(Group order >= %d)\n" (Big_int.int_of_big_int !group_order_bound) in
     exit 0

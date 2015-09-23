@@ -55,7 +55,7 @@ let rvar_to_hvar (s : sum) (v : atom) (g : group_name) =
   let f ~key:k ~data:d m =
     let new_k = match k with
       | Rvar (name, oivar) when name = atom_to_name v ->
-        let ivar = Option.value ~default:{name = "k"; id = 0} oivar in
+        let ivar = Option.value ~default:{name = "_k"; id = 0} oivar in
 	Hvar { hv_name = name; hv_ivar = ivar; hv_gname = g }
       | _ -> k
     in
@@ -232,7 +232,7 @@ let iconds_to_wconds conds choices estate =
 	  let params2 = fresh_params (L.length outputs) (used_params @ params) in
 	  let lcomb_opts = L.map2_exn outputs params2
 			    ~f:(fun p par ->
-			      let sum_index = {name = "k"; id = 0 } in
+			      let sum_index = {name = "_k"; id = 0 } in
 			      Map.fold SP.(p *! of_a (Param (par,Some sum_index)))
 				 ~init:SP.zero
 				 ~f:(fun ~key:s ~data:c p' -> SP.(p' +!
@@ -301,7 +301,7 @@ let knowledge estate =
        ~f:(fun ~key:k ~data:d m ->
 	   let new_k = match k with
 	     | Rvar (name, None) when L.mem estate.es_orvars k ~equal:Atom.equal ->
-		Rvar (name, Some { name = "k"; id = 0 })
+		Rvar (name, Some { name = "_k"; id = 0 })
 	     | _ -> k
 	   in
 	   Map.add m ~key:new_k ~data:d)
@@ -339,7 +339,7 @@ let knowledge estate =
 let eval_cmds cmds =
   let es = L.fold_left cmds ~init:empty_eval_state ~f:eval_cmd in
   match es.es_mwcond with
-  | Some constraints -> constraints, knowledge es
+  | Some constraints -> uniform_bound constraints, knowledge es
   | None             -> failwith "No winning constraints"
 
 

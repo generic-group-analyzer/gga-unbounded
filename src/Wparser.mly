@@ -83,8 +83,7 @@
 /* Types */
 
 ivar :
-| idx = ID                    { if (String.compare idx "k" <> 0) then { name = idx; id = 0 }
-			        else failwith "index 'k' is reserved" }
+| idx = ID                    { { name = idx; id = 0 } }
 | idx = ID; QUOTE;            { { name = idx; id = 1 } }
 | idx = ID; QUOTE; n = INT    { if n > 0 then { name = idx; id = n } else assert false }
 

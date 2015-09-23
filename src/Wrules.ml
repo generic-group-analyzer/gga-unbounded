@@ -1261,8 +1261,12 @@ let simplify_single_handle_eqs c =
 	 ~f:(fun p (k,coeff) -> SP.(p +! ((of_const k) *! (aux SP.one coeff summations variables)) ))
       in
       if (answer_type = "M") then
+	let () = F.printf "Modulo!!!!\n" in
+	F.print_flush();
 	[c; mk_constr c.qvars c.q_ineq Eq poly]
       else if (answer_type = "C") then
+	let () = F.printf "Quotient!!!!\n" in
+	F.print_flush();
 	[mk_constr c.qvars c.q_ineq Eq SP.((of_a h) -! poly)]
       else assert false
 
