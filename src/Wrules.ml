@@ -57,7 +57,7 @@ let split_sum (iv : ivar) (sum : sum) =
   let rec do_split s =
     match s.ivars with
     | [] -> L.filter ~f:not_iineq_absurd [s]
-    | i::is ->x
+    | i::is ->
        let sums = do_split (mk_sum is s.i_ineq s.monom) in
        let sums1 = L.map ~f:(fun s' -> mk_sum (i::s'.ivars) ((i,iv)::(s'.i_ineq@s.i_ineq)) s'.monom) sums in
        let sums2 = L.map ~f:(subst_idx_sum i iv) sums in

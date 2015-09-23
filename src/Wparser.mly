@@ -154,7 +154,7 @@ polys_group:
 { List.map (fun p -> (p,g)) ps}
 
 cmd :
-| GROUPSETTING i = INT
+| GROUPSETTING i = INT; DOT
   { GroupSetting(match i with 1 -> I | 2 -> II | 3 -> III | _ -> failwith "invalid group setting") }
 | vs = samp_vars; DOT
   { AddSamplings(vs) }
