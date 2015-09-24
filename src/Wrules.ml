@@ -849,10 +849,15 @@ let groebner_polys constraints =
   aux [] constraints, sums, vars, qvars, q_ineq
 
 let groebner_basis system =
-  call_Sage ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':'[[[]]]'}\n")
-  |> String.filter ~f:(fun c -> c <> '\n')
-  |> String.filter ~f:(fun c -> c <> ' ')
-  |> String.filter ~f:(fun c -> c <> '"')
+  let answer =
+    call_Sage ("{'cmd':'GroebnerBasis', 'equations':" ^ system ^ ", 'polynomials':'[[[]]]'}\n")
+    |> String.filter ~f:(fun c -> c <> '\n')
+    |> String.filter ~f:(fun c -> c <> ' ')
+    |> String.filter ~f:(fun c -> c <> '"')
+    |> String.split ~on:'B'
+  in
+  L.nth_exn answer 0, Big_int.big_int_of_string (L.nth_exn answer 1)
+  
 
 let gbpolys2string polys =
   let rec singlepoly2string output = function
@@ -961,12 +966,15 @@ let simplify_gb_var_constraints constraints =
   in
   let new_constraints =
     if (L.length equalities > 0) then
-      let reduced_polys = call_Sage ("{'cmd':'GroebnerBasis', 'equations':'[" ^ output ^ "]', 'polynomials':'[[[]]]'}\n")
-  |> String.filter ~f:(fun c -> c <> '\n')
-  |> String.filter ~f:(fun c -> c <> ' ')
-  |> String.filter ~f:(fun c -> c <> '"')
-  |> string2gbpoly
+      let answer = call_Sage ("{'cmd':'GroebnerBasis', 'equations':'[" ^ output ^ "]', 'polynomials':'[[[]]]'}\n")
+                          |> String.filter ~f:(fun c -> c <> '\n')
+			  |> String.filter ~f:(fun c -> c <> ' ')
+			  |> String.filter ~f:(fun c -> c <> '"')
+			  |> String.split ~on:'B'
       in
+      let reduced_polys = string2gbpoly (L.nth_exn answer 0) in
+      let prime_bound = Big_int.big_int_of_string (L.nth_exn answer 1) in
+      group_order_bound := BI.(max !group_order_bound (one +! prime_bound));
       let constr_from_poly p =
 	mk_constr qvars q_pairs Eq (
 	  L.fold_left p
@@ -1022,14 +1030,15 @@ let simplify_poly_groebner_basis gb_equations polynomial ivars ivars_distinct = 
     (* sums should be empty *)
     let gb_system = gbpolys2string (L.tl_exn polys) in
     let poly_string = gbpolys2string [L.hd_exn polys] in
-    let simplified_constr =
-    let string = call_Sage ("{'cmd':'reduceModulo', 'equations':" ^ gb_system ^ ", 'polynomials':" ^ poly_string  ^ "}\n") in
-    string
-    |> String.filter ~f:(fun c -> c <> '\n')
-    |> String.filter ~f:(fun c -> c <> ' ')
-    |> String.filter ~f:(fun c -> c <> '"')
-    |> string2gbpoly
-    in
+    let string = call_Sage ("{'cmd':'reduceModulo', 'equations':" ^ gb_system ^ ", 'polynomials':" ^ poly_string  ^ "}\n")
+      |> String.filter ~f:(fun c -> c <> '\n')
+      |> String.filter ~f:(fun c -> c <> ' ')
+      |> String.filter ~f:(fun c -> c <> '"')
+      |> String.split ~on:'B'
+      in
+    let simplified_constr = string2gbpoly (L.nth_exn string 0) in
+    let prime_bound = Big_int.big_int_of_string (L.nth_exn string 1) in
+    group_order_bound := BI.(max !group_order_bound (one +! prime_bound));
     let simplified_constr =
       if L.length vars > 0 then
 	L.hd_exn (constraints_of_groebner_polys simplified_constr sums vars qvars q_ineq)
@@ -1245,7 +1254,11 @@ let simplify_single_handle_eqs c =
                     |> String.filter ~f:(fun c -> c <> '\n')
 	  	    |> String.filter ~f:(fun c -> c <> ' ')
 		    |> String.filter ~f:(fun c -> c <> '"')
+		    |> String.split ~on:'B'
        in
+       let prime_bound = Big_int.big_int_of_string (L.nth_exn answer 1) in
+       group_order_bound := BI.(max !group_order_bound (one +! prime_bound));
+       let answer = L.nth_exn answer 0 in
 
        let answer_poly_to_poly answer_poly =
 	 if answer_poly = "" then SP.zero
@@ -1279,23 +1292,26 @@ let simplify_single_handle_eqs c =
 	 L.map answer_constrs 
 	  ~f:(fun ac ->
 	    let conditions_and_quotient = String.split ac ~on:'m' in
-	    let conditions = L.nth_exn (conditions_and_quotient) 0 in
-	    let quotient   = L.nth_exn (conditions_and_quotient) 1 in
-	    let quotient_eq = 
-	      if (quotient = "E") then
-		mk_constr c.qvars c.q_ineq Eq numerator
-	      else
-		let poly = answer_poly_to_poly quotient in
-		mk_constr c.qvars c.q_ineq Eq (SP.((of_a h) -! poly))
-	    in
-	    let answer_polys = String.split conditions ~on:'p' in
-	    quotient_eq :: 
-	      (L.map answer_polys ~f:(fun ap -> 
-		let poly = answer_poly_to_poly ap in
-		[mk_constr c.qvars c.q_ineq Eq poly])
-	       |> L.concat
-	      )
+	    if (L.length conditions_and_quotient) <= 1 then []
+	    else
+	      let conditions = L.nth_exn (conditions_and_quotient) 0 in
+	      let quotient   = L.nth_exn (conditions_and_quotient) 1 in
+	      let quotient_eq = 
+		if (quotient = "E") then
+		  mk_constr c.qvars c.q_ineq Eq numerator
+		else
+		  let poly = answer_poly_to_poly quotient in
+		  mk_constr c.qvars c.q_ineq Eq (SP.((of_a h) -! poly))
+	      in
+	      let answer_polys = String.split conditions ~on:'p' in
+	      quotient_eq :: 
+		(L.map answer_polys ~f:(fun ap -> 
+		  let poly = answer_poly_to_poly ap in
+		  [mk_constr c.qvars c.q_ineq Eq poly])
+		  |> L.concat
+		)
 	  )
+        |> L.filter ~f:(fun l -> l <> [])
 	 
 (* ** Simplify *)
 
@@ -1305,7 +1321,9 @@ let simplify constraints =
   let gb_constraints = opening gb_constraints in
   let rest_constraints = simplify_gb_var_constraints rest_constraints in
   let polys, sums, vars, qvars, q_ineq = groebner_polys gb_constraints in
-  let simplified_polys = string2gbpoly (groebner_basis (gbpolys2string polys)) in
+  let groebner_basis_string, prime_bound = groebner_basis (gbpolys2string polys) in
+  group_order_bound := BI.(max !group_order_bound (one +! prime_bound));
+  let simplified_polys = string2gbpoly groebner_basis_string in
   let simplified_constraints = constraints_of_groebner_polys simplified_polys sums vars qvars q_ineq in
   let with_sums, without_sums = filter_constraints_with_without_sums simplified_constraints in
   let with_sums = L.map (uniform_bound with_sums) ~f:(simplify_sums_in_param_constr without_sums) in

@@ -126,7 +126,7 @@ def filter_constraints(constraints, R):
   for c in constraints:
     new_c = []
     for conj in c:
-      if (conj == 0):    continue
+      #if (conj == 0):    continue
       if (conj.monomials() == [1]):
           new_c = []
           break
