@@ -83,7 +83,10 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
       | mon :: rest_monoms ->
 	 let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
 	 if not(overlap (idxs,mon) eq.poly k1 k2) then
-	   let () = F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter in
+	   let () = 
+	     if (Map.is_empty mon) then F.printf "%sextract (;) %i.\n" (repeat_string "  " depth) counter
+	     else F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter
+	   in
 	   F.print_flush ();
 	   any_extracted := true;
 	   let new_constraints = extract_stable_nth constraints (idxs,mon) k1 k2 counter in
@@ -146,7 +149,17 @@ let automatic_algorithm system (k1,k2) oc =
 	constraints
     in
 
-    let constraints = extract_every_handle_monomial_constraints constraints (L.hd_exn indices_order_list) in
+    let new_eqs = extract_every_handle_monomial_constraints constraints (L.hd_exn indices_order_list) in
+    if (L.length new_eqs <> 0) then
+	let () = F.printf "(* Indices trick! *)\n" in
+	F.printf "(*   %a@\n*)@\n"(pp_list "@\n \\/  " pp_constr) new_eqs;
+	F.print_flush();
+	let new_constraints = L.map new_eqs ~f:(fun nc -> simplify (simplify_vars (constraints @ [nc]))) in
+	let k = L.length new_eqs in
+	new_constraints @ rest_goals, depth+k-1,
+	(repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
+	(repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
+    else
 
     (*F.printf "%a@\n" pp_constr_conj constraints;
     F.print_flush(); *)
@@ -203,18 +216,30 @@ let automatic_algorithm system (k1,k2) oc =
     F.print_flush();*)
     (*let () = F.printf "[%a]@\n" (pp_list ", " pp_int) _data in*)
       match parameters with
-      | [] -> 
-	 let indices_order = L.hd_exn indices_order_list in
-	 let free = Set.to_list (free_ivars_constr_conj constraints)
-                    |> L.filter ~f:(fun i -> not(L.mem indices_order i ~equal:equal_ivar))
-	 in
-	 begin match free with
-	 | [] -> (constraints :: rest_goals), depth+1, used_parameters_list, indices_order_list
-	 | i :: _ ->
-	    let new_indices = insert i indices_order in
-	    let k = L.length new_indices in
-	    (repeat_element constraints k) @ rest_goals, depth+k-1, (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list), new_indices @ (L.tl_exn indices_order_list)
-	 end
+      | [] ->
+	 let new_branches = L.concat (L.map constraints ~f:simplify_single_handle_eqs) in
+	 if (new_branches = [[]]) then
+	   let indices_order = L.hd_exn indices_order_list in
+	   let free = Set.to_list (free_ivars_constr_conj constraints)
+                      |> L.filter ~f:(fun i -> not(L.mem indices_order i ~equal:equal_ivar))
+	   in
+	   begin match free with
+	   | [] -> (constraints :: rest_goals), depth+1, used_parameters_list, indices_order_list
+	   | i :: _ ->
+	      let new_indices = insert i indices_order in
+	      let k = L.length new_indices in
+	      (repeat_element constraints k) @ rest_goals, depth+k-1, (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list), new_indices @ (L.tl_exn indices_order_list)
+	   end
+
+	 else
+	   let new_constraints = L.map new_branches ~f:(fun branch -> simplify (simplify_vars (branch @ constraints)) ) in
+	   F.printf "(* If Laurent polynomial then,\n     (%a)@\n*)\n" (pp_list ")@\n \\/  (" (pp_list " /\\ " pp_constr)) new_branches;
+	   F.print_flush();
+	   let k = L.length new_constraints in
+	   new_constraints @ rest_goals, depth+k-1, 
+	   (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
+	   (repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
+
       | p :: _rest_parameters ->
 	 let cases = case_dist constraints p in
 	 let case1 = clear_non_used_idxs (L.nth_exn cases 0) in

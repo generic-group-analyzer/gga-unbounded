@@ -443,15 +443,14 @@ let extract_handle_monomial (eq : constr) mon indices_order =
 		      )
     in
     if (L.length rest_monoms = 0) then (* Independent monomial *)
-      let () = F.printf "Trick!!!\n" in
-      F.print_flush();
-      (* This is only if the message is not zero *)
       let new_constr = mk_constr eq.qvars eq.q_ineq Eq (coeff eq.poly ([], mon)) in
-      [eq; new_constr]
+      let new_mon = Map.filter mon ~f:(fun ~key:v ~data:_ -> is_hvar v) in
+      let mon_zero = mk_constr eq.qvars eq.q_ineq Eq (mk_poly [(BI.one, mk_sum [] [] new_mon)]) in
+      [new_constr; mon_zero]
     else
-      [eq]
+      []
   else
-    [eq]
+    []
 
 let extract_every_handle_monomial (eq : constr) indices_order=
   let h_mons = L.map (Map.keys eq.poly) ~f:(fun s -> if s.ivars = [] then [s.monom] else [])
@@ -459,20 +458,19 @@ let extract_every_handle_monomial (eq : constr) indices_order=
 	       |> L.filter ~f:(fun m -> let (hvs,_) = L.unzip (hvars m) in hvs <> [])
   in
   L.fold_left h_mons
-   ~init:[eq]
-   ~f:(fun eqs mon ->
-     let eq = L.hd_exn eqs in
-     let rest = L.tl_exn eqs in
-     (extract_handle_monomial eq mon indices_order) @ rest
+   ~init:[]
+   ~f:(fun eqs hmon ->
+     eqs @ (extract_handle_monomial eq hmon indices_order)
    )
 
 let extract_every_handle_monomial_constraints (constraints : constr_conj) indices_order =
   L.map constraints
    ~f:(fun c ->
      if c.is_eq = Eq then extract_every_handle_monomial c indices_order
-     else [c]
+     else []
    )
   |> L.concat
+  |> L.dedup ~compare:compare_constr
 
 (* * Case distinctions *)
 
@@ -1208,68 +1206,97 @@ let simplify_single_handle_eqs c =
        aux SP.(p *! (power_poly (mk_poly [(BI.one, s)]) exp)) rest_exps rest_sums vars
     | _, [], [] -> p
   in
-   match (linear_single_handle_in_constraint c) with
-   | None -> [c]
-   | Some h ->
-      let summations, variables =
-	Map.fold c.poly
-	   ~init:([],[])
-	   ~f:(fun ~key:s ~data:_ (list_sums, list_vars) ->
-	       let (new_s,vars,_) = extract_not_bound_from_sum s in
-	       if (L.length new_s.ivars > 0) && not(L.exists list_sums ~f:(isomorphic_sum new_s)) then
-		 (list_sums @ [new_s]), (L.dedup ~compare:compare_atom (list_vars @ vars))
-	       else
-		 list_sums, (L.dedup ~compare:compare_atom (list_vars @ vars))
-	      )
-      in
-      let variables = L.filter variables ~f:(fun v -> not(is_hvar v)) in
-      let (numerator, denominator) =
-	Map.fold c.poly
-	   ~init:(SP.zero, SP.zero)
-	   ~f:(fun ~key:s ~data:k (num,den) ->
-	     let (hvars_monom, _) = L.unzip (hvars s.monom) in
-	     if (L.mem hvars_monom h ~equal:(fun a b -> compare_atom a b = 0) ) then
-	       (num, SP.(den +! mk_poly[(k,s)]) )
-	     else
-	       (SP.(num -! mk_poly[(k,s)]), den)
-	   )
-      in
-      let string_num = poly2string summations variables numerator
-                       |> (fun x -> String.sub x ~pos:0 ~len:((String.length x)-1) )
-      in
-      let string_den = poly2string summations variables denominator
-                       |> (fun x -> String.sub x ~pos:0 ~len:((String.length x)-1) )
-      in
-      let answer = call_Sage ("{'cmd':'NumDen', 'num':'[" ^ string_num ^ "]', 'den':'[" ^ string_den ^ "]'}\n")
-                   |> String.filter ~f:(fun c -> c <> '\n')
-		   |> String.filter ~f:(fun c -> c <> ' ')
-		   |> String.filter ~f:(fun c -> c <> '"')
-      in
-      let answer_type = String.sub answer ~pos:0 ~len:1 in
-      let answer_terms = String.split (String.sub answer ~pos:1 ~len:((String.length answer)-1) ) ~on:'t' in
-      let answer_poly =
-	L.map answer_terms
-	 ~f:(fun t ->
-	   let coeffs = String.split t ~on:',' in
-	   let coeffs = L.map coeffs ~f:(Big_int.big_int_of_string) in
-	   (L.hd_exn coeffs, L.tl_exn coeffs)
-	 )
-      in
-      let poly =
-	L.fold_left answer_poly
-	 ~init:SP.zero
-	 ~f:(fun p (k,coeff) -> SP.(p +! ((of_const k) *! (aux SP.one coeff summations variables)) ))
-      in
-      if (answer_type = "M") then
-	let () = F.printf "Modulo!!!!\n" in
-	F.print_flush();
-	[c; mk_constr c.qvars c.q_ineq Eq poly]
-      else if (answer_type = "C") then
-	let () = F.printf "Quotient!!!!\n" in
-	F.print_flush();
-	[mk_constr c.qvars c.q_ineq Eq SP.((of_a h) -! poly)]
-      else assert false
+  match (linear_single_handle_in_constraint c) with
+  | None -> []
+  | Some h ->
+     let summations, variables =
+       Map.fold c.poly
+	  ~init:([],[])
+	  ~f:(fun ~key:s ~data:_ (list_sums, list_vars) ->
+	    let (new_s,vars,_) = extract_not_bound_from_sum s in
+	    if (L.length new_s.ivars > 0) && not(L.exists list_sums ~f:(isomorphic_sum new_s)) then
+	      (list_sums @ [new_s]), (L.dedup ~compare:compare_atom (list_vars @ vars))
+	    else
+	      list_sums, (L.dedup ~compare:compare_atom (list_vars @ vars))
+	  )
+     in
+     if (summations <> []) then []
+     else
+       let real_variables = L.filter variables ~f:(fun v -> is_rvar v) in
+       let parameters = L.filter variables ~f:(fun v -> is_param v) in
+       let (numerator, denominator) =
+	 Map.fold c.poly
+   	    ~init:(SP.zero, SP.zero)
+	    ~f:(fun ~key:s ~data:k (num,den) ->
+	      let (hvars_monom, _) = L.unzip (hvars s.monom) in
+	      if (L.mem hvars_monom h ~equal:(fun a b -> compare_atom a b = 0) ) then
+		(num, SP.(den +! mk_poly[(k,s)]) )
+	      else
+		(SP.(num -! mk_poly[(k,s)]), den)
+	    )
+       in
+       let string_num = poly2string [] (parameters @ real_variables) numerator
+                        |> (fun x -> String.sub x ~pos:0 ~len:((String.length x)-1) )
+       in
+       let string_den = poly2string [] (parameters @ real_variables) denominator
+                        |> (fun x -> String.sub x ~pos:0 ~len:((String.length x)-1) )
+       in
+       let answer = call_Sage ("{'cmd':'NumDen', 'num':'[" ^ string_num ^ "]', 'den':'[" ^ string_den ^ "]', 'params':'" ^ (string_of_int (L.length parameters)) ^ "'}\n")
+                    |> String.filter ~f:(fun c -> c <> '\n')
+	  	    |> String.filter ~f:(fun c -> c <> ' ')
+		    |> String.filter ~f:(fun c -> c <> '"')
+       in
 
+       let answer_poly_to_poly answer_poly =
+	 if answer_poly = "" then SP.zero
+	 else
+	   let answer_terms = String.split answer_poly ~on:'t' in
+	   let answer_poly =
+	     L.map answer_terms
+	      ~f:(fun t ->
+		let coeffs = String.split t ~on:',' in
+		let coeffs = L.map coeffs ~f:(Big_int.big_int_of_string) in
+		(L.hd_exn coeffs, L.tl_exn coeffs)
+	      )
+	   in
+	   L.fold_left answer_poly
+	    ~init:SP.zero
+	    ~f:(fun p (k,coeff) -> SP.(p +! ((of_const k) *! (aux SP.one coeff [] (parameters @ real_variables) )) ))
+       in
+
+       let answer_constrs = String.split answer ~on:'r' in
+       
+       if (string_num = "") then
+	 let den = 
+	   Map.fold denominator
+	      ~init:SP.zero
+	      ~f:(fun ~key:s ~data:k p -> 
+		let new_monom = Map.filter s.monom ~f:(fun ~key:a ~data:_ -> not(equal_atom a h) ) in
+		SP.(p +! (mk_poly[(k, mk_sum s.ivars s.i_ineq new_monom)] ) ) )
+	 in
+	 [[mk_constr c.qvars c.q_ineq Eq SP.(of_a h)]; [mk_constr c.qvars c.q_ineq Eq den]] 
+       else
+	 L.map answer_constrs 
+	  ~f:(fun ac ->
+	    let conditions_and_quotient = String.split ac ~on:'m' in
+	    let conditions = L.nth_exn (conditions_and_quotient) 0 in
+	    let quotient   = L.nth_exn (conditions_and_quotient) 1 in
+	    let quotient_eq = 
+	      if (quotient = "E") then
+		mk_constr c.qvars c.q_ineq Eq numerator
+	      else
+		let poly = answer_poly_to_poly quotient in
+		mk_constr c.qvars c.q_ineq Eq (SP.((of_a h) -! poly))
+	    in
+	    let answer_polys = String.split conditions ~on:'p' in
+	    quotient_eq :: 
+	      (L.map answer_polys ~f:(fun ap -> 
+		let poly = answer_poly_to_poly ap in
+		[mk_constr c.qvars c.q_ineq Eq poly])
+	       |> L.concat
+	      )
+	  )
+	 
 (* ** Simplify *)
 
 let simplify constraints =
@@ -1290,8 +1317,7 @@ let simplify constraints =
    |> clear_equations
    |> L.dedup ~compare:(fun c1 c2 -> if (isomorphic_constr c1 c2) then 0 else compare_constr c1 c2)
   in
-  L.concat (L.map constraints ~f:simplify_single_handle_eqs)
-
+  constraints
 
 (* * Find contradictions *)
 

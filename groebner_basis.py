@@ -7,6 +7,8 @@ import sys
 import ast
 import traceback
 
+from laurent_polys import *
+
 def _parseJSON(obj):
   """Convert unicode strings to standard strings"""
   if isinstance(obj, dict):
@@ -24,140 +26,116 @@ def _parseJSON(obj):
       newobj = obj
   return newobj
 
+def polys_of_polylist(polylist, R):
+  x = R.gens()
+  polynomials = []
+  for p in polylist:
+    new_poly = 0*x[0]
+    for term in p:
+      new_term = term[0]
+      for i in range(len(x)):
+        new_term *= x[i]**(term[i+1])
+      new_poly += new_term
+    polynomials.append(new_poly)
+  return polynomials
+
+def polys_to_polylist(polys, R):
+  x = R.gens()
+  polylist = []
+  for p in polys:
+    poly = []
+    coeffs = p.coefficients()
+    mons = p.monomials()
+    for i in range(len(mons)):
+      term = [coeffs[i]]
+      for j in range(len(x)):
+        #term.append(mons[i].degree(x[j]))
+        term.append(mons[i].degree(mons[i].parent()(x[j])))
+      poly.append(term)
+    if poly == []:  polylist.append([[0*x[0]]*(len(x)+1)] )
+    else: polylist.append(poly)
+  return polylist
+
+def polylist_to_Ocaml(polylist):
+  output = ""
+  for i in range(len(polylist)):
+    for j in range(len(polylist[i])):
+      for k in range(len(polylist[i][j])):
+        output += str(polylist[i][j][k])
+        if (k < len(polylist[i][j])-1):    output += ","
+      if (j < len(polylist[i])-1):    output += "t"
+    if (i < len(polylist)-1):    output += "p"
+  return output
+
+def integer_coefficients(polynomials, R):
+  new_polys = []
+  max_den = 1
+  for p in polynomials:
+    p += 0*R.gens()[0]   # If we had a constant, not it is a polynomial.
+    commun_den = lcm([t.denominator() for t in p.coefficients()])
+    new_polys.append(p * commun_den)
+    max_den = max(max_den, commun_den)
+  return new_polys, max_den
+
 def interp(req):
   cmd = req['cmd']
   if cmd == "GroebnerBasis":
     polylist = ast.literal_eval(req["equations"])
     if polylist == []:    return ""
-    n_variables = len(polylist[0][0]) - 1 # The first element is the coefficient.
+    n_variables = len(polylist[0][0]) - 1    # The first element is the coefficient.
     if (n_variables == 0): return ""
+
     R = PolynomialRing(QQ, n_variables, 'x')
-    x = R.gens()
-    polynomials = []
-    for p in polylist:
-      new_poly = 0*x[0]
-      for term in p:
-        new_term = term[0]
-        for i in range(n_variables):
-          new_term *= x[i]**(term[i+1])
-        new_poly += new_term
-      polynomials.append(new_poly)
-  
-#    for i in range(len(polynomials)):
-#      print (i+1), polynomials[i]
+
+    polynomials = polys_of_polylist(polylist, R)
     reduced = ideal(polynomials).groebner_basis()
   
-    # Make integer every constant. (Return this information!!!)
-    reduced_int = []
-    for p in reduced:
-      denominators = [t.denominator() for t in p.coefficients()]
-      reduced_int.append(p*lcm(denominators))
-  
-    reduced_polylist = []
-    for p in reduced_int:
-      reduced_poly = []
-      coeffs = p.coefficients()
-      mons = p.monomials()
-      for i in range(len(mons)):
-        reduced_term = [coeffs[i]]
-        for j in range(len(x)):
-          reduced_term.append(mons[i].degree(x[j]))
-        reduced_poly.append(reduced_term)
-      reduced_polylist.append(reduced_poly)
+    # Make integer every coefficient. (Return this information!!!)
+    reduced, commun_den = integer_coefficients(reduced, R)
+     
+    reduced_polylist = polys_to_polylist(reduced, R)
   
     # Print the output in Ocaml format.
-    output = ""
-    for i in range(len(reduced_polylist)):
-      for j in range(len(reduced_polylist[i])):
-        for k in range(len(reduced_polylist[i][j])):
-          output += str(reduced_polylist[i][j][k])
-          if (k < len(reduced_polylist[i][j])-1):    output += ","
-        if (j < len(reduced_polylist[i])-1):    output += "t"
-      if (i < len(reduced_polylist)-1):    output += "p"
-  
-    return output
+    return polylist_to_Ocaml(reduced_polylist)
   
   elif cmd == "reduceModulo":
     polylist = ast.literal_eval(req["equations"])
     n_equations = len(polylist)
     polylist += ast.literal_eval(req["polynomials"])
-    n_variables = len(polylist[0][0]) - 1 # The first element is the coefficient.
-
+    n_variables = len(polylist[0][0]) - 1    # The first element is the coefficient.
     if n_variables == 0:    return ""
 
     R = PolynomialRing(QQ, n_variables, 'x')
-    x = R.gens()
-    polynomials = []
-    for p in polylist:
-      new_poly = 0*x[0]
-      for term in p:
-        new_term = term[0]
-        for i in range(n_variables):
-          new_term *= x[i]**(term[i+1])
-        new_poly += new_term
-      polynomials.append(new_poly)
-      
-    if n_equations == 0:
-      reduced = polynomials[n_equations:]
+
+    polynomials = polys_of_polylist(polylist, R)
+
+    if n_equations == 0:  reduced = polynomials[n_equations:]
     else:
-      I = ideal(polynomials[:n_equations])  # We assume the input is already in groebner basis.    
+      I = ideal(polynomials[:n_equations])  # We assume the input is already in groebner basis.
       reduced = [poly.reduce(I) for poly in polynomials[n_equations:]]
 
-    # Make integer every constant. (Return this information!!!)
-    reduced_int = []
-    for p in reduced:
-      denominators = [t.denominator() for t in p.coefficients()]
-      reduced_int.append(p*lcm(denominators))
-
-    reduced_polylist = []
-    for p in reduced_int:
-      reduced_poly = []
-      coeffs = p.coefficients()
-      mons = p.monomials()
-      for i in range(len(mons)):
-        reduced_term = [coeffs[i]]
-        for j in range(len(x)):
-          reduced_term.append(mons[i].degree(x[j]))
-        reduced_poly.append(reduced_term)
-      if reduced_poly == []:
-	reduced_polylist.append([[0*x[0]]*(len(x)+1)] )
-      else:
-        reduced_polylist.append(reduced_poly)
+    # Make integer every coefficient. (Return this information!!!)
+    reduced, commun_den = integer_coefficients(reduced, R)
+ 
+    reduced_polylist = polys_to_polylist(reduced, R)
 
     # Print the output in Ocaml format.
-    output = ""
-    for i in range(len(reduced_polylist)):
-      for j in range(len(reduced_polylist[i])):
-        for k in range(len(reduced_polylist[i][j])):
-          output += str(reduced_polylist[i][j][k])
-          if (k < len(reduced_polylist[i][j])-1):    output += ","
-        if (j < len(reduced_polylist[i])-1):    output += "t"
-      if (i < len(reduced_polylist)-1):    output += "p"
-  
-    return output
+    return polylist_to_Ocaml(reduced_polylist)
 
   elif cmd == "NumDen":
     num = ast.literal_eval(req["num"])
     den = ast.literal_eval(req["den"])
+    n = ast.literal_eval(req["params"])
 
-    if num == []:  return "C0"
+    if num == []: return ""
     n_variables = len(num[0]) - 1 # The first element is the coefficient.
-
-    if n_variables == 0:    return "C0"
+    if n_variables == 0:    return ""
 
     R = PolynomialRing(QQ, n_variables, 'x')
-    x = R.gens()
-    polynomials = []
-    for p in [num,den]:
-      new_poly = 0*x[0]
-      for term in p:
-        new_term = term[0]
-        for i in range(n_variables):
-          new_term *= x[i]**(term[i+1])
-        new_poly += new_term
-      polynomials.append(new_poly)
- 
-    num, den = polynomials
+
+    num, den = polys_of_polylist([num, den], R)
+    old_num = num
+    old_den = den
     num_num = num.numerator()
     num_den = num.denominator()
     den_num = den.numerator()
@@ -165,54 +143,48 @@ def interp(req):
     num = num_num * den_den
     den = num_den * den_num
 
-    if (num % den == 0):
-      msg = "C"  #Quotient
-      p = num.quo_rem(den)[0]
-    else:
-      msg = "M"  #Modulo
-      p = num % den
+    constrs = constraintsForLaurent(R, n, num, den)
+    constrs = filter_constraints(constrs, R)
+    
+    quotients = []
+    for c in constrs:
+      I = ideal(c)
+      if old_den.reduce(I) == 0:
+        quotients.append("E")
+      else:
+        q,r = old_num.reduce(I).quo_rem(old_den.reduce(I))
+        q,commun = integer_coefficients([q],R)
+        polylist = polys_to_polylist(q,R)
+        quotients.append(polylist_to_Ocaml(polylist))
 
-    # Make integer every constant. (Return this information!!!)
-    try:
-      denominators = [t.denominator() for t in p.coefficients()]
-    except Exception:
-      p = p*p.denominator()
-      return msg + str(p) + ",0"*len(x)
-    p = p*lcm(denominators)
+    # Make integer every coefficient. (Return this information!!!)
+    new_constrs = []
+    for c in constrs:
+      c, commun_den = integer_coefficients(c, R)
+      new_constrs.append(c)
 
-    poly = []
-    coeffs = p.coefficients()
-    mons = p.monomials()
-    for i in range(len(mons)):
-      term = [coeffs[i]]
-      for j in range(len(x)):
-        term.append(mons[i].degree(mons[i].parent()(x[j])))
-      poly.append(term)
-
-    if poly == []:
-      poly = [[0*x[0]]*(len(x)+1)]
+    constrs_polylist = []
+    for c in new_constrs:
+      constrs_polylist.append(polys_to_polylist(c,R))
 
     # Print the output in Ocaml format.
-    output = ""
-    for j in range(len(poly)):
-      for k in range(len(poly[j])):
-        output += str(poly[j][k])
-        if (k < len(poly[j])-1):    output += ","
-      if (j < len(poly)-1):    output += "t"
-  
-    return msg + output
+    output_list = []
+    for polylist in constrs_polylist:
+      output_list.append(polylist_to_Ocaml(polylist))
 
+    output = ""
+    for i in range(len(output_list)):
+      output += output_list[i] + "m" + quotients[i] + "r"
+    return output[:-1]
 
 def main():
   try:
     while True:
-      #polylist = ast.literal_eval(sys.argv[1])
       inp = sys.stdin.readline()
       if (inp == ''): break
       cmd = ast.literal_eval(inp)
       result = interp(cmd)
       o = json.dumps(result)
-      #len = o.len()
       print(json.dumps(result))
       sys.stdout.flush()
         
