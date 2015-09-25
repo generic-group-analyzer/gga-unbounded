@@ -72,9 +72,9 @@ def integer_coefficients(polynomials, R):
   max_den = 1
   for p in polynomials:
     p += 0*R.gens()[0]   # If we had a constant, not it is a polynomial.
-    commun_den = lcm([t.denominator() for t in p.coefficients()])
-    new_polys.append(p * commun_den)
-    max_den = max(max_den, abs(commun_den))
+    common_den = lcm([t.denominator() for t in p.coefficients()])
+    new_polys.append(p * common_den)
+    max_den = max(max_den, abs(common_den))
   return new_polys, max_den
 
 def interp(req):
@@ -91,12 +91,12 @@ def interp(req):
     reduced = ideal(polynomials).groebner_basis()
   
     # Make integer every coefficient. (Return this information!!!)
-    reduced, commun_den = integer_coefficients(reduced, R)
+    reduced, common_den = integer_coefficients(reduced, R)
      
     reduced_polylist = polys_to_polylist(reduced, R)
   
     # Print the output in Ocaml format.
-    return polylist_to_Ocaml(reduced_polylist) + "B" + str(abs(commun_den))
+    return polylist_to_Ocaml(reduced_polylist) + "B" + str(abs(common_den))
   
   elif cmd == "reduceModulo":
     polylist = ast.literal_eval(req["equations"])
@@ -115,12 +115,12 @@ def interp(req):
       reduced = [poly.reduce(I) for poly in polynomials[n_equations:]]
 
     # Make integer every coefficient. (Return this information!!!)
-    reduced, commun_den = integer_coefficients(reduced, R)
+    reduced, common_den = integer_coefficients(reduced, R)
  
     reduced_polylist = polys_to_polylist(reduced, R)
 
     # Print the output in Ocaml format.
-    return polylist_to_Ocaml(reduced_polylist) + "B" + str(abs(commun_den))
+    return polylist_to_Ocaml(reduced_polylist) + "B" + str(abs(common_den))
 
   elif cmd == "NumDen":
     num = ast.literal_eval(req["num"])
@@ -147,22 +147,22 @@ def interp(req):
     constrs = filter_constraints(constrs, R)
     
     quotients = []
-    max_commun = 1
+    max_common = 1
     for c in constrs:
       I = ideal(c)
       if old_den.reduce(I) == 0:
         quotients.append("E")
       else:
         q,r = old_num.reduce(I).quo_rem(old_den.reduce(I))
-        q,commun = integer_coefficients([q],R)
-        max_commun = max(max_commun, abs(commun))
+        q,common = integer_coefficients([q],R)
+        max_common = max(max_common, abs(common))
         polylist = polys_to_polylist(q,R)
         quotients.append(polylist_to_Ocaml(polylist))
 
     # Make integer every coefficient. (Return this information!!!)
     new_constrs = []
     for c in constrs:
-      c, commun_den = integer_coefficients(c, R)
+      c, common_den = integer_coefficients(c, R)
       new_constrs.append(c)
 
     constrs_polylist = []
@@ -178,7 +178,7 @@ def interp(req):
     for i in range(len(output_list)):
       output += output_list[i] + "m" + quotients[i] + "r"
 
-    return output[:-1] + "B" + str(max_commun)
+    return output[:-1] + "B" + str(max_common)
 
 def main():
   try:
