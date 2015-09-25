@@ -857,7 +857,7 @@ let groebner_basis system =
     |> String.split ~on:'B'
   in
   L.nth_exn answer 0, Big_int.big_int_of_string (L.nth_exn answer 1)
-  
+
 
 let gbpolys2string polys =
   let rec singlepoly2string output = function
@@ -1278,25 +1278,25 @@ let simplify_single_handle_eqs c =
        in
 
        let answer_constrs = String.split answer ~on:'r' in
-       
+
        if (string_num = "") then
-	 let den = 
+	 let den =
 	   Map.fold denominator
 	      ~init:SP.zero
-	      ~f:(fun ~key:s ~data:k p -> 
+	      ~f:(fun ~key:s ~data:k p ->
 		let new_monom = Map.filter s.monom ~f:(fun ~key:a ~data:_ -> not(equal_atom a h) ) in
 		SP.(p +! (mk_poly[(k, mk_sum s.ivars s.i_ineq new_monom)] ) ) )
 	 in
-	 [[mk_constr c.qvars c.q_ineq Eq SP.(of_a h)]; [mk_constr c.qvars c.q_ineq Eq den]] 
+	 [[mk_constr c.qvars c.q_ineq Eq SP.(of_a h)]; [mk_constr c.qvars c.q_ineq Eq den]]
        else
-	 L.map answer_constrs 
+	 L.map answer_constrs
 	  ~f:(fun ac ->
 	    let conditions_and_quotient = String.split ac ~on:'m' in
 	    if (L.length conditions_and_quotient) <= 1 then []
 	    else
 	      let conditions = L.nth_exn (conditions_and_quotient) 0 in
 	      let quotient   = L.nth_exn (conditions_and_quotient) 1 in
-	      let quotient_eq = 
+	      let quotient_eq =
 		if (quotient = "E") then
 		  mk_constr c.qvars c.q_ineq Eq numerator
 		else
@@ -1304,15 +1304,15 @@ let simplify_single_handle_eqs c =
 		  mk_constr c.qvars c.q_ineq Eq (SP.((of_a h) -! poly))
 	      in
 	      let answer_polys = String.split conditions ~on:'p' in
-	      quotient_eq :: 
-		(L.map answer_polys ~f:(fun ap -> 
+	      quotient_eq ::
+		(L.map answer_polys ~f:(fun ap ->
 		  let poly = answer_poly_to_poly ap in
 		  [mk_constr c.qvars c.q_ineq Eq poly])
 		  |> L.concat
 		)
 	  )
         |> L.filter ~f:(fun l -> l <> [])
-	 
+
 (* ** Simplify *)
 
 let simplify constraints =

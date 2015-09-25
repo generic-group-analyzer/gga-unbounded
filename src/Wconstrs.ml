@@ -1,10 +1,12 @@
+(* * Constraints and operations on constraints *)
+
 open Core_kernel.Std
 open Util
 open Abbrevs
 open Watom
 
-(* ======================================================================= *)
-(* constraint expressions and constraints  *)
+(* ** Constraint expressions and constraints
+ * ======================================================================= *)
 
 type is_eq = Eq | InEq with compare, sexp
 
@@ -48,24 +50,20 @@ type constr_conj = constr list with compare, sexp
 
 type constr_disj = constr_conj list with compare, sexp
 
-(* ----------------------------------------------------------------------- *)
-(* equality functions *)
+(* ** Equality functions
+ * ----------------------------------------------------------------------- *)
 
-let equal_is_eq a b = compare_is_eq a b = 0
-let equal_monom a b = compare_monom a b = 0
-let equal_sum a b = Set.equal (Ivar.Set.of_list a.ivars) (Ivar.Set.of_list b.ivars) &&
-		    Set.equal (Ivar_Pair.Set.of_list a.i_ineq) (Ivar_Pair.Set.of_list b.i_ineq) &&
-		    equal_monom a.monom b.monom
-let equal_poly a b = compare_poly a b = 0
-let equal_constr a b = Set.equal (Ivar.Set.of_list a.qvars) (Ivar.Set.of_list b.qvars) &&
-		       Set.equal (Ivar_Pair.Set.of_list a.q_ineq) (Ivar_Pair.Set.of_list b.q_ineq) &&
-		       equal_is_eq a.is_eq b.is_eq &&
-		       equal_poly a.poly b.poly
+let equal_is_eq       a b = compare_is_eq a b = 0
+let equal_monom       a b = compare_monom a b = 0
+let equal_sum         a b = compare_sum a b = 0
+let equal_poly        a b = compare_poly a b = 0
+let equal_constr      a b = compare_constr a b = 0
 let equal_constr_conj a b = compare_constr_conj a b = 0
 let equal_constr_disj a b = compare_constr_disj a b = 0
 
-(* ----------------------------------------------------------------------- *)
-(* variable occurences *)
+
+(* ** Extracting, mapping, and renaming index variables
+ * ----------------------------------------------------------------------- *)
 
 let ivars_pairs pairs =
   L.fold_left pairs
@@ -158,8 +156,8 @@ let all_ivar_distinct membership update_t rename ivars_t t =
   in
   do_split t (all_pairs (ivars_t t))
 
-(* ----------------------------------------------------------------------- *)
-(* smart constructors *)
+(* Smart constructors
+ * ----------------------------------------------------------------------- *)
 
 let mult_monom_atom m (e,a) =
     if BI.compare e BI.zero < 0 && not (is_rvar a) then
@@ -206,9 +204,6 @@ let sum2Q unused ivs ivs_pairs =
   b, BI.of_int (- (L.length exceptions))
 
 let mk_sum ivs ivs_dist mon =
-  (*let ivs_monom = Set.to_list (ivars_monom mon) in*)
-  (*let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem (ivs@ivs_monom) x || L.mem (ivs@ivs_monom) y) in*)
-  (*let ivs_dist = L.filter ivs_dist ~f:(fun (x,y) -> L.mem ivs x ~equal:equal_ivar || L.mem ivs y ~equal:equal_ivar) in *)
   let ivar_pairs = Ivar_Pair.Set.to_list (Ivar_Pair.Set.of_list ivs_dist) in
   let unused_ivars = Set.diff (Ivar.Set.of_list ivs) (ivars_monom mon) in
   let again_ivs, qpart =
@@ -265,8 +260,8 @@ let mk_constr ivs ivs_dist is_eq poly =
   (* let ivar_pairs = L.filter ivar_pairs ~f:(fun (x,y) -> L.mem ivs x || L.mem ivs y) in *)
   { qvars = ivs; q_ineq = ivar_pairs; is_eq = is_eq; poly = poly }
 
-(* ----------------------------------------------------------------------- *)
-(* arithmetic operations *)
+(* ** Arithmetic operations
+ * ----------------------------------------------------------------------- *)
 
 let opp_poly p =
   Map.map ~f:(fun coeff -> BI.opp coeff) p
@@ -364,8 +359,100 @@ module SP = struct
   let one = of_const BI.one
 end
 
-(* ----------------------------------------------------------------------- *)
-(* pretty printing *)
+(* ** Isomorphic constraints
+ * ----------------------------------------------------------------------- *)
+
+let rename_sum s rn =
+  let ivars = L.map s.ivars ~f:(apply_renaming rn) in
+  let i_ineq = L.map s.i_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y)) in
+  let monom = map_idx_monom ~f:(apply_renaming rn) s.monom in
+  mk_sum ivars i_ineq monom
+
+let rename_poly p rn =
+  Map.fold p
+     ~init:SP.zero
+     ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(c,rename_sum s rn)]) ) )
+
+let rename_constr c rn =
+  let qvars = L.map c.qvars ~f:(apply_renaming rn) in
+  let q_ineq = L.map c.q_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y)) in
+  let poly = rename_poly c.poly rn in
+  mk_constr qvars q_ineq c.is_eq poly
+
+let matching_term (c1,s1) (c2,s2) ren =
+  let free1 = L.filter (Set.to_list (free_ivars_sum s1)) ~f:(fun x -> (Ivar.Map.find ren x)=None) in
+  let free2 = L.filter (Set.to_list (free_ivars_sum s2)) ~f:(fun x -> (Ivar.Map.find ren x)=None) in
+  let bound1 = s1.ivars in
+  let bound2 = s2.ivars in
+  if (BI.compare c1 c2 <> 0) ||
+     (L.length free1 <> L.length free2) || (L.length bound1 <> L.length bound2) then []
+  else
+    let f_perms = perms free1 in
+    let b_perms = perms bound1 in
+
+    let rec aux output f_list b_list =
+    match f_list with
+      | [] -> output
+      | f::rest_f ->
+	 begin match b_list with
+	 | [] -> aux output rest_f b_perms
+	 | b::rest_b ->
+	    let rn = Ivar.Map.of_alist_exn (L.zip_exn (f @ b) (free2 @ bound2)) in
+	    if equal_sum (rename_sum s1 rn) s2 then
+	      let new_rn = Ivar.Map.of_alist_exn ((Map.to_alist ren) @ (L.zip_exn f free2)) in
+	      aux (new_rn :: output) rest_f rest_b
+	    else
+	      aux output f_list rest_b
+	 end
+    in
+    aux [] f_perms b_perms
+
+let invert_rn rn =
+  let (k,v) = L.unzip (Map.to_alist rn) in
+  Ivar.Map.of_alist_exn (L.zip_exn v k)
+
+let matching_poly p1 p2 =
+  let rec aux xs ys ren =
+    match xs with
+    | [] -> [ren]
+    | (s1,c1)::rest_xs ->
+       let renamings = L.map ys ~f:(fun (s2,c2) -> matching_term (c1,s1) (c2,s2) ren) in
+       let ys_residues = rm_diagonal ys in
+       let rename_terms terms rn = L.map terms ~f:(fun (s,c) -> (rename_sum s (invert_rn rn), c)) in
+       let residues = L.map2_exn renamings ys_residues
+		      ~f:(fun rns terms -> L.map rns ~f:(rename_terms terms)) in
+       L.map2_exn (L.concat renamings) (L.concat residues)
+	~f:(fun rn ys_rest -> aux rest_xs ys_rest rn)
+       |> L.concat
+  in
+  if (Map.length p1) <> (Map.length p2) then []
+  else aux (Map.to_alist p1) (Map.to_alist p2) (Ivar.Map.empty)
+
+let matching_constr c1 c2 = (* This does not check the q_ineq *)
+  let valid_rn rn =
+    let (ivars1, ivars2) = L.unzip (Map.to_alist rn) in
+    L.map2_exn ivars1 ivars2
+     ~f:(fun i j ->
+          ((L.mem ~equal:equal_ivar c1.qvars i) && (L.mem ~equal:equal_ivar c2.qvars j)) ||
+	  (not ((L.mem ~equal:equal_ivar c1.qvars i)
+                || (L.mem ~equal:equal_ivar c2.qvars j)))
+          && (equal_ivar i j))
+    |> L.fold_left ~init:true ~f:(&&)
+  in
+  L.filter (matching_poly c1.poly c2.poly) ~f:(valid_rn)
+
+let isomorphic_sum s1 s2 = L.length (matching_term (BI.one,s1) (BI.one,s2) Ivar.Map.empty) > 0
+
+let isomorphic_constr c1 c2 =
+  equal_is_eq c1.is_eq c2.is_eq &&
+  (L.length (matching_constr c1 c2) > 0 ||
+   L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0)
+
+let isomorphic_poly p1 p2 =
+  L.length (matching_constr (mk_constr [] [] Eq p1) (mk_constr [] [] Eq p2)) > 0
+
+(* ** Pretty printing
+ * ----------------------------------------------------------------------- *)
 
 let is_eq_to_string = function
   | Eq   -> "="
@@ -449,97 +536,3 @@ let pp_constr_conj fmt conj =
        F.fprintf f "%t" (aux (n+1) rest)
   in
   aux 1 conj fmt
-
-(*
-let pp_int fmt i =
-  F.fprintf fmt "%i" i
-*)
-
-(* ----------------------------------------------------------------------- *)
-(* isomorphic constraints *)
-
-let rename_sum s rn =
-  let ivars = L.map s.ivars ~f:(apply_renaming rn) in
-  let i_ineq = L.map s.i_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y)) in
-  let monom = map_idx_monom ~f:(apply_renaming rn) s.monom in
-  mk_sum ivars i_ineq monom
-
-let rename_poly p rn =
-  Map.fold p
-     ~init:SP.zero
-     ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(c,rename_sum s rn)]) ) )
-
-let rename_constr c rn =
-  let qvars = L.map c.qvars ~f:(apply_renaming rn) in
-  let q_ineq = L.map c.q_ineq ~f:(fun (x,y) -> (apply_renaming rn x, apply_renaming rn y)) in
-  let poly = rename_poly c.poly rn in
-  mk_constr qvars q_ineq c.is_eq poly
-
-let matching_term (c1,s1) (c2,s2) ren =
-  let free1 = L.filter (Set.to_list (free_ivars_sum s1)) ~f:(fun x -> (Ivar.Map.find ren x)=None) in
-  let free2 = L.filter (Set.to_list (free_ivars_sum s2)) ~f:(fun x -> (Ivar.Map.find ren x)=None) in
-  let bound1 = s1.ivars in
-  let bound2 = s2.ivars in
-  if (BI.compare c1 c2 <> 0) ||
-     (L.length free1 <> L.length free2) || (L.length bound1 <> L.length bound2) then []
-  else
-    let f_perms = perms free1 in
-    let b_perms = perms bound1 in
-
-    let rec aux output f_list b_list =
-    match f_list with
-      | [] -> output
-      | f::rest_f ->
-	 begin match b_list with
-	 | [] -> aux output rest_f b_perms
-	 | b::rest_b ->
-	    let rn = Ivar.Map.of_alist_exn (L.zip_exn (f @ b) (free2 @ bound2)) in
-	    if equal_sum (rename_sum s1 rn) s2 then
-	      let new_rn = Ivar.Map.of_alist_exn ((Map.to_alist ren) @ (L.zip_exn f free2)) in
-	      aux (new_rn :: output) rest_f rest_b
-	    else
-	      aux output f_list rest_b
-	 end
-    in
-    aux [] f_perms b_perms
-
-let invert_rn rn =
-  let (k,v) = L.unzip (Map.to_alist rn) in
-  Ivar.Map.of_alist_exn (L.zip_exn v k)
-
-let matching_poly p1 p2 =
-  let rec aux xs ys ren =
-    match xs with
-    | [] -> [ren]
-    | (s1,c1)::rest_xs ->
-       let renamings = L.map ys ~f:(fun (s2,c2) -> matching_term (c1,s1) (c2,s2) ren) in
-       let ys_residues = rm_diagonal ys in
-       let rename_terms terms rn = L.map terms ~f:(fun (s,c) -> (rename_sum s (invert_rn rn), c)) in
-       let residues = L.map2_exn renamings ys_residues
-		      ~f:(fun rns terms -> L.map rns ~f:(rename_terms terms)) in
-       L.map2_exn (L.concat renamings) (L.concat residues)
-	~f:(fun rn ys_rest -> aux rest_xs ys_rest rn)
-       |> L.concat
-  in
-  if (Map.length p1) <> (Map.length p2) then []
-  else aux (Map.to_alist p1) (Map.to_alist p2) (Ivar.Map.empty)
-
-let matching_constr c1 c2 = (* This does not check the q_ineq *)
-  let valid_rn rn =
-    let (ivars1, ivars2) = L.unzip (Map.to_alist rn) in
-    L.map2_exn ivars1 ivars2
-     ~f:(fun i j -> ((L.mem ~equal:equal_ivar c1.qvars i) && (L.mem ~equal:equal_ivar c2.qvars j)) ||
-	  (not ((L.mem ~equal:equal_ivar c1.qvars i) || (L.mem ~equal:equal_ivar c2.qvars j))) && (equal_ivar i j)  )
-    |> L.fold_left ~init:true ~f:(&&)
-  in
-  L.filter (matching_poly c1.poly c2.poly) ~f:(valid_rn)
-
-let isomorphic_sum s1 s2 = L.length (matching_term (BI.one,s1) (BI.one,s2) Ivar.Map.empty) > 0
-let isomorphic_constr c1 c2 =
-(*let () = F.printf "%a [%a] [%a] ?=? %a [%a] [%a] -> %b %b\n" pp_constr c1 (pp_list "," pp_ivar) c1.qvars (pp_list "," pp_ivar_pair) c1.q_ineq pp_constr c2 (pp_list "," pp_ivar) c2.qvars (pp_list "," pp_ivar_pair) c2.q_ineq (equal_is_eq c1.is_eq c2.is_eq) ((L.length (matching_constr c1 c2) > 0 ||
-   L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0)) in
-  F.print_flush();*)
- equal_is_eq c1.is_eq c2.is_eq &&
-  (L.length (matching_constr c1 c2) > 0 ||
-   L.length (matching_constr c1 { c2 with poly = SP.opp c2.poly }) > 0)
-let isomorphic_poly p1 p2 = L.length (matching_constr (mk_constr [] [] Eq p1) (mk_constr [] [] Eq p2)) > 0
