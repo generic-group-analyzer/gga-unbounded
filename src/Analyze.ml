@@ -154,7 +154,7 @@ let automatic_algorithm system (k1,k2) oc =
 	let () = F.printf "(* Indices trick! *)\n" in
 	F.printf "(*   %a@\n*)@\n"(pp_list "@\n \\/  " pp_constr) new_eqs;
 	F.print_flush();
-	let new_constraints = L.map new_eqs ~f:(fun nc -> simplify (simplify_vars (constraints @ [nc]))) in
+	let new_constraints = L.map new_eqs ~f:(fun nc -> simplify (simplify_vars (introduce_branch [nc] constraints ))) in
 	let k = L.length new_eqs in
 	new_constraints @ rest_goals, depth+k-1,
 	(repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
@@ -218,6 +218,8 @@ let automatic_algorithm system (k1,k2) oc =
       match parameters with
       | [] ->
 	 let new_branches = L.concat (L.map constraints ~f:simplify_single_handle_eqs) in
+	 (*F.printf "%a@\n" pp_constr_conj constraints;
+	 F.print_flush();*)
 	 if (new_branches = [[]]) then
 	   let indices_order = L.hd_exn indices_order_list in
 	   let free = Set.to_list (free_ivars_constr_conj constraints)
@@ -232,7 +234,7 @@ let automatic_algorithm system (k1,k2) oc =
 	   end
 
 	 else
-	   let new_constraints = L.map new_branches ~f:(fun branch -> simplify (simplify_vars (branch @ constraints)) ) in
+	   let new_constraints = L.map new_branches ~f:(fun branch -> simplify (simplify_vars (introduce_branch branch constraints)) ) in
 	   F.printf "(* If Laurent polynomial then,\n     (%a)@\n*)\n" (pp_list ")@\n \\/  (" (pp_list " /\\ " pp_constr)) new_branches;
 	   F.print_flush();
 	   let k = L.length new_constraints in

@@ -1313,6 +1313,31 @@ let simplify_single_handle_eqs c =
 	  )
         |> L.filter ~f:(fun l -> l <> [])
 
+let subst_hvar_by_zero constrs h =
+  L.map constrs ~f:(fun c ->
+    let new_poly = Map.filter c.poly
+      ~f:(fun ~key:s ~data:_ -> Map.fold s.monom 
+                                   ~init:true
+                                   ~f:(fun ~key:a ~data:_ b -> b && not (equal_atom h a) ) 
+      ) in
+    mk_constr c.qvars c.q_ineq c.is_eq new_poly
+  )
+
+let introduce_branch branch constraints = 
+  branch @
+    (L.fold_left branch
+      ~init:constraints
+      ~f:(fun constrs b ->
+        match Map.keys b.poly with
+        | sum :: [] when sum.ivars = [] && b.is_eq = Eq && b.qvars = [] ->
+           begin match Map.keys sum.monom with
+           | Hvar _ as h :: [] -> subst_hvar_by_zero constrs h
+           | _ -> constrs
+           end
+        | _ -> constrs
+      )
+    )
+
 (* ** Simplify *)
 
 let simplify constraints =

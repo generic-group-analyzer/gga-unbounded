@@ -103,7 +103,7 @@ def interp(req):
     n_equations = len(polylist)
     polylist += ast.literal_eval(req["polynomials"])
     n_variables = len(polylist[0][0]) - 1    # The first element is the coefficient.
-    if n_variables == 0:    return ""
+    if n_variables == 0:    return "B1"
 
     R = PolynomialRing(QQ, n_variables, 'x')
 
