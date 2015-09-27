@@ -1217,7 +1217,7 @@ let simplify_single_handle_eqs c =
   in
   match (linear_single_handle_in_constraint c) with
   | None -> []
-  | Some h ->
+  | Some h ->    
      let summations, variables =
        Map.fold c.poly
 	  ~init:([],[])
@@ -1311,7 +1311,7 @@ let simplify_single_handle_eqs c =
 		  |> L.concat
 		)
 	  )
-        |> L.filter ~f:(fun l -> l <> [])
+          |> L.filter ~f:(fun l -> l <> [])
 
 let subst_hvar_by_zero constrs h =
   L.map constrs ~f:(fun c ->

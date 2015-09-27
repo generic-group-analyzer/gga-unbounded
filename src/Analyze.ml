@@ -220,7 +220,7 @@ let automatic_algorithm system (k1,k2) oc =
 	 let new_branches = L.concat (L.map constraints ~f:simplify_single_handle_eqs) in
 	 (*F.printf "%a@\n" pp_constr_conj constraints;
 	 F.print_flush();*)
-	 if (new_branches = [[]]) then
+	 if (new_branches = [[]] || new_branches = []) then
 	   let indices_order = L.hd_exn indices_order_list in
 	   let free = Set.to_list (free_ivars_constr_conj constraints)
                       |> L.filter ~f:(fun i -> not(L.mem indices_order i ~equal:equal_ivar))
