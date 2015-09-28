@@ -112,20 +112,20 @@ let monom_to_monlist p_var mon =
   |> Map.to_alist
   |> L.sort ~cmp:(fun (k1,_) (k2,_) -> compare_atom k1 k2)
 
-let rvars (mon : monom)  = monom_to_monlist is_rvar mon
+let rvars (mon : monom)  = monom_to_monlist is_uvar mon
 let hvars (mon : monom)  = monom_to_monlist is_hvar mon
 let params (mon : monom) = monom_to_monlist is_param mon
 
 let monom_filter_vars p_var mon =
   Map.filter ~f:(fun ~key:k ~data:_d -> p_var k) mon
 
-let rvars_monom  (mon : monom) = monom_filter_vars is_rvar mon
+let rvars_monom  (mon : monom) = monom_filter_vars is_uvar mon
 let hvars_monom  (mon : monom) = monom_filter_vars is_hvar mon
 let params_monom (mon : monom) = monom_filter_vars is_param mon
 
 let bound_by_sum (s : sum) = function
-  | Rvar (_, None)   | Param(_, None)   -> false
-  | Rvar (_, Some i) | Param(_, Some i) -> L.mem ~equal:equal_ivar s.ivars i
+  | Uvar (_, None)   | Param(_, None)   -> false
+  | Uvar (_, Some i) | Param(_, Some i) -> L.mem ~equal:equal_ivar s.ivars i
   | Hvar hv -> L.mem ~equal:equal_ivar s.ivars hv.hv_ivar
   | _ -> assert false
 
@@ -765,7 +765,7 @@ let extract_not_bound_from_sum s =
 	 match v with
 	 | Param (_, Some i) when L.mem s.ivars i ~equal:equal_ivar ->
 	    (Map.add new_monom ~key:v ~data:d, vars, degrees)
-	 | Rvar (_, Some i) when L.mem s.ivars i ~equal:equal_ivar ->
+	 | Uvar (_, Some i) when L.mem s.ivars i ~equal:equal_ivar ->
 	    (Map.add new_monom ~key:v ~data:d, vars, degrees)
 	 | _ -> (new_monom, vars @ [v], degrees @ [d])
 	)
@@ -1159,7 +1159,7 @@ let simplify_vars (constraitns : constr_conj) =
   |> remove_canceled_params
   |> clear_equations
 
-(* * Building message *)
+(* * Building message (Laurent polynomial restriction) *)
 
 let linear_single_handle_in_constraint c =
   let free = Set.to_list (free_ivars_constr c) in
@@ -1231,7 +1231,7 @@ let simplify_single_handle_eqs c =
      in
      if (summations <> []) then []
      else
-       let real_variables = L.filter variables ~f:(fun v -> is_rvar v) in
+       let real_variables = L.filter variables ~f:(fun v -> is_uvar v) in
        let parameters = L.filter variables ~f:(fun v -> is_param v) in
        let (numerator, denominator) =
 	 Map.fold c.poly
@@ -1367,7 +1367,7 @@ let simplify constraints =
 let q_violation c =
   let is_constant s =
     (s.ivars = []) && (s.i_ineq = []) &&
-    not(L.exists (Map.to_alist s.monom) ~f:(fun (a,_) -> (is_hvar a) || (is_rvar a) || (is_param a)))
+    not(L.exists (Map.to_alist s.monom) ~f:(fun (a,_) -> (is_hvar a) || (is_uvar a) || (is_param a)))
   in
   not(L.exists (Map.to_alist c.poly) ~f:(fun (s,_c) -> not (is_constant s))) && (c.is_eq = Eq) && not(equal_poly c.poly SP.zero)
 

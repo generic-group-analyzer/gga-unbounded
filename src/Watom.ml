@@ -55,8 +55,8 @@ end
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp
 
-(* random variable (possibly indexed) *)
-type rvar = name_oidx with compare, sexp
+(* uniform variable (possibly indexed) *)
+type uvar = name_oidx with compare, sexp
 
 (* parameter (possibly indexed) *)
 type param = name_oidx with compare, sexp
@@ -70,7 +70,7 @@ type hvar = {
 
 type atom =
   | Param of param
-  | Rvar  of rvar
+  | Uvar  of uvar
   | Hvar  of hvar
   | Nqueries of BI.t
   with compare, sexp
@@ -93,7 +93,7 @@ let equal_group_setting x y = compare_group_setting x y = 0
 let equal_ty x y = compare_ty x y = 0
 let equal_ivar x y = compare_ivar x y = 0
 let equal_ivar_pair x y = compare_ivar_pair x y = 0
-let equal_rvar x y = compare_rvar x y = 0
+let equal_uvar x y = compare_uvar x y = 0
 let equal_param x y = compare_param x y = 0
 let equal_hvar x y = compare_hvar x y = 0
 let equal_atom x y = compare_atom x y = 0
@@ -101,7 +101,7 @@ let equal_atom x y = compare_atom x y = 0
 (* ** Destructors, indicators
  * ----------------------------------------------------------------------- *)
 
-let is_rvar = function Rvar _ -> true | _ -> false
+let is_uvar = function Uvar _ -> true | _ -> false
 
 let is_param = function Param _ -> true | _ -> false
 
@@ -112,7 +112,7 @@ let bi_of_inv = function
   | NoInv -> BI.one
 
 let ivars_atom = function
-  | Rvar (_,Some i)
+  | Uvar (_,Some i)
   | Param (_,Some i) -> Ivar.Set.singleton i
   | Hvar hv          -> Ivar.Set.singleton hv.hv_ivar
   | _                -> Ivar.Set.empty
@@ -120,8 +120,8 @@ let ivars_atom = function
 (* ** Constructors
  * ----------------------------------------------------------------------- *)
 
-let mk_rvar ?idx:(idx=None) name =
-  Rvar (name,idx)
+let mk_uvar ?idx:(idx=None) name =
+  Uvar (name,idx)
 
 let mk_param ?idx:(idx=None) name = Param (name,idx)
 
@@ -129,7 +129,7 @@ let mk_hvar ~idx gname name =
   Hvar {hv_name = name; hv_ivar = idx; hv_gname = gname }
 
 let map_idx ~f = function
-  | Rvar (v,Some i)  -> Rvar (v,Some (f i))
+  | Uvar (v,Some i)  -> Uvar (v,Some (f i))
   | Param (v,Some i) -> Param (v,Some (f i))
   | Hvar hv          -> Hvar { hv with hv_ivar = f hv.hv_ivar }
   | a                -> a
@@ -155,7 +155,7 @@ let pp_name_oidx fmt (s,oi) =
 let pp_ivar_pair fmt (i,j) =
   F.fprintf fmt "%a<>%a" pp_ivar i pp_ivar j
 
-let pp_rvar = pp_name_oidx
+let pp_uvar = pp_name_oidx
 
 let pp_param = pp_name_oidx
 
@@ -167,7 +167,7 @@ let pp_inv fmt = function
   | Inv   -> pp_string fmt "Inv"
 
 let pp_atom fmt = function
-  | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar vi
+  | Uvar(vi)  -> F.fprintf fmt "%a" pp_uvar vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
   | Nqueries(n) ->

@@ -43,7 +43,7 @@
 %token <int> INT
 %token <string> ID
 
-%token <string> RVAR
+%token <string> UVAR
 %token <string> ONAME
 
 
@@ -88,8 +88,8 @@ ivar :
 | idx = ID; QUOTE; n = INT    { if n > 0 then { name = idx; id = n } else assert false }
 
 atom :
-| s = RVAR UNDERSCORE idx = ivar            { mk_rvar s ~idx:(Some idx) }
-| s = RVAR                                  { mk_rvar s }
+| s = UVAR UNDERSCORE idx = ivar            { mk_uvar s ~idx:(Some idx) }
+| s = UVAR                                  { mk_uvar s }
 
 oexp_atom:
 | a = atom;                            { [(NoInv,a)] };
@@ -135,18 +135,18 @@ param_type :
 ;
 
 samp_vars :
-| SAMP; vs = separated_nonempty_list(COMMA,RVAR)
-  { L.map vs ~f:mk_rvar }
+| SAMP; vs = separated_nonempty_list(COMMA,UVAR)
+  { L.map vs ~f:mk_uvar }
 ;
 
 samp_vars_orcl :
-| SAMP; vs = separated_nonempty_list(COMMA,RVAR); SEMICOLON
-  { L.map vs ~f:mk_rvar }
+| SAMP; vs = separated_nonempty_list(COMMA,UVAR); SEMICOLON
+  { L.map vs ~f:mk_uvar }
 ;
 
 typed_var :
-| v = RVAR; COLON; ty = param_type;
-  { (mk_rvar v,ty) }
+| v = UVAR; COLON; ty = param_type;
+  { (mk_uvar v,ty) }
 ;
 
 polys_group:
@@ -161,9 +161,9 @@ cmd :
 | INP; LBRACK; ps = separated_nonempty_list(COMMA,poly); RBRACK; IN; g = GROUP; DOT
   { AddInput(ps,g) }
 | ORACLE; oname = ONAME; LPAR; params = separated_list(COMMA,typed_var); RPAR;
-  EQ; orvar = list(samp_vars_orcl);
+  EQ; ouvar = list(samp_vars_orcl);
   RETURN; ps = separated_list(COMMA,polys_group); DOT
-  { AddOracle(oname,params,List.concat orvar,List.concat ps) }
+  { AddOracle(oname,params,List.concat ouvar,List.concat ps) }
 | WIN; LPAR; params = separated_list(COMMA,typed_var); RPAR;
   EQ;  LPAR; conds  = separated_list(LAND,constr); RPAR; DOT;
   { SetWinning(params,conds) }

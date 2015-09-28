@@ -38,11 +38,7 @@ val isomorphic_constr : constr -> constr -> bool
 
 type constr_conj = constr list
   with sexp, compare
-val equal_constr_conj   : constr_conj -> constr_conj -> bool
-
-type constr_disj = constr_conj list
-  with sexp, compare
-val equal_constr_disj   : constr_disj -> constr_disj -> bool
+val equal_constr_conj : constr_conj -> constr_conj -> bool
 
 (* ** Extracting, mapping, and renaming index variables
  * ----------------------------------------------------------------------- *)

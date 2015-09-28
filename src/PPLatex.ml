@@ -31,7 +31,7 @@ let pp_hvar_latex fmt { hv_name=s; hv_ivar=i; hv_gname=gn } =
   F.fprintf fmt "%s_{%a}^{%a}" s pp_ivar_latex i pp_gname_latex gn
 
 let pp_atom_latex fmt = function
-  | Rvar(vi)  -> F.fprintf fmt "%a" pp_rvar_latex vi
+  | Uvar(vi)  -> F.fprintf fmt "%a" pp_rvar_latex vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param_latex vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar_latex hv
   | Nqueries(n) ->

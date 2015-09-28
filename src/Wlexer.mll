@@ -63,7 +63,7 @@ rule lex = parse
 
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
   | ['i'-'m']chars* as s         { ID s}
-  | chars* as s                  { RVAR s}
+  | chars* as s                  { UVAR s}
 
 and comment = parse
   | "*)"        { () }
