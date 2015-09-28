@@ -32,14 +32,14 @@ end
 
 type name_oidx = string * ivar option with compare, sexp
 
-type rvar = name_oidx with compare, sexp
+type uvar = name_oidx with compare, sexp
 
 type param = name_oidx with compare, sexp
 
 type hvar = { hv_name : string; hv_ivar : ivar; hv_gname : group_name }
   with compare, sexp
 
-type atom = Param of param | Rvar of param | Hvar of hvar | Nqueries of BI.t
+type atom = Param of param | Uvar of uvar | Hvar of hvar | Nqueries of BI.t
   with compare, sexp
 
 module Atom : sig
@@ -52,7 +52,7 @@ val equal_group_setting : group_setting -> group_setting -> bool
 val equal_ty : ty -> ty -> bool
 val equal_ivar : ivar -> ivar -> bool
 val equal_ivar_pair : ivar * ivar -> ivar * ivar -> bool
-val equal_rvar : rvar -> rvar -> bool
+val equal_uvar : uvar -> uvar -> bool
 val equal_param : param -> param -> bool
 val equal_hvar : hvar -> hvar -> bool
 val equal_atom : atom -> atom -> bool
@@ -60,7 +60,7 @@ val equal_atom : atom -> atom -> bool
 (* ** Destructors, indicators
  * ----------------------------------------------------------------------- *)
 
-val is_rvar   : atom -> bool
+val is_uvar   : atom -> bool
 val is_param  : atom -> bool
 val is_hvar   : atom -> bool
 
@@ -71,7 +71,7 @@ val ivars_atom : atom -> Ivar.Set.t
 (* ** Constructors
  * ----------------------------------------------------------------------- *)
 
-val mk_rvar  : ?idx:ivar option -> string -> atom
+val mk_uvar  : ?idx:ivar option -> string -> atom
 val mk_param : ?idx:ivar option -> string -> atom
 val mk_hvar  : idx:ivar -> group_name -> string -> atom
 val map_idx  : f:(ivar -> ivar) -> atom -> atom
@@ -84,7 +84,7 @@ val pp_ivar      : F.formatter -> ivar -> unit
 val pp_name_idx  : F.formatter -> string * ivar -> unit
 val pp_name_oidx : F.formatter -> string * ivar option -> unit
 val pp_ivar_pair : F.formatter -> ivar_pair-> unit
-val pp_rvar      : F.formatter -> string * ivar option -> unit
+val pp_uvar      : F.formatter -> string * ivar option -> unit
 val pp_param     : F.formatter -> string * ivar option -> unit
 val pp_hvar      : F.formatter -> hvar -> unit
 val pp_inv       : F.formatter -> inv -> unit

@@ -10,7 +10,7 @@ open Watom
 
 type is_eq = Eq | InEq with compare, sexp
 
-(* Mapping from atom to exponent, we ensure in mk_monom that only random
+(* Mapping from atom to exponent, we ensure in mk_monom that only uniform
    variables can have negative exponents *)
 type monom = BI.t Atom.Map.t with compare, sexp
 
@@ -48,8 +48,6 @@ type constr = {
 (* constraint conjunction *)
 type constr_conj = constr list with compare, sexp
 
-type constr_disj = constr_conj list with compare, sexp
-
 (* ** Equality functions
  * ----------------------------------------------------------------------- *)
 
@@ -59,8 +57,6 @@ let equal_sum         a b = compare_sum a b = 0
 let equal_poly        a b = compare_poly a b = 0
 let equal_constr      a b = compare_constr a b = 0
 let equal_constr_conj a b = compare_constr_conj a b = 0
-let equal_constr_disj a b = compare_constr_disj a b = 0
-
 
 (* ** Extracting, mapping, and renaming index variables
  * ----------------------------------------------------------------------- *)
@@ -140,27 +136,11 @@ let bound_ivars_constr_conj constraints =
 		   |> Set.union (Ivar.Set.of_list c.qvars)
       )
 
-let all_pairs (ivars : ivar list) =
-  L.filter (L.cartesian_product ivars ivars) ~f:(fun (x,y) -> x <> y)
-  |> L.dedup ~compare:Ivar_Pair.compare
-
-let all_ivar_distinct membership update_t rename ivars_t t =
-  let rec do_split x = function
-    | [] -> [x]
-    | (i,j) :: rest_pairs ->
-       if membership x (i,j) then do_split x rest_pairs
-       else
-	 let ts1 = do_split (update_t x (i,j)) rest_pairs in
-	 let ts2 = do_split (rename x i j) (all_pairs (ivars_t (rename x i j))) in
-	 ts1 @ ts2
-  in
-  do_split t (all_pairs (ivars_t t))
-
-(* Smart constructors
+(* ** Smart constructors
  * ----------------------------------------------------------------------- *)
 
 let mult_monom_atom m (e,a) =
-    if BI.compare e BI.zero < 0 && not (is_rvar a) then
+    if BI.compare e BI.zero < 0 && not (is_uvar a) then
       failwith "mult_monom_atom: only random variables can have negative exponent";
     Map.change m a
       (function
@@ -234,6 +214,22 @@ let map_idx_monom ~f m =
   Atom.Map.fold m
     ~init:Atom.Map.empty
     ~f:(fun ~key:a ~data:bi m -> mult_monom_atom m (bi,Watom.map_idx ~f a))
+
+let all_pairs (ivars : ivar list) =
+  L.filter (L.cartesian_product ivars ivars) ~f:(fun (x,y) -> x <> y)
+  |> L.dedup ~compare:Ivar_Pair.compare
+
+let all_ivar_distinct membership update_t rename ivars_t t =
+  let rec do_split x = function
+    | [] -> [x]
+    | (i,j) :: rest_pairs ->
+       if membership x (i,j) then do_split x rest_pairs
+       else
+	 let ts1 = do_split (update_t x (i,j)) rest_pairs in
+	 let ts2 = do_split (rename x i j) (all_pairs (ivars_t (rename x i j))) in
+	 ts1 @ ts2
+  in
+  do_split t (all_pairs (ivars_t t))
 
 let all_ivar_distinct_poly p =
   let membership s (i,j) = Set.mem (Ivar_Pair.Set.of_list s.i_ineq) (i,j) in

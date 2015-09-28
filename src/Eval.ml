@@ -33,7 +33,7 @@ let empty_eval_state = {
 }
 
 let atom_to_name = function
-  | Rvar (name, _) -> name
+  | Uvar (name, _) -> name
   | Param (name,_) -> name
   | Hvar hv        -> hv.hv_name
   | Nqueries _     -> failwith "impossible: unexpected Nqueries constructor"
@@ -44,7 +44,7 @@ let fold_sum_monom (s : sum) ~f =
 let rvar_to_param (s : sum) (v : atom) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Rvar (name, idx) when name = atom_to_name v -> Param(name, idx)
+      | Uvar (name, idx) when name = atom_to_name v -> Param(name, idx)
       | _ -> k
     in
     Map.add m ~key:new_k ~data:d
@@ -54,7 +54,7 @@ let rvar_to_param (s : sum) (v : atom) =
 let rvar_to_hvar (s : sum) (v : atom) (g : group_name) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Rvar (name, oivar) when name = atom_to_name v ->
+      | Uvar (name, oivar) when name = atom_to_name v ->
         let ivar = Option.value ~default:{name = "_k"; id = 0} oivar in
 	Hvar { hv_name = name; hv_ivar = ivar; hv_gname = g }
       | _ -> k
@@ -137,7 +137,7 @@ let interp_add_oracle params orvars fs estate =
 let rvar_to_irvar (s : sum) (v : atom) (i : ivar) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Rvar(name, None) when name = atom_to_name v -> Rvar(name, Some i)
+      | Uvar(name, None) when name = atom_to_name v -> Uvar(name, Some i)
       | _                                           -> k
     in
     Map.add m ~key:new_k ~data:d
@@ -190,12 +190,12 @@ let iconds_to_wconds conds choices estate =
 		Map.fold p
 		  ~init:SP.zero
 		  ~f:(fun ~key:s ~data:c p ->
-                        SP.(p +! mk_poly [(c, rvar_to_param s (Rvar (v, None)))] ))
+                        SP.(p +! mk_poly [(c, rvar_to_param s (Uvar (v, None)))] ))
 	      | GroupName(gid) ->
 		Map.fold p
 		  ~init:SP.zero
 		  ~f:(fun ~key:s ~data:c p ->
-		        SP.(p +! mk_poly [(c, rvar_to_hvar s (Rvar (v,None)) gid)] )))
+		        SP.(p +! mk_poly [(c, rvar_to_hvar s (Uvar (v,None)) gid)] )))
     in
     mk_constr c.qvars c.q_ineq c.is_eq new_poly
   in
@@ -300,8 +300,8 @@ let knowledge estate =
        ~init:Atom.Map.empty
        ~f:(fun ~key:k ~data:d m ->
 	   let new_k = match k with
-	     | Rvar (name, None) when L.mem estate.es_orvars k ~equal:Atom.equal ->
-		Rvar (name, Some { name = "_k"; id = 0 })
+	     | Uvar (name, None) when L.mem estate.es_orvars k ~equal:Atom.equal ->
+		Uvar (name, Some { name = "_k"; id = 0 })
 	     | _ -> k
 	   in
 	   Map.add m ~key:new_k ~data:d)
@@ -366,8 +366,8 @@ let eval_instr (k1,k2) system nth instr =
   | CaseDistinction(par) ->
     let par =
       match par with
-      | Rvar(name, None) -> Param(name, None)
-      | Rvar(name, Some i) -> Param(name, Some i)
+      | Uvar(name, None) -> Param(name, None)
+      | Uvar(name, Some i) -> Param(name, Some i)
       | _ -> failwith "eval_instr: input should be a random variable"
     in
     let cases = (case_dist (L.nth_exn system (nth-1) ) par) in
