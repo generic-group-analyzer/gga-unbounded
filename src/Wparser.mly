@@ -146,7 +146,7 @@ samp_vars_orcl :
 
 typed_var :
 | v = RVAR; COLON; ty = param_type;
-  { (mk_rvar v,ty) }
+  { match ty with | Fp -> (mk_param v, ty) | _ -> (mk_rvar v,ty) }
 ;
 
 polys_group:

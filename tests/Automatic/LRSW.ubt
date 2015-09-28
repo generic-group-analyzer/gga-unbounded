@@ -1,9 +1,12 @@
+group_setting 3.
+
 sample X,Y.
-input [1,X,Y] in G.
 
-oracle o1(m:Fp) = 
+input [1,X,Y] in G1.
+
+oracle o1(m:G1) = 
   sample A;
-  return [A, Y*A, X*A + m*X*Y*A] in G.
+  return [A, Y*A, X*A + m*X*Y*A] in G1.
 
-win (U:G, V:G, W:G, mm:Fp) =
+win (U:G1, V:G1, W:G1, mm:Fp) =
   ( V - U*Y = 0 /\ W - U*X - mm*U*X*Y = 0 /\ U <> 0 /\ forall i: m_i <> mm /\ mm <> 0 /\ forall i: m_i <> 0).

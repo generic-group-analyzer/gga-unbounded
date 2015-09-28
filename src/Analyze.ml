@@ -266,11 +266,16 @@ let automatic_algorithm system (k1,k2) oc =
 let automatic_tool cmds _file =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let oc = 1234 in
+  let t1 = Unix.gettimeofday() in
   let proven = automatic_algorithm [uniform_bound constraints] (k1,k2) oc in
+  let t2 = Unix.gettimeofday() in
   if proven then
-    let () =  F.printf "Proven!\n(Group order >= %d)\n" (Big_int.int_of_big_int !group_order_bound) in
+    let () = F.printf "Proven! (Group order >= %d) " (Big_int.int_of_big_int !group_order_bound) in
+    let () = F.printf "Time: %F seconds\n" (t2 -. t1) in
     exit 0
   else
+    let () = F.printf "Not proven! " in
+    let () = F.printf "%F seconds\n" (t2 -. t1) in
     exit 1
 (*    F.printf "Not proven\n"*)
 

@@ -1,4 +1,4 @@
-map G1 * G2 -> GT.
+group_setting 3.
 
 sample X,Y.
 
@@ -29,4 +29,5 @@ simplify.
 case_distinction p8_i.
   simplify.
   contradiction.
-simplify.  
+simplify.
+contradiction.

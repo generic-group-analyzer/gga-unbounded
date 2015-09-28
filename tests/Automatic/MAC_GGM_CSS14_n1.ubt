@@ -1,10 +1,12 @@
+group_setting 1.
+
 sample x0,x1.
 
-input [x1] in G.
+input [x1] in G1.
 
 oracle o1(m1:Fp) =
   sample u;
-  return [u, u*(x0 + x1*m1)] in G.
+  return [u, u*(x0 + x1*m1)] in G1.
 
-win (wm1:Fp, wu:G, wU:G) = (forall i: wm1 <> m1_i /\ wu <> 0 /\ wU = wu*(x0 + x1*wm1)).
+win (wm1:Fp, wu:G1, wU:G1) = (forall i: wm1 <> m1_i /\ wu <> 0 /\ wU = wu*(x0 + x1*wm1)).
 

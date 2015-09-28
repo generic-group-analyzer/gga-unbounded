@@ -62,7 +62,7 @@ rule lex = parse
   | ['o']chars* as s { ONAME s }
 
   | '-'?['0'-'9']['0'-'9']* as s { INT(int_of_string(s)) }
-  | ['i'-'m']chars* as s         { ID s}
+  | ['i'-'l']chars* as s         { ID s}
   | chars* as s                  { RVAR s}
 
 and comment = parse
