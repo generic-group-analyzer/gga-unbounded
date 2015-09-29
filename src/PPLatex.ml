@@ -34,10 +34,6 @@ let pp_atom_latex fmt = function
   | Uvar(vi)  -> F.fprintf fmt "%a" pp_rvar_latex vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param_latex vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar_latex hv
-  | Nqueries(n) ->
-     if BI.is_zero n then F.fprintf fmt "|{\\cal Q}|"
-     else if BI.(compare n zero) < 0 then F.fprintf fmt "(|{\\cal Q}|-%s)" (BI.to_string (BI.abs(n)))
-     else if BI.(compare n zero) > 0 then F.fprintf fmt "(|{\\cal Q}|+%s)" (BI.to_string n)
 
 let pp_atom_pow_latex fmt (a,e) =
   if BI.is_one e then
@@ -72,7 +68,7 @@ let pp_sum_latex fmt sum =
 let pp_term_latex fmt (s,c) =
   let one = mk_sum [] [] (mk_monom []) in
   if BI.is_one c then pp_sum_latex fmt s
-  else if Sum.(compare s one) = 0 then F.fprintf fmt "%s" (BI.to_string c) 
+  else if Sum.(compare s one) = 0 then F.fprintf fmt "%s" (BI.to_string c)
   else F.fprintf fmt "%s \\cdot %a" (BI.to_string c) pp_sum_latex s
 
 let pp_poly_latex fmt poly =
@@ -104,7 +100,7 @@ let pp_constr_latex fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq }
                pp_poly_latex p
               (is_eq_to_string_latex is_eq)
   else if qvs <> [] then
-    F.fprintf fmt "\\forall_{%a}. \\ %a %s 0" 
+    F.fprintf fmt "\\forall_{%a}. \\ %a %s 0"
               (pp_list ", " pp_ivar_latex) qvs
               pp_poly_latex p
               (is_eq_to_string_latex is_eq)

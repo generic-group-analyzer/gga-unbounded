@@ -43,6 +43,6 @@ let call_Sage cmd =
   | None ->
     let sts = start_sage () in
     persistent_sage := Some sts;
-    eval_sage sts cmd    
+    eval_sage sts cmd
   | Some sts ->
     eval_sage sts cmd

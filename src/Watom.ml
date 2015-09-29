@@ -12,8 +12,6 @@ type inv = NoInv | Inv with compare, sexp
 
 (* group settings *)
 
-let group_order_bound = ref (BI.of_int 2)
-
 type group_name = G1 | G2 with compare, sexp
 type group_setting = I | II | III with compare, sexp
 type ty = Fp | GroupName of group_name with compare, sexp
@@ -72,7 +70,6 @@ type atom =
   | Param of param
   | Uvar  of uvar
   | Hvar  of hvar
-  | Nqueries of BI.t
   with compare, sexp
 
 (* data structures with atoms *)
@@ -87,25 +84,23 @@ module Atom = struct
   include Comparable.Make(T)
 end
 
-let equal_inv x y = compare_inv x y = 0
-let equal_group_name x y = compare_group_name x y = 0
+let equal_inv           x y = compare_inv           x y = 0
+let equal_group_name    x y = compare_group_name    x y = 0
 let equal_group_setting x y = compare_group_setting x y = 0
-let equal_ty x y = compare_ty x y = 0
-let equal_ivar x y = compare_ivar x y = 0
-let equal_ivar_pair x y = compare_ivar_pair x y = 0
-let equal_uvar x y = compare_uvar x y = 0
-let equal_param x y = compare_param x y = 0
-let equal_hvar x y = compare_hvar x y = 0
-let equal_atom x y = compare_atom x y = 0
+let equal_ty            x y = compare_ty            x y = 0
+let equal_ivar          x y = compare_ivar          x y = 0
+let equal_ivar_pair     x y = compare_ivar_pair     x y = 0
+let equal_uvar          x y = compare_uvar          x y = 0
+let equal_param         x y = compare_param         x y = 0
+let equal_hvar          x y = compare_hvar          x y = 0
+let equal_atom          x y = compare_atom          x y = 0
 
 (* ** Destructors, indicators
  * ----------------------------------------------------------------------- *)
 
-let is_uvar = function Uvar _ -> true | _ -> false
-
+let is_uvar  = function Uvar _  -> true | _ -> false
 let is_param = function Param _ -> true | _ -> false
-
-let is_hvar = function Hvar _ -> true | _ -> false
+let is_hvar  = function Hvar _  -> true | _ -> false
 
 let bi_of_inv = function
   | Inv   -> BI.of_int (-1)
@@ -170,8 +165,3 @@ let pp_atom fmt = function
   | Uvar(vi)  -> F.fprintf fmt "%a" pp_uvar vi
   | Param(vi) -> F.fprintf fmt "%a" pp_param vi
   | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
-  | Nqueries(n) ->
-     let s = BI.sign n in
-     if      s = 0 then F.fprintf fmt "|Q|"
-     else if s < 0 then F.fprintf fmt "(|Q|-%s)" BI.(to_string (abs n))
-     else               F.fprintf fmt "(|Q|+%s)" (BI.to_string n)

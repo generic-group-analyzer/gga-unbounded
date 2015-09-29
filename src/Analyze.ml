@@ -13,37 +13,37 @@ let any_extracted = ref false
 let all_parameters_poly poly parameters free_idxs =
   Map.fold poly
     ~init:parameters
-    ~f:(fun ~key:s ~data:_c parameters' -> 
+    ~f:(fun ~key:s ~data:_c parameters' ->
         let (p_list,_) = L.unzip (params s.monom) in
         L.fold_left p_list
          ~init:parameters'
          ~f:(fun parameters' p ->
            match p with
-           | Param(name, Some i) -> 
+           | Param(name, Some i) ->
               if (Set.mem free_idxs i) then
-                Map.change parameters' p 
-                           (function 
+                Map.change parameters' p
+                           (function
                            | None -> Some 1
                            | Some n -> Some (n+1)
                            )
               else
-                let p_equiv = L.find (Map.keys parameters') 
+                let p_equiv = L.find (Map.keys parameters')
                                ~f:(function
                                    | Param(name', Some i') -> name = name' && not(Set.mem free_idxs i')
                                    | _ -> false
                                ) in
                 begin match p_equiv with
                 | None -> Map.add parameters' ~key:p ~data:1
-                | Some p' -> 
+                | Some p' ->
                    Map.change parameters' p'
-                     (function 
+                     (function
                      | None -> Some 1
                      | Some n -> Some (n+1)
                      )
                 end
            | Param(_, None) ->
-              Map.change parameters' p 
-                         (function 
+              Map.change parameters' p
+                         (function
                          | None -> Some 1
                          | Some n -> Some (n+1)
                          )
@@ -57,7 +57,7 @@ let all_parameters constraints =
    ~init:Atom.Map.empty
    ~f:(fun parameters c -> all_parameters_poly c.poly parameters free_idxs)
 
-let all_parameters_filtered constraints = 
+let all_parameters_filtered constraints =
   all_parameters constraints
   |> Map.filter ~f:(fun ~key:p ~data:_ -> not(known_not_null SP.(of_a p) constraints))
 
@@ -72,7 +72,7 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
         F.printf "%a\n" pp_poly eq.poly;
         F.print_flush();*)
         L.dedup (mons_hvar_free eq.poly) ~compare:compare_monom
-          
+
       else monomials
     in
     if not(L.exists monomials ~f:(fun m -> not(Map.is_empty m))) then
@@ -83,7 +83,7 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
       | mon :: rest_monoms ->
          let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
          if not(overlap (idxs,mon) eq.poly k1 k2) then
-           let () = 
+           let () =
              if (Map.is_empty mon) then F.printf "%sextract (;) %i.\n" (repeat_string "  " depth) counter
              else F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter
            in
@@ -98,20 +98,20 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
   let eq = L.nth_exn constraints (counter-1) in
   if eq.is_eq = InEq then constraints
   else aux constraints [] true
-     
+
 let extract_everything constraints depth (k1,k2) oc =
   let rec aux constraints counter =
     if (counter > L.length constraints) then constraints
-    else 
+    else
       aux (extract_everything_equation constraints depth (k1,k2) counter oc) (counter+1)
   in
   aux constraints 1
-  
+
 let automatic_algorithm system (k1,k2) oc =
   let step goals depth used_parameters_list indices_order_list =
     let constraints = L.hd_exn goals in
     let rest_goals = L.tl_exn goals in
-    
+
     (*F.printf "[%a]\n" (pp_list "," pp_atom) (L.hd_exn used_parameters_list);
     F.print_flush ();*)
 
@@ -173,15 +173,15 @@ let automatic_algorithm system (k1,k2) oc =
     let parameters = all_parameters constraints in
     let max_count = L.fold_left (Map.data parameters) ~init: 0 ~f:(fun m x -> if x > m then x else m) in
     let free_idxs = free_ivars_constr_conj constraints in
-    let parameters = Map.filter (all_parameters constraints) 
+    let parameters = Map.filter (all_parameters constraints)
                         ~f:(fun ~key:p ~data:_ ->
-                          not (L.mem used_parameters p 
+                          not (L.mem used_parameters p
                                  ~equal:(fun p1 p2 ->
                                      match p1, p2 with
                                      | Param(name1,i), Param(name2,j) ->
                                         if (name1 = name2) then
                                           (match i,j with
-                                          | Some i, Some j -> 
+                                          | Some i, Some j ->
                                              if (Set.mem free_idxs i) then equal_ivar i j
                                              else false
                                           | _ -> true
@@ -193,10 +193,10 @@ let automatic_algorithm system (k1,k2) oc =
                         )
     in
     let parameters = (* If previous case_distinction in a parameter, put it in the end of the queue *)
-      Map.fold parameters 
+      Map.fold parameters
         ~init:Atom.Map.empty
         ~f:(fun ~key:p ~data:d m ->
-          if (L.mem used_parameters p 
+          if (L.mem used_parameters p
                  ~equal:(fun p1 p2 ->
                    match p1, p2 with
                    | Param(name1,_), Param(name2,_) -> name1 = name2
@@ -238,7 +238,7 @@ let automatic_algorithm system (k1,k2) oc =
            F.printf "(* If Laurent polynomial then,\n     (%a)@\n*)\n" (pp_list ")@\n \\/  (" (pp_list " /\\ " pp_constr)) new_branches;
            F.print_flush();
            let k = L.length new_constraints in
-           new_constraints @ rest_goals, depth+k-1, 
+           new_constraints @ rest_goals, depth+k-1,
            (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
            (repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
 
@@ -256,8 +256,8 @@ let automatic_algorithm system (k1,k2) oc =
   let rec aux goals depth used_parameters_list (indices_order_list : idx_order_list ) =
     if (L.length goals = 0) then true
     else if (depth = 50) then false
-    else 
-      let new_goals, new_depth, new_used_parameters_list, new_indices_order_list = 
+    else
+      let new_goals, new_depth, new_used_parameters_list, new_indices_order_list =
         step goals depth used_parameters_list indices_order_list in
       aux new_goals new_depth new_used_parameters_list new_indices_order_list
   in
@@ -290,13 +290,13 @@ let analyze_unbounded cmds instrs =
   F.print_flush ();
   close_out file;
   Unix.dup2 shell Unix.stdout;
-  
+
   if (L.length system = 0) then
     F.printf "# Proven!\n(Group order >= %d)@\n" (Big_int.int_of_big_int !group_order_bound)
 
   else
     let constraints = L.nth_exn system (nth-1) in
-    F.printf "Working on goal %d out of %d." nth (L.length system);  
+    F.printf "Working on goal %d out of %d." nth (L.length system);
     F.printf "%s(Group order >= %d)@\n\n" ("       ") (Big_int.int_of_big_int !group_order_bound);
     F.printf "%a" pp_constr_conj constraints;
     let (contradiction, c) = Wrules.contradictions_msg constraints in
@@ -317,9 +317,9 @@ let analyze_unbounded_ws cmds instrs =
     F.fprintf fbuf "<p>Proven!\n(Group order >= %s)\n</p>" (string_of_big_int !group_order_bound)
   | _::_ ->
     let constraints = L.nth_exn system (nth-1) in
-    F.fprintf fbuf 
+    F.fprintf fbuf
        "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
-       nth (L.length system) (string_of_big_int !group_order_bound);  
+       nth (L.length system) (string_of_big_int !group_order_bound);
     F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
     let (contradiction, c) = Wrules.contradictions_msg constraints in
     if contradiction then
@@ -341,9 +341,9 @@ let string_of_state st =
     F.fprintf fbuf "<p>Proven!\n(Group order >= %s)\n</p>" (string_of_big_int !group_order_bound)
   | _::_ ->
     let constraints = L.nth_exn system (nth-1) in
-    F.fprintf fbuf 
+    F.fprintf fbuf
        "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
-       nth (L.length system) (string_of_big_int !group_order_bound);  
+       nth (L.length system) (string_of_big_int !group_order_bound);
     F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
     let (contradiction, c) = Wrules.contradictions_msg (clear_equations constraints) in
     if contradiction then

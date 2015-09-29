@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Abbrevs
 open Big_int
-       
+
 (* ======================================================================= *)
 (* Big int helper functions *)
 
@@ -11,7 +11,7 @@ module BI = struct
   let zero = zero_big_int
   let is_one = eq_big_int one
   let is_zero = eq_big_int zero
-  let opp = minus_big_int             
+  let opp = minus_big_int
   let ( *! ) a b = mult_big_int a b
   let ( +! ) a b = add_big_int a b
   let ( -! ) a b = a +! (opp b)
@@ -58,7 +58,7 @@ let nchoosek_perm list k ~compare =
 (* list of all permutations of a list *)
 let rec perms = function
   | [] -> [[]]
-  | hd::tl -> L.concat (L.map ~f:(insert hd) (perms tl))   
+  | hd::tl -> L.concat (L.map ~f:(insert hd) (perms tl))
 
 (* remove one element for every position of a list *)
 let rec rm_diagonal = function
@@ -118,7 +118,7 @@ let list2multiplicity list ~equal =
                        (L.filter rest ~f:(distinct a))
   in
   aux [] list
-        
+
 let repeat_string s n =
   let rec aux output k =
     if (k = 0) then output
@@ -135,7 +135,7 @@ let first_n list n =
                    else aux (output @ [a]) (k-1) rest
   in
   aux [] n list
-            
+
 let sub_list list1 list2 ~equal =
   L.fold_left list1
      ~init:true
@@ -159,7 +159,7 @@ let rec quicksort_double gt list aux_list =
       let ys, zs, vs, ws = partition_double (gt x) xs us in
       let s1, aux_s1 = quicksort_double gt ys vs in
       let s2, aux_s2 = quicksort_double gt zs ws in
-      s1 @ [x] @ s2, aux_s1 @ [u] @ aux_s2      
+      s1 @ [x] @ s2, aux_s1 @ [u] @ aux_s2
   | _ -> failwith "lists must have the same length"
 
 (* ======================================================================= *)
@@ -205,7 +205,7 @@ let group rel xs =
   let rec go xs y acc = match xs with
     | []                 -> [ L.rev acc ]
     | x::xs when rel x y -> go xs y (x::acc)
-    | x::xs              -> (L.rev acc)::go xs x [x] 
+    | x::xs              -> (L.rev acc)::go xs x [x]
   in
   match xs with
   | []    -> []

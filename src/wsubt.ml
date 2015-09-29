@@ -116,7 +116,7 @@ let process_load s =
 let cache = ref String.Map.empty
 
 let process_eval _fname proofscript =
-  let res = 
+  let res =
     try
       let add_dots l = L.map ~f:(fun s -> s^".") l |> String.concat in
       let def_cmds, proof_cmds = split_proof_script proofscript in
@@ -124,7 +124,7 @@ let process_eval _fname proofscript =
       let istate = ([constraints], 1) in
       let cmds = ref (add_dots def_cmds) in
       (* start with cmds and try lookup, then drop last cmd, try lookup *)
-      let st = 
+      let st =
         List.fold_left proof_cmds
             ~init:istate
             ~f:(fun (st_system, st_nth) cmd ->
@@ -171,7 +171,7 @@ let process_frame frame =
   let open WS in
   let open Frame in
   match frame.opcode with
-  | Opcode.Ping -> 
+  | Opcode.Ping ->
     Some (Frame.create ~opcode:Opcode.Pong ~content:frame.content ())
 
   | Opcode.Close ->
@@ -180,7 +180,7 @@ let process_frame frame =
         Some (Frame.create ~opcode:Opcode.Close
                 ~content:(String.sub frame.content ~pos:0 ~len:2) ())
     else None
- 
+
 
   | Opcode.Pong -> None
 

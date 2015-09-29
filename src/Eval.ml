@@ -36,7 +36,6 @@ let atom_to_name = function
   | Uvar (name, _) -> name
   | Param (name,_) -> name
   | Hvar hv        -> hv.hv_name
-  | Nqueries _     -> failwith "impossible: unexpected Nqueries constructor"
 
 let fold_sum_monom (s : sum) ~f =
   mk_sum s.ivars s.i_ineq (Map.fold s.monom ~init:Atom.Map.empty ~f)

@@ -15,7 +15,7 @@ let input_file filename =
   let lines = go [] in
   let _ = close_in_noerr in_channel in
   String.concat ~sep:"\n" (L.rev lines)
-       
+
 let main =
   if Array.length Sys.argv <> 3 then
     output_string stderr (F.sprintf "usage: %s <definition_file> <instructions_file / 'automatic'> \n" Sys.argv.(0))

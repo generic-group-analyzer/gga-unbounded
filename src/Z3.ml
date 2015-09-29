@@ -41,6 +41,6 @@ let call_z3 cmd =
   | None ->
     let sts = start_z3 () in
     persistent_z3 := Some sts;
-    eval_z3 sts cmd    
+    eval_z3 sts cmd
   | Some sts ->
     eval_z3 sts cmd
