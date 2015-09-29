@@ -14,41 +14,41 @@ let all_parameters_poly poly parameters free_idxs =
   Map.fold poly
     ~init:parameters
     ~f:(fun ~key:s ~data:_c parameters' -> 
-	let (p_list,_) = L.unzip (params s.monom) in
-	L.fold_left p_list
-	 ~init:parameters'
-	 ~f:(fun parameters' p ->
-	   match p with
-	   | Param(name, Some i) -> 
-	      if (Set.mem free_idxs i) then
-		Map.change parameters' p 
-	                   (function 
-			   | None -> Some 1
-			   | Some n -> Some (n+1)
-			   )
-	      else
-		let p_equiv = L.find (Map.keys parameters') 
-		               ~f:(function
-			           | Param(name', Some i') -> name = name' && not(Set.mem free_idxs i')
-				   | _ -> false
-			       ) in
-		begin match p_equiv with
-		| None -> Map.add parameters' ~key:p ~data:1
-		| Some p' -> 
-		   Map.change parameters' p'
-		     (function 
-		     | None -> Some 1
-		     | Some n -> Some (n+1)
-		     )
-		end
-	   | Param(_, None) ->
-	      Map.change parameters' p 
-	                 (function 
-			 | None -> Some 1
-			 | Some n -> Some (n+1)
-			 )
-	   | _ -> assert false
-	    )
+        let (p_list,_) = L.unzip (params s.monom) in
+        L.fold_left p_list
+         ~init:parameters'
+         ~f:(fun parameters' p ->
+           match p with
+           | Param(name, Some i) -> 
+              if (Set.mem free_idxs i) then
+                Map.change parameters' p 
+                           (function 
+                           | None -> Some 1
+                           | Some n -> Some (n+1)
+                           )
+              else
+                let p_equiv = L.find (Map.keys parameters') 
+                               ~f:(function
+                                   | Param(name', Some i') -> name = name' && not(Set.mem free_idxs i')
+                                   | _ -> false
+                               ) in
+                begin match p_equiv with
+                | None -> Map.add parameters' ~key:p ~data:1
+                | Some p' -> 
+                   Map.change parameters' p'
+                     (function 
+                     | None -> Some 1
+                     | Some n -> Some (n+1)
+                     )
+                end
+           | Param(_, None) ->
+              Map.change parameters' p 
+                         (function 
+                         | None -> Some 1
+                         | Some n -> Some (n+1)
+                         )
+           | _ -> assert false
+            )
        )
 
 let all_parameters constraints =
@@ -68,11 +68,11 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
     let eq = L.nth_exn constraints (counter-1) in
     let monomials =
       if extracted then
-	(*let () = F.printf "[%a]\n" (pp_list "," pp_monom) (mons_hvar_free eq.poly) in
-	F.printf "%a\n" pp_poly eq.poly;
-	F.print_flush();*)
-	L.dedup (mons_hvar_free eq.poly) ~compare:compare_monom
-	  
+        (*let () = F.printf "[%a]\n" (pp_list "," pp_monom) (mons_hvar_free eq.poly) in
+        F.printf "%a\n" pp_poly eq.poly;
+        F.print_flush();*)
+        L.dedup (mons_hvar_free eq.poly) ~compare:compare_monom
+          
       else monomials
     in
     if not(L.exists monomials ~f:(fun m -> not(Map.is_empty m))) then
@@ -81,19 +81,19 @@ let extract_everything_equation constraints depth (k1,k2) counter _oc =
       match monomials with
       | [] -> constraints
       | mon :: rest_monoms ->
-	 let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
-	 if not(overlap (idxs,mon) eq.poly k1 k2) then
-	   let () = 
-	     if (Map.is_empty mon) then F.printf "%sextract (;) %i.\n" (repeat_string "  " depth) counter
-	     else F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter
-	   in
-	   F.print_flush ();
-	   any_extracted := true;
-	   let new_constraints = extract_stable_nth constraints (idxs,mon) k1 k2 counter in
+         let idxs = Set.to_list (Set.diff (ivars_monom mon) (Set.union free_ivars (Ivar.Set.of_list eq.qvars))) in
+         if not(overlap (idxs,mon) eq.poly k1 k2) then
+           let () = 
+             if (Map.is_empty mon) then F.printf "%sextract (;) %i.\n" (repeat_string "  " depth) counter
+             else F.printf "%sextract (%a; %a) %i.\n" (repeat_string "  " depth) (pp_list "," pp_ivar) idxs pp_monom mon counter
+           in
+           F.print_flush ();
+           any_extracted := true;
+           let new_constraints = extract_stable_nth constraints (idxs,mon) k1 k2 counter in
 
-	   aux new_constraints [] true
-	 else
-	   aux constraints rest_monoms false
+           aux new_constraints [] true
+         else
+           aux constraints rest_monoms false
   in
   let eq = L.nth_exn constraints (counter-1) in
   if eq.is_eq = InEq then constraints
@@ -119,46 +119,46 @@ let automatic_algorithm system (k1,k2) oc =
     if contradiction then
       let () = F.printf "%scontradiction.\n" (repeat_string "  " depth) in
       if (L.length rest_goals > 0) then
-	let constraints = L.hd_exn rest_goals in
-	let rest_goals = L.tl_exn rest_goals in
-	let used_parameters_list = L.tl_exn used_parameters_list in
-	let indices_order_list = L.tl_exn indices_order_list in
-	let (contradiction_next, _) = Wrules.contradictions_msg (clear_equations constraints) in
-	if (contradiction_next) then
-	  constraints :: rest_goals, depth-1, used_parameters_list, indices_order_list
-	else
-	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
-	  let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
-	  let () = F.printf "%ssimplify.\n" (repeat_string "  " (depth-1)) in
-	  F.print_flush ();
-	  (simplify (simplify_vars (simplify_vars constraints))) :: rest_goals, depth-1, used_parameters_list, indices_order_list
+        let constraints = L.hd_exn rest_goals in
+        let rest_goals = L.tl_exn rest_goals in
+        let used_parameters_list = L.tl_exn used_parameters_list in
+        let indices_order_list = L.tl_exn indices_order_list in
+        let (contradiction_next, _) = Wrules.contradictions_msg (clear_equations constraints) in
+        if (contradiction_next) then
+          constraints :: rest_goals, depth-1, used_parameters_list, indices_order_list
+        else
+          let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
+          let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " (depth-1)) in
+          let () = F.printf "%ssimplify.\n" (repeat_string "  " (depth-1)) in
+          F.print_flush ();
+          (simplify (simplify_vars (simplify_vars constraints))) :: rest_goals, depth-1, used_parameters_list, indices_order_list
       else
-	rest_goals, depth-1, used_parameters_list, indices_order_list
+        rest_goals, depth-1, used_parameters_list, indices_order_list
     else
 
     let () = any_extracted := false in
     let constraints = extract_everything constraints depth (k1,k2) oc in
     let constraints =
       if !any_extracted then
-	let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " depth) in
-	let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " depth) in
-	let () = F.printf "%ssimplify.\n" (repeat_string "  " depth) in
-	F.print_flush();
-	simplify (simplify_vars (simplify_vars constraints))
+        let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " depth) in
+        let () = F.printf "%ssimplify_vars.\n" (repeat_string "  " depth) in
+        let () = F.printf "%ssimplify.\n" (repeat_string "  " depth) in
+        F.print_flush();
+        simplify (simplify_vars (simplify_vars constraints))
       else
-	constraints
+        constraints
     in
 
     let new_eqs = extract_every_handle_monomial_constraints constraints (L.hd_exn indices_order_list) in
     if (L.length new_eqs <> 0) then
-	let () = F.printf "(* Indices trick! *)\n" in
-	F.printf "(*   %a@\n*)@\n"(pp_list "@\n \\/  " pp_constr) new_eqs;
-	F.print_flush();
-	let new_constraints = L.map new_eqs ~f:(fun nc -> simplify (simplify_vars (introduce_branch [nc] constraints ))) in
-	let k = L.length new_eqs in
-	new_constraints @ rest_goals, depth+k-1,
-	(repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
-	(repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
+        let () = F.printf "(* Indices trick! *)\n" in
+        F.printf "(*   %a@\n*)@\n"(pp_list "@\n \\/  " pp_constr) new_eqs;
+        F.print_flush();
+        let new_constraints = L.map new_eqs ~f:(fun nc -> simplify (simplify_vars (introduce_branch [nc] constraints ))) in
+        let k = L.length new_eqs in
+        new_constraints @ rest_goals, depth+k-1,
+        (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
+        (repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
     else
 
     (*F.printf "%a@\n" pp_constr_conj constraints;
@@ -175,38 +175,38 @@ let automatic_algorithm system (k1,k2) oc =
     let free_idxs = free_ivars_constr_conj constraints in
     let parameters = Map.filter (all_parameters constraints) 
                         ~f:(fun ~key:p ~data:_ ->
-			  not (L.mem used_parameters p 
-				 ~equal:(fun p1 p2 ->
-				     match p1, p2 with
-				     | Param(name1,i), Param(name2,j) ->
-					if (name1 = name2) then
-					  (match i,j with
-					  | Some i, Some j -> 
-					     if (Set.mem free_idxs i) then equal_ivar i j
-					     else false
-					  | _ -> true
-					  )
-					else false
-				     | _ -> false
-				 )
-			  )
-			)
+                          not (L.mem used_parameters p 
+                                 ~equal:(fun p1 p2 ->
+                                     match p1, p2 with
+                                     | Param(name1,i), Param(name2,j) ->
+                                        if (name1 = name2) then
+                                          (match i,j with
+                                          | Some i, Some j -> 
+                                             if (Set.mem free_idxs i) then equal_ivar i j
+                                             else false
+                                          | _ -> true
+                                          )
+                                        else false
+                                     | _ -> false
+                                 )
+                          )
+                        )
     in
     let parameters = (* If previous case_distinction in a parameter, put it in the end of the queue *)
       Map.fold parameters 
-	~init:Atom.Map.empty
+        ~init:Atom.Map.empty
         ~f:(fun ~key:p ~data:d m ->
-	  if (L.mem used_parameters p 
-		 ~equal:(fun p1 p2 ->
-		   match p1, p2 with
-		   | Param(name1,_), Param(name2,_) -> name1 = name2
-		   | _ -> false
-		 )
-	     ) then
-	    Map.add m ~key:p ~data:(d-max_count)
-	  else
-	    Map.add m ~key:p ~data:d
-	)
+          if (L.mem used_parameters p 
+                 ~equal:(fun p1 p2 ->
+                   match p1, p2 with
+                   | Param(name1,_), Param(name2,_) -> name1 = name2
+                   | _ -> false
+                 )
+             ) then
+            Map.add m ~key:p ~data:(d-max_count)
+          else
+            Map.add m ~key:p ~data:d
+        )
     in
     let keys = Map.keys parameters in
     let data = Map.data parameters in
@@ -217,40 +217,40 @@ let automatic_algorithm system (k1,k2) oc =
     (*let () = F.printf "[%a]@\n" (pp_list ", " pp_int) _data in*)
       match parameters with
       | [] ->
-	 let new_branches = L.concat (L.map constraints ~f:simplify_single_handle_eqs) in
-	 (*F.printf "%a@\n" pp_constr_conj constraints;
-	 F.print_flush();*)
-	 if (new_branches = [[]] || new_branches = []) then
-	   let indices_order = L.hd_exn indices_order_list in
-	   let free = Set.to_list (free_ivars_constr_conj constraints)
+         let new_branches = L.concat (L.map constraints ~f:simplify_single_handle_eqs) in
+         (*F.printf "%a@\n" pp_constr_conj constraints;
+         F.print_flush();*)
+         if (new_branches = [[]] || new_branches = []) then
+           let indices_order = L.hd_exn indices_order_list in
+           let free = Set.to_list (free_ivars_constr_conj constraints)
                       |> L.filter ~f:(fun i -> not(L.mem indices_order i ~equal:equal_ivar))
-	   in
-	   begin match free with
-	   | [] -> (constraints :: rest_goals), depth+1, used_parameters_list, indices_order_list
-	   | i :: _ ->
-	      let new_indices = insert i indices_order in
-	      let k = L.length new_indices in
-	      (repeat_element constraints k) @ rest_goals, depth+k-1, (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list), new_indices @ (L.tl_exn indices_order_list)
-	   end
+           in
+           begin match free with
+           | [] -> (constraints :: rest_goals), depth+1, used_parameters_list, indices_order_list
+           | i :: _ ->
+              let new_indices = insert i indices_order in
+              let k = L.length new_indices in
+              (repeat_element constraints k) @ rest_goals, depth+k-1, (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list), new_indices @ (L.tl_exn indices_order_list)
+           end
 
-	 else
-	   let new_constraints = L.map new_branches ~f:(fun branch -> simplify (simplify_vars (introduce_branch branch constraints)) ) in
-	   F.printf "(* If Laurent polynomial then,\n     (%a)@\n*)\n" (pp_list ")@\n \\/  (" (pp_list " /\\ " pp_constr)) new_branches;
-	   F.print_flush();
-	   let k = L.length new_constraints in
-	   new_constraints @ rest_goals, depth+k-1, 
-	   (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
-	   (repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
+         else
+           let new_constraints = L.map new_branches ~f:(fun branch -> simplify (simplify_vars (introduce_branch branch constraints)) ) in
+           F.printf "(* If Laurent polynomial then,\n     (%a)@\n*)\n" (pp_list ")@\n \\/  (" (pp_list " /\\ " pp_constr)) new_branches;
+           F.print_flush();
+           let k = L.length new_constraints in
+           new_constraints @ rest_goals, depth+k-1, 
+           (repeat_element (L.hd_exn used_parameters_list) k) @ (L.tl_exn used_parameters_list),
+           (repeat_element (L.hd_exn indices_order_list) k) @ (L.tl_exn indices_order_list)
 
       | p :: _rest_parameters ->
-	 let cases = case_dist constraints p in
-	 let case1 = clear_non_used_idxs (L.nth_exn cases 0) in
-	 let case2 = clear_non_used_idxs (L.nth_exn cases 1) in
-	 let () = F.printf "%scase_distinction %a.\n" (repeat_string "  " depth) pp_atom p in
-	 F.print_flush ();
-	 ([case1] @ [case2] @ rest_goals), depth+1,
-	 [p :: used_parameters] @ [p :: used_parameters] @ rest_used_parameters,
-	 (L.hd_exn indices_order_list) :: indices_order_list
+         let cases = case_dist constraints p in
+         let case1 = clear_non_used_idxs (L.nth_exn cases 0) in
+         let case2 = clear_non_used_idxs (L.nth_exn cases 1) in
+         let () = F.printf "%scase_distinction %a.\n" (repeat_string "  " depth) pp_atom p in
+         F.print_flush ();
+         ([case1] @ [case2] @ rest_goals), depth+1,
+         [p :: used_parameters] @ [p :: used_parameters] @ rest_used_parameters,
+         (L.hd_exn indices_order_list) :: indices_order_list
   in
 
   let rec aux goals depth used_parameters_list (indices_order_list : idx_order_list ) =
@@ -258,7 +258,7 @@ let automatic_algorithm system (k1,k2) oc =
     else if (depth = 50) then false
     else 
       let new_goals, new_depth, new_used_parameters_list, new_indices_order_list = 
-	step goals depth used_parameters_list indices_order_list in
+        step goals depth used_parameters_list indices_order_list in
       aux new_goals new_depth new_used_parameters_list new_indices_order_list
   in
   aux system 0 [[]] [[]]

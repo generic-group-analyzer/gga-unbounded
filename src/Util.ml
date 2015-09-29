@@ -11,7 +11,7 @@ module BI = struct
   let zero = zero_big_int
   let is_one = eq_big_int one
   let is_zero = eq_big_int zero
-  let opp = minus_big_int	      
+  let opp = minus_big_int             
   let ( *! ) a b = mult_big_int a b
   let ( +! ) a b = add_big_int a b
   let ( -! ) a b = a +! (opp b)
@@ -115,10 +115,10 @@ let list2multiplicity list ~equal =
   let rec aux output = function
     | [] -> output
     | a :: rest -> aux ((a, 1+(L.count rest ~f:(equal a))) :: output)
-		       (L.filter rest ~f:(distinct a))
+                       (L.filter rest ~f:(distinct a))
   in
   aux [] list
-	
+        
 let repeat_string s n =
   let rec aux output k =
     if (k = 0) then output
@@ -132,10 +132,10 @@ let first_n list n =
   let rec aux output k = function
     | [] -> output
     | a :: rest -> if (k = 0) then output
-		   else aux (output @ [a]) (k-1) rest
+                   else aux (output @ [a]) (k-1) rest
   in
   aux [] n list
-	    
+            
 let sub_list list1 list2 ~equal =
   L.fold_left list1
      ~init:true

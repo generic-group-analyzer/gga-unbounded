@@ -86,7 +86,7 @@ let ivars_constr constr =
 
 let ivars_conj conj =
   L.fold_left conj ~init:Ivar.Set.empty
-	           ~f:(fun se1 t -> Set.union se1 (ivars_constr t))
+                   ~f:(fun se1 t -> Set.union se1 (ivars_constr t))
 
 let new_ivar taken old_idx =
   let n = old_idx.name in
@@ -133,7 +133,7 @@ let bound_ivars_constr_conj constraints =
   L.fold_left constraints
    ~init:Ivar.Set.empty
    ~f:(fun se c -> Set.union se (bound_ivars_poly c.poly)
-		   |> Set.union (Ivar.Set.of_list c.qvars)
+                   |> Set.union (Ivar.Set.of_list c.qvars)
       )
 
 (* ** Smart constructors
@@ -160,26 +160,26 @@ let sum2Q unused ivs ivs_pairs =
     L.fold_left ivs_pairs
      ~init:[]
      ~f:(fun l (x,y) -> if equal_ivar unused x then y :: l
-			else if equal_ivar unused y then x :: l
-			else l)
+                        else if equal_ivar unused y then x :: l
+                        else l)
   in
   let bound_exceptions = L.filter exceptions ~f:(fun x -> L.mem ivs x ~equal:equal_ivar) in
   let free_exceptions = L.filter exceptions ~f:(fun x -> not (L.mem ivs x ~equal:equal_ivar)) in
   let b = L.fold_left bound_exceptions
            ~init:true
-	   ~f:(fun b i ->
-	       let exceptions_i =
-		 L.fold_left ivs_pairs
+           ~f:(fun b i ->
+               let exceptions_i =
+                 L.fold_left ivs_pairs
                   ~init:[]
-		  ~f:(fun l (x,y) -> if equal_ivar i x then y :: l
-				     else if equal_ivar i y then x :: l
-				     else l)
-	       in
-	       b && (L.fold_left free_exceptions
+                  ~f:(fun l (x,y) -> if equal_ivar i x then y :: l
+                                     else if equal_ivar i y then x :: l
+                                     else l)
+               in
+               b && (L.fold_left free_exceptions
                       ~init:true
-		      ~f:(fun b' j -> b' && (L.mem exceptions_i j ~equal:equal_ivar))
-		    )
-	      )
+                      ~f:(fun b' j -> b' && (L.mem exceptions_i j ~equal:equal_ivar))
+                    )
+              )
   in
   b, BI.of_int (- (L.length exceptions))
 
@@ -190,10 +190,10 @@ let mk_sum ivs ivs_dist mon =
     L.fold_left (Ivar.Set.to_list unused_ivars)
      ~init:([],[])
      ~f:(fun (idxs,qlist) i ->
-	 let b, n = sum2Q i ivs ivar_pairs in
-	 if b then (idxs, Nqueries(n) :: qlist)
-	 else (i :: idxs, qlist)
-	)
+         let b, n = sum2Q i ivs ivar_pairs in
+         if b then (idxs, Nqueries(n) :: qlist)
+         else (i :: idxs, qlist)
+        )
   in
   let ivs = (Ivar.Set.to_list (Set.diff (Ivar.Set.of_list ivs) unused_ivars)) @ again_ivs in
   let new_mon = L.fold_left (list2multiplicity qpart ~equal:Atom.equal)
@@ -225,9 +225,9 @@ let all_ivar_distinct membership update_t rename ivars_t t =
     | (i,j) :: rest_pairs ->
        if membership x (i,j) then do_split x rest_pairs
        else
-	 let ts1 = do_split (update_t x (i,j)) rest_pairs in
-	 let ts2 = do_split (rename x i j) (all_pairs (ivars_t (rename x i j))) in
-	 ts1 @ ts2
+         let ts1 = do_split (update_t x (i,j)) rest_pairs in
+         let ts2 = do_split (rename x i j) (all_pairs (ivars_t (rename x i j))) in
+         ts1 @ ts2
   in
   do_split t (all_pairs (ivars_t t))
 
@@ -242,9 +242,9 @@ let all_ivar_distinct_poly p =
   Map.fold p
     ~init:Sum.Map.empty
     ~f:(fun ~key:s ~data:c p' ->
-	L.fold_left (L.map (all_ivar_distinct membership update rename ivars_t s) ~f:(fun x -> (c,x)) )
-    	  ~init:p'
-      	  ~f:add_poly_term)
+        L.fold_left (L.map (all_ivar_distinct membership update rename ivars_t s) ~f:(fun x -> (c,x)) )
+          ~init:p'
+          ~f:add_poly_term)
 
 let mk_poly terms =
   L.fold_left ~init:Sum.Map.empty ~f:add_poly_term terms |> all_ivar_distinct_poly
@@ -319,8 +319,8 @@ let map_idx_poly ~f p =
     ~init:Sum.Map.empty
     ~f:(fun ~key:s ~data:c p' -> add_poly p'
           (mk_poly [(c, mk_sum (L.map ~f s.ivars)
-			       (L.map ~f:(fun(x,y) -> (f x, f y)) s.i_ineq)
-			       (map_idx_monom ~f s.monom))]))
+                               (L.map ~f:(fun(x,y) -> (f x, f y)) s.i_ineq)
+                               (map_idx_monom ~f s.monom))]))
 
 let all_ivar_distinct_constr_conj conj =
   let membership c (i,j) = L.mem c.q_ineq (i,j) in
@@ -328,7 +328,7 @@ let all_ivar_distinct_constr_conj conj =
   let rename c i j =
     let f = (fun x -> if x = i then j else x) in
     mk_constr (L.map c.qvars ~f) (L.map c.q_ineq ~f:(fun (x,y) -> (f x, f y)))
-	      c.is_eq (map_idx_poly ~f c.poly)
+              c.is_eq (map_idx_poly ~f c.poly)
   in
   let ivars_t c = c.qvars in
   L.map conj ~f:(all_ivar_distinct membership update rename ivars_t)
@@ -390,16 +390,16 @@ let matching_term (c1,s1) (c2,s2) ren =
     match f_list with
       | [] -> output
       | f::rest_f ->
-	 begin match b_list with
-	 | [] -> aux output rest_f b_perms
-	 | b::rest_b ->
-	    let rn = Ivar.Map.of_alist_exn (L.zip_exn (f @ b) (free2 @ bound2)) in
-	    if equal_sum (rename_sum s1 rn) s2 then
-	      let new_rn = Ivar.Map.of_alist_exn ((Map.to_alist ren) @ (L.zip_exn f free2)) in
-	      aux (new_rn :: output) rest_f rest_b
-	    else
-	      aux output f_list rest_b
-	 end
+         begin match b_list with
+         | [] -> aux output rest_f b_perms
+         | b::rest_b ->
+            let rn = Ivar.Map.of_alist_exn (L.zip_exn (f @ b) (free2 @ bound2)) in
+            if equal_sum (rename_sum s1 rn) s2 then
+              let new_rn = Ivar.Map.of_alist_exn ((Map.to_alist ren) @ (L.zip_exn f free2)) in
+              aux (new_rn :: output) rest_f rest_b
+            else
+              aux output f_list rest_b
+         end
     in
     aux [] f_perms b_perms
 
@@ -416,9 +416,9 @@ let matching_poly p1 p2 =
        let ys_residues = rm_diagonal ys in
        let rename_terms terms rn = L.map terms ~f:(fun (s,c) -> (rename_sum s (invert_rn rn), c)) in
        let residues = L.map2_exn renamings ys_residues
-		      ~f:(fun rns terms -> L.map rns ~f:(rename_terms terms)) in
+                      ~f:(fun rns terms -> L.map rns ~f:(rename_terms terms)) in
        L.map2_exn (L.concat renamings) (L.concat residues)
-	~f:(fun rn ys_rest -> aux rest_xs ys_rest rn)
+        ~f:(fun rn ys_rest -> aux rest_xs ys_rest rn)
        |> L.concat
   in
   if (Map.length p1) <> (Map.length p2) then []
@@ -430,7 +430,7 @@ let matching_constr c1 c2 = (* This does not check the q_ineq *)
     L.map2_exn ivars1 ivars2
      ~f:(fun i j ->
           ((L.mem ~equal:equal_ivar c1.qvars i) && (L.mem ~equal:equal_ivar c2.qvars j)) ||
-	  (not ((L.mem ~equal:equal_ivar c1.qvars i)
+          (not ((L.mem ~equal:equal_ivar c1.qvars i)
                 || (L.mem ~equal:equal_ivar c2.qvars j)))
           && (equal_ivar i j))
     |> L.fold_left ~init:true ~f:(&&)
@@ -463,7 +463,7 @@ let pp_atom_pow fmt (a,e) =
 let pp_monom fmt mon =
   if (Map.to_alist mon)<>[] then
     F.fprintf fmt "@[<hov 2>%a@]"
-	      (pp_list " * " pp_atom_pow) (Map.to_alist mon)
+              (pp_list " * " pp_atom_pow) (Map.to_alist mon)
   else
     F.fprintf fmt "@[<hov 2>1@]"
 
@@ -516,10 +516,10 @@ let pp_poly fmt poly =
 let pp_constr fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq } =
   if qinqs<>[] then
     F.fprintf fmt "@[<hov 2>%a(%a) %a %s 0@]"
-	      (pp_binder "forall") qvs
-	      (pp_list ", " pp_ivar_pair) qinqs
-	       pp_poly p
-	      (is_eq_to_string is_eq)
+              (pp_binder "forall") qvs
+              (pp_list ", " pp_ivar_pair) qinqs
+               pp_poly p
+              (is_eq_to_string is_eq)
   else
     F.fprintf fmt "@[<hov 2>%a%a %s 0@]" (pp_binder "forall") qvs pp_poly p (is_eq_to_string is_eq)
 

@@ -1,6 +1,6 @@
-(*s Websocket server for web interface *)
+(* * Websocket server for web interface *)
 
-(*i*)
+(* ** Imports and abbreviations *)
 open Abbrevs
 open Core_kernel.Std
 open Lwt.Infix
@@ -8,17 +8,8 @@ open Lwt.Infix
 module WS = Websocket_lwt
 module YS = Yojson.Safe
 
-(*
-open Util
-
-open Tactic
-open CoreRules
-open TheoryTypes
-open TheoryState
-
-module PU = ParserUtil
-(*i*)
-*)
+(* ** Global vars
+ * ----------------------------------------------------------------------- *)
 
 let ps_file  = ref ""
 let ps_files = ref []
@@ -26,8 +17,8 @@ let disallow_save = ref false
 let new_dir = ref ""
 let server_name = ref "localhost"
 
-(*i ----------------------------------------------------------------------- i*)
-(* \hd{Eval} *)
+(* ** Eval
+ * ----------------------------------------------------------------------- *)
 
 let split_proof_script s =
   let rec find_dot i =
@@ -70,8 +61,8 @@ let split_proof_script s =
   in
   go 0 false [] []
 
-(*i ----------------------------------------------------------------------- i*)
-(* \hd{Handlers for different commands} *)
+(* ** Handlers for different commands
+ * ----------------------------------------------------------------------- *)
 
 let frame_of_string s = WS.Frame.create ~content:s ()
 
@@ -134,20 +125,20 @@ let process_eval _fname proofscript =
       let cmds = ref (add_dots def_cmds) in
       (* start with cmds and try lookup, then drop last cmd, try lookup *)
       let st = 
-	List.fold_left proof_cmds
+        List.fold_left proof_cmds
             ~init:istate
-	    ~f:(fun (st_system, st_nth) cmd ->
+            ~f:(fun (st_system, st_nth) cmd ->
                   let new_cmds = !cmds^cmd^"." in
                   try
                     let new_st = Map.find_exn !cache new_cmds in
-		    cmds := new_cmds;
-		    new_st
+                    cmds := new_cmds;
+                    new_st
                   with
                     Not_found ->
-		      let st = Eval.eval_instrs (Wparse.p_instrs (cmd^ ".")) (k1,k2) st_system st_nth in
-		      cache := Map.add !cache ~key:(new_cmds) ~data:st;
-		      cmds := new_cmds;
-		      st
+                      let st = Eval.eval_instrs (Wparse.p_instrs (cmd^ ".")) (k1,k2) st_system st_nth in
+                      cache := Map.add !cache ~key:(new_cmds) ~data:st;
+                      cmds := new_cmds;
+                      st
                )
       in
       Result.Ok (Analyze.string_of_state st)
@@ -173,8 +164,8 @@ let process_eval _fname proofscript =
   in
   frame_of_string (YS.to_string res)
 
-(*i ----------------------------------------------------------------------- i*)
-(* \hd{Frame processing and server setup} *)
+(* ** Frame processing and server setup
+ * ----------------------------------------------------------------------- *)
 
 let process_frame frame =
   let open WS in
@@ -244,8 +235,8 @@ let run_server _node _service =
 let rec wait_forever () =
   Lwt_unix.sleep 1000.0 >>= wait_forever
 
-(*i ----------------------------------------------------------------------- i*)
-(* \hd{Argument handling} *)
+(* * Argument handling
+ * ----------------------------------------------------------------------- *)
 
 let main =
   Printexc.record_backtrace true;

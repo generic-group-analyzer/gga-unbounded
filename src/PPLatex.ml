@@ -99,15 +99,15 @@ let is_eq_to_string_latex = function
 let pp_constr_latex fmt { qvars = qvs; q_ineq = qinqs; poly = p; is_eq = is_eq } =
   if qinqs<>[] then
     F.fprintf fmt "\\forall_{%a \\ : \\ %a}. \\ %a %s 0"
-	      (pp_list ", " pp_ivar_latex) qvs
-	      (pp_list ", " pp_ivar_pair_latex) qinqs
-	       pp_poly_latex p
-	      (is_eq_to_string_latex is_eq)
+              (pp_list ", " pp_ivar_latex) qvs
+              (pp_list ", " pp_ivar_pair_latex) qinqs
+               pp_poly_latex p
+              (is_eq_to_string_latex is_eq)
   else if qvs <> [] then
     F.fprintf fmt "\\forall_{%a}. \\ %a %s 0" 
-	      (pp_list ", " pp_ivar_latex) qvs
-	      pp_poly_latex p
-	      (is_eq_to_string_latex is_eq)
+              (pp_list ", " pp_ivar_latex) qvs
+              pp_poly_latex p
+              (is_eq_to_string_latex is_eq)
   else
     F.fprintf fmt "%a %s 0" pp_poly_latex p (is_eq_to_string_latex is_eq)
 
@@ -118,8 +118,8 @@ let pp_constr_conj_latex fmt conj =
     | [] -> ()
     | c :: rest ->
        F.fprintf f "%s.   <p><script type=\"math/tex\" mode=\"display\">%a</script></p>\n\n"
-		 (string_of_int n)
-		 pp_constr_latex c;
+                 (string_of_int n)
+                 pp_constr_latex c;
        F.fprintf f "%t" (aux (n+1) rest)
   in
   aux 1 conj fmt

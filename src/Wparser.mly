@@ -115,8 +115,8 @@ poly :
 | MINUS; f = poly            { SP.( zero -! f) }
 | LPAR; f = poly; RPAR       { f };
 | LPAR; f = poly; RPAR; EXP; e = INT { if e < 0
-				       then failwith "negative exponent only allowed for variables"
-				       else Wrules.power_poly f (BI.of_int e) }
+                                       then failwith "negative exponent only allowed for variables"
+                                       else Wrules.power_poly f (BI.of_int e) }
 
 qprefix :
 | FORALL; ids = separated_list(COMMA,ID); COLON { L.map ~f:(fun s -> { name = s; id = 0}) ids };
