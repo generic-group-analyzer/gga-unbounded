@@ -415,13 +415,25 @@ let lower_idx i j indices_order =
   (L.mem indices_order j ~equal:equal_ivar) &&
   aux indices_order
 
-let extract_handle_monomial (eq : constr) mon indices_order =
+let overlap2 (idxs,mon) p k1 k2 =
+  let handle_mons = L.filter (mons p) 
+    ~f:(fun m -> hvars m <> [] && not(equal_monom (hvars_monom m) (hvars_monom mon)))
+                    |> L.dedup ~compare:compare_monom
+  in
+  let system = L.fold_left handle_mons
+                ~init:String.Set.empty
+                ~f:(fun se hm -> Set.union se (system_handle_term (idxs,mon) hm k1 k2))
+  in
+  (smt_solver (list2string (Set.to_list system) ", " "[" "]")) &&
+    not(L.exists (mons p) ~f:(fun m -> hvars m <> []))
+
+let extract_handle_monomial (eq : constr) mon indices_order (k1,k2) =
   (* mon is a handle monomial *)
   let ivar_h h = Set.choose_exn (ivars_atom h) in
   let (hvars_mon, _) = L.unzip (hvars mon) in
   let rvars_mon = rvars_monom mon in
   let ivars_mon = ivars_monom (rvars_mon) in
-  if ((L.length hvars_mon) = 1) && (Set.mem ivars_mon (ivar_h (L.hd_exn hvars_mon))) then
+  if ((L.length hvars_mon) = 1) && (Set.mem ivars_mon (ivar_h (L.hd_exn hvars_mon))) then    
     let rest_monoms = L.map (Map.keys eq.poly) ~f:(fun s -> s.monom)
                       |> L.filter ~f:(fun x ->
                         let (hvars_x, _) = L.unzip (hvars x) in
@@ -450,9 +462,15 @@ let extract_handle_monomial (eq : constr) mon indices_order =
     else
       []
   else
-    []
+    if not(overlap2 (Set.to_list ivars_mon, mon) eq.poly k1 k2) then
+      let new_constr = mk_constr eq.qvars eq.q_ineq Eq (coeff eq.poly ([], mon)) in
+      let new_mon = Map.filter mon ~f:(fun ~key:v ~data:_ -> is_hvar v) in
+      let mon_zero = mk_constr eq.qvars eq.q_ineq Eq (mk_poly [(BI.one, mk_sum [] [] new_mon)]) in
+      [new_constr; mon_zero]
+    else
+      []
 
-let extract_every_handle_monomial (eq : constr) indices_order=
+let extract_every_handle_monomial (eq : constr) indices_order (k1,k2)=
   let h_mons = L.map (Map.keys eq.poly) ~f:(fun s -> if s.ivars = [] then [s.monom] else [])
                |> L.concat
                |> L.filter ~f:(fun m -> let (hvs,_) = L.unzip (hvars m) in hvs <> [])
@@ -460,13 +478,13 @@ let extract_every_handle_monomial (eq : constr) indices_order=
   L.fold_left h_mons
    ~init:[]
    ~f:(fun eqs hmon ->
-     eqs @ (extract_handle_monomial eq hmon indices_order)
+     eqs @ (extract_handle_monomial eq hmon indices_order (k1,k2))
    )
 
-let extract_every_handle_monomial_constraints (constraints : constr_conj) indices_order =
+let extract_every_handle_monomial_constraints (constraints : constr_conj) indices_order (k1,k2) =
   L.map constraints
    ~f:(fun c ->
-     if c.is_eq = Eq then extract_every_handle_monomial c indices_order
+     if c.is_eq = Eq then extract_every_handle_monomial c indices_order (k1,k2)
      else []
    )
   |> L.concat

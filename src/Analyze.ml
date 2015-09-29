@@ -149,7 +149,7 @@ let automatic_algorithm system (k1,k2) oc =
         constraints
     in
 
-    let new_eqs = extract_every_handle_monomial_constraints constraints (L.hd_exn indices_order_list) in
+    let new_eqs = extract_every_handle_monomial_constraints constraints (L.hd_exn indices_order_list) (k1,k2) in
     if (L.length new_eqs <> 0) then
         let () = F.printf "(* Indices trick! *)\n" in
         F.printf "(*   %a@\n*)@\n"(pp_list "@\n \\/  " pp_constr) new_eqs;
