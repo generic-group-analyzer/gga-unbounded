@@ -1,5 +1,8 @@
+(* Optimal Structure-Preserving Signatures in Asymmetric Bilinear Groups *)
+
 group_setting 3.
 
+sample A1,A2,A3,A4.
 sample U,V,W,Z.
 
 input [U] in G1.
@@ -11,8 +14,11 @@ oracle o1(M:G1, N:G2) =
          [(1-U*N)*R^-1] in G2.
 
 win (wM:G1, wN:G2, wR:G1, wS:G1, wT:G2) = 
-  (forall i: wM <> M_i   /\ 
-   forall i: wN <> N_i   /\ 
+  (forall i: wM - M_i + 
+             A1*(wN - N_i) +
+             A2*(wR - R_i) + 
+             A3*(wS - (Z-R_i*V-M_i*W)) +
+             A4*(wT - ((1-U*N_i)*R_i^-1)) <> 0  /\ 
    wR*V + wS + wM*W = Z  /\
    wR*wT + U*wN = 1
   ).

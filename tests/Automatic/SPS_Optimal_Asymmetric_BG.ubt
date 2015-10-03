@@ -1,0 +1,16 @@
+group_setting 3.
+
+sample A.
+sample U1,U2,V,W1,Z.
+
+input [U1,U2] in G1.
+input [V,W1,Z] in G2.
+
+oracle o1(M1:G1, N1:G2, N2:G2) =
+  sample R;
+  return [ R, Z-R*V-M1*W1 ] in G1,
+         [ (1-N1*U1-N2*U2)*R^-1 ] in G2.
+
+win (wM1:G1, wN1:G2, wN2:G2, wR:G1, wS:G1, wT:G2) = 
+  (forall i: (wM1 - M1_i)+A*(wN1 - N1_i)+A^2*(wN2 - N2_i) <> 0 /\ 
+    wR*V+wS+wM1*W1 = Z /\ wR*wT+wN1*U1+wN2*U2 = 1).

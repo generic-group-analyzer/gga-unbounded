@@ -1,0 +1,12 @@
+group_setting 3.
+
+sample X,Y.
+
+input [X,Y] in G2.
+
+oracle o1(M:Fp) =
+  sample H;
+  return [H, H*X + H*M*Y] in G1.
+
+win (wM:Fp, wH:G1, wK:G1) = (forall i: wM <> M_i /\ wH <> 0 /\ wK = wH*X + wH*wM*Y).
+

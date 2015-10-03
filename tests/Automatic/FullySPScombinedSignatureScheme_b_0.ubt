@@ -1,0 +1,19 @@
+(* Effcient Fully Structure-Preserving Signatures for Large Messages *)
+(* cryptoeprint:2015:824 *)
+group_setting 3.
+
+sample Y,V.
+
+input [V] in G1.
+input [Y] in G2.
+
+oracle o1(M:G2) =
+  sample Z;
+  return [Z^-1] in G1,
+         [Z*(Y+V), Z*(M+V*Y)] in G2.
+
+win (wM:G2, wR:G1, wS:G2, wT:G2) = 
+  (forall i: wM <> M_i   /\ 
+   wR*wS = Y + V  /\
+   wR*wT = wM + V*Y
+  ).

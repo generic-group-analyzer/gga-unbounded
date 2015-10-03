@@ -1,4 +1,4 @@
-group_setting 3.
+group_setting 2.
 
 sample V,W.
 
@@ -6,7 +6,6 @@ input [V,W] in G1.
 
 oracle o1(M:G2) =
   sample R;
-  return [ R ] in G1,
-         [ R, M*V + R^2 + W] in G2.
+  return [ R, M*V + R^2 + W] in G2.
 
-win (wM:G2, wR1:G1, wR2:G2, wS:G2) = (forall i: wM <> M_i /\ wR1 = wR2 /\ wS = V*wM + wR1*wR2 + W).
+win (wM:G2, wR2:G2, wS:G2) = (forall i: wM <> M_i /\ wS = V*wM + wR2*wR2 + W).
