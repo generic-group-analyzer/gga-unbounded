@@ -84,6 +84,18 @@ module Atom = struct
   include Comparable.Make(T)
 end
 
+(* data structures with atoms *)
+module Uvar = struct
+  module T = struct
+    type t = uvar
+    let compare = compare_uvar
+    let sexp_of_t = sexp_of_uvar
+    let t_of_sexp = uvar_of_sexp
+  end
+  include T
+  include Comparable.Make(T)
+end
+
 let equal_inv           x y = compare_inv           x y = 0
 let equal_group_name    x y = compare_group_name    x y = 0
 let equal_group_setting x y = compare_group_setting x y = 0

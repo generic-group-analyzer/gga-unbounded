@@ -16,7 +16,14 @@ type is_eq = Eq | InEq with compare, sexp
 type monom = { monom_map : BI.t Atom.Map.t }
   with compare, sexp
 
+
+type umonom = BI.t Uvar.Map.t
+
 let monom_of_map m = { monom_map = m } (* DO NOT EXPORT *)
+
+type coeff = { cmon_unif : umonom ; cmom : monom}
+
+type summand = Mon of monom | Coeff of coeff
 
 (* [Sum ivars: monom] where monom can contain bound and free index variables *)
 type sum = {

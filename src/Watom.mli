@@ -47,6 +47,10 @@ module Atom : sig
   include Comparable.S with type t := atom
 end
 
+module Uvar : sig
+  include Comparable.S with type t := uvar
+end
+
 val equal_inv           : inv           -> inv           -> bool
 val equal_group_name    : group_name    -> group_name    -> bool
 val equal_group_setting : group_setting -> group_setting -> bool
