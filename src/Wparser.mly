@@ -47,16 +47,19 @@
 %token <string> ONAME
 
 
-%token EXTRACT
-%token CASE_DIST
+(*%token EXTRACT
+%token CASE_DIST*)
 %token GOTO
-%token ADMIT
+%token COEFF
+%token SIMPLIFY
+(*%token ADMIT
 %token CONTRADICTION
 %token UNIFORM
-%token SIMPLIFY
-%token SIMPLIFYVARS
+%token SIMPLIFYVARS*)
 
 %token QUOTE
+
+%token ONE
 
 /************************************************************************/
 /* Priority & associativity */
@@ -97,17 +100,22 @@ oexp_atom:
 | a = atom; EXP; LPAR; n = INT; RPAR   { repeat_element ((if n < 0 then Inv else NoInv),a) (abs n) }
 
 monom:
+| ONE;                                 { mk_monom [] };
 | atoms=separated_list(STAR,oexp_atom) { mk_monom (L.concat atoms) };
 
+summand:
+| m = monom    { Mon(m) };
+
 sum:
-| LPAR; SUM; ids=separated_list(COMMA,ID); COLON; m = monom; RPAR
-   { mk_sum (L.map ~f:(fun s -> { name = s; id = 0}) ids ) [] m };
+| LPAR; SUM; ids=separated_list(COMMA,ID); COLON; m = summand; RPAR
+   { mk_sum (L.map ~f:(fun s -> ({ name = s; id = 0}, Ivar.Set.empty)) ids ) m };
 
 poly :
+| ONE;                       { SP.one }
 | n = INT                    { SP.of_const (BI.of_int n) }
-| a = atom                   { SP.of_a a }
+| a = atom                   { SP.of_atom a }
 | a = atom; EXP; n = INT
-  { mk_poly [(BI.one, mk_sum [] [] (mk_monom (repeat_element ((if n < 0 then Inv else NoInv),a) (abs n))))] }
+  { mk_poly [(BI.one, mk_sum [] (Mon(mk_monom (repeat_element ((if n < 0 then Inv else NoInv),a) (abs n)))))] }
 | s = sum                    { mk_poly [(BI.one, s)] }
 | f = poly; PLUS; g = poly   { SP.( f +! g) }
 | f = poly; STAR; g = poly   { SP.( f *! g) }
@@ -127,7 +135,7 @@ is_eq :
 
 constr :
 | qp = qprefix? f = poly sep = is_eq g = poly?
-  { mk_constr (optional ~d:[] qp) [] sep SP.(f -! (optional ~d:zero g)) };
+  { mk_constr (L.map (optional ~d:[] qp) ~f:(fun i -> (i, Ivar.Set.empty))) sep SP.(f -! (optional ~d:zero g)) };
 
 param_type :
 | s = GROUP { GroupName(s) }
@@ -166,18 +174,24 @@ cmd :
   { AddOracle(oname,params,List.concat ouvar,List.concat ps) }
 | WIN; LPAR; params = separated_list(COMMA,typed_var); RPAR;
   EQ;  LPAR; conds  = separated_list(LAND,constr); RPAR; DOT;
-  { SetWinning(params,conds) }
+  { SetWinning(params, mk_conj [] conds) }
 ;
 
 cmds_t : cs = list(cmd); EOF; { cs };
 
 instr :
-| EXTRACT; LPAR; idxs = separated_list(COMMA,ivar); SEMICOLON; m = monom; RPAR; n = INT; DOT;
-  { Extract((idxs,m),n) }
+(*| EXTRACT; LPAR; idxs = separated_list(COMMA,ivar); SEMICOLON; m = monom; RPAR; n = INT; DOT;
+  { Extract((idxs,Mon(m)),n) }
 | CASE_DIST; a = atom; DOT;
   { CaseDistinction(a) }
+*)
 | GOTO; n = INT; DOT;
   { GoTo(n) }
+| COEFF; LPAR; uM = monom; RPAR; n = INT; DOT;
+  { IntrCoeff(mon2umon uM, n) }
+| SIMPLIFY; DOT;
+  { Simplify }
+(*
 | ADMIT; DOT;
   { Admit }
 | CONTRADICTION; DOT;
@@ -188,5 +202,6 @@ instr :
   { Simplify }
 | SIMPLIFYVARS; DOT;
   { SimplifyVars }
+*)
 
 instrs_t : instrs = list(instr); EOF; { instrs };

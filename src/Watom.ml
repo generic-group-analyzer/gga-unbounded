@@ -35,6 +35,7 @@ module Ivar = struct
 end
 
 (* index variables *)
+(*
 type ivar_pair = (ivar * ivar) with compare, sexp
 
 (* data structures for ivar pairs *)
@@ -49,6 +50,8 @@ module Ivar_Pair = struct
   include T
   include Comparable.Make(T)
 end
+*) 
+
 
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp
@@ -101,7 +104,7 @@ let equal_group_name    x y = compare_group_name    x y = 0
 let equal_group_setting x y = compare_group_setting x y = 0
 let equal_ty            x y = compare_ty            x y = 0
 let equal_ivar          x y = compare_ivar          x y = 0
-let equal_ivar_pair     x y = compare_ivar_pair     x y = 0
+(*let equal_ivar_pair     x y = compare_ivar_pair     x y = 0 *)
 let equal_uvar          x y = compare_uvar          x y = 0
 let equal_param         x y = compare_param         x y = 0
 let equal_hvar          x y = compare_hvar          x y = 0
@@ -159,9 +162,10 @@ let pp_name_oidx fmt (s,oi) =
   | None   -> pp_string fmt s
   | Some i -> pp_name_idx fmt (s,i)
 
+(*
 let pp_ivar_pair fmt (i,j) =
   F.fprintf fmt "%a<>%a" pp_ivar i pp_ivar j
-
+*)
 let pp_uvar = pp_name_oidx
 
 let pp_param = pp_name_oidx

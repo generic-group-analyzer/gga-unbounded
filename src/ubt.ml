@@ -22,8 +22,9 @@ let main =
   else
     let scmds = input_file Sys.argv.(1) in
     if Sys.argv.(2) = "automatic" then
-      let filename = String.prefix Sys.argv.(1) ((String.length Sys.argv.(1)) - 4) in
-      Analyze.automatic_tool scmds (filename ^ ".prf")
+      assert false
+(*      let filename = String.prefix Sys.argv.(1) ((String.length Sys.argv.(1)) - 4) in
+      Analyze.automatic_tool scmds (filename ^ ".prf")*)
     else
       let instrs = input_file Sys.argv.(2) in
       Analyze.analyze_unbounded scmds instrs

@@ -22,12 +22,13 @@ module Ivar : sig
   include Comparable.S with type t := ivar
 end
 
+(*
 type ivar_pair = ivar * ivar with compare, sexp
 
 module Ivar_Pair : sig
   include Comparable.S with type t := ivar_pair
 end
-
+*)
 type name_oidx = string * ivar option with compare, sexp
 
 type uvar = name_oidx with compare, sexp
@@ -56,7 +57,7 @@ val equal_group_name    : group_name    -> group_name    -> bool
 val equal_group_setting : group_setting -> group_setting -> bool
 val equal_ty            : ty            -> ty            -> bool
 val equal_ivar          : ivar          -> ivar          -> bool
-val equal_ivar_pair     : ivar * ivar   -> ivar * ivar   -> bool
+(*val equal_ivar_pair     : ivar * ivar   -> ivar * ivar   -> bool *)
 val equal_uvar          : uvar          -> uvar          -> bool
 val equal_param         : param         -> param         -> bool
 val equal_hvar          : hvar          -> hvar          -> bool
@@ -90,7 +91,7 @@ val pp_gname     : F.formatter -> group_name -> unit
 val pp_ivar      : F.formatter -> ivar -> unit
 val pp_name_idx  : F.formatter -> string * ivar -> unit
 val pp_name_oidx : F.formatter -> string * ivar option -> unit
-val pp_ivar_pair : F.formatter -> ivar_pair-> unit
+(* val pp_ivar_pair : F.formatter -> ivar_pair-> unit *)
 val pp_uvar      : F.formatter -> string * ivar option -> unit
 val pp_param     : F.formatter -> string * ivar option -> unit
 val pp_hvar      : F.formatter -> hvar -> unit

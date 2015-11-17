@@ -17,6 +17,7 @@ module BI = struct
   let ( -! ) a b = a +! (opp b)
   let ( /! ) a b = div_big_int a b
   let of_int = big_int_of_int
+  let to_int = int_of_big_int
   let to_string = string_of_big_int
   let t_of_sexp se = big_int_of_string (string_of_sexp se)
   let sexp_of_t bi = sexp_of_string (string_of_big_int bi)
@@ -30,6 +31,14 @@ end
 
 (* ======================================================================= *)
 (* List functions *)
+
+let unzip1 list =
+  let (list1,_) = L.unzip list in
+  list1
+
+let unzip2 list =
+  let (_,list2) = L.unzip list in
+  list2
 
 let repeat_element x n =
   let rec aux output k =

@@ -14,6 +14,7 @@ let newline = '\n'
 let chars = ['a'-'z' 'A'-'Z' '0'-'9']
 
 rule lex = parse
+  | '1'     { ONE }
   | blank+  { lex lexbuf }
   | "(*"    { comment lexbuf; lex lexbuf }
   | newline { Lexing.new_line lexbuf; lex lexbuf }
@@ -46,14 +47,17 @@ rule lex = parse
   | "win"    { WIN }
   | "in"     { IN }
 
-  | "extract"  { EXTRACT }
-  | "case_distinction"  { CASE_DIST }
+(*  | "extract"  { EXTRACT }
+  | "case_distinction"  { CASE_DIST }*)
   | "goto"     { GOTO }
+  | "coeff"    { COEFF }
+  | "simplify" { SIMPLIFY }
+(*
   | "admit"    { ADMIT }
   | "contradiction" { CONTRADICTION }
   | "uniform" { UNIFORM }
   | "simplify" { SIMPLIFY }
-  | "simplify_vars" { SIMPLIFYVARS }
+  | "simplify_vars" { SIMPLIFYVARS }*)
 
   | "G1"             { GROUP(G1) }
   | "G2"             { GROUP(G2) }

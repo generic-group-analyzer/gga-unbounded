@@ -5,6 +5,8 @@ open Wrules
 open Watom
 open Util
 
+
+(*
 type param_list = int Atom.Map.t with compare, sexp
 type idx_order_list = ivar list list with compare, sexp
 
@@ -279,6 +281,8 @@ let automatic_tool cmds _file =
     exit 1
 (*    F.printf "Not proven\n"*)
 
+*)
+
 let analyze_unbounded _cmds _intrs = ()
 (*
 let analyze_unbounded cmds instrs =
@@ -309,6 +313,25 @@ let analyze_unbounded_ws cmds instrs =
   let open Big_int in
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
+  let buf  = Buffer.create 127 in
+  let fbuf = F.formatter_of_buffer buf in
+  begin match system with
+  | [] ->
+    F.fprintf fbuf "<p>Proven!\n</p>"
+  | _::_ ->
+    let constraints = L.nth_exn system (nth-1) in
+    F.fprintf fbuf
+       "<p>Working on goal %d out of %d.</p>\n" nth (L.length system);
+    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints.constrs;
+    ()
+  end;
+  F.pp_print_flush fbuf ();
+  Buffer.contents buf
+(*
+let analyze_unbounded_ws cmds instrs =
+  let open Big_int in
+  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
+  let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
 
   let buf  = Buffer.create 127 in
   let fbuf = F.formatter_of_buffer buf in
@@ -330,7 +353,7 @@ let analyze_unbounded_ws cmds instrs =
   F.pp_print_flush fbuf ();
   Buffer.contents buf
 
-
+*)
 let string_of_state st =
   let open Big_int in
   let (system, nth) = st in
@@ -338,18 +361,14 @@ let string_of_state st =
   let fbuf = F.formatter_of_buffer buf in
   begin match system with
   | [] ->
-    F.fprintf fbuf "<p>Proven!\n(Group order >= %s)\n</p>" (string_of_big_int !group_order_bound)
+    F.fprintf fbuf "<p>Proven!\n\n</p>"
   | _::_ ->
     let constraints = L.nth_exn system (nth-1) in
     F.fprintf fbuf
-       "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
-       nth (L.length system) (string_of_big_int !group_order_bound);
-    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
-    let (contradiction, c) = Wrules.contradictions_msg (clear_equations constraints) in
-    if contradiction then
-      let () = F.fprintf fbuf "\n<p>Contradiction!\n</p>" in
-      F.fprintf fbuf "<p><script type=\"math/tex\" mode=\"display\">%a\n</script></p>" PPLatex.pp_constr_latex c
-    else ()
+       "<p>Working on goal %d out of %d.</p>\n" nth (L.length system);
+    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints.constrs;
+   ()
   end;
   F.pp_print_flush fbuf ();
   Buffer.contents buf
+
