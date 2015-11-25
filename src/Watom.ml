@@ -34,25 +34,6 @@ module Ivar = struct
   include Comparable.Make(T)
 end
 
-(* index variables *)
-(*
-type ivar_pair = (ivar * ivar) with compare, sexp
-
-(* data structures for ivar pairs *)
-module Ivar_Pair = struct
-  module T = struct
-    type t = ivar_pair
-    let sort_pair (i,j) = if (compare_ivar i j <= 0) then (i,j) else (j,i)
-    let compare pair1 pair2 = compare_ivar_pair (sort_pair pair1) (sort_pair pair2)
-    let sexp_of_t = sexp_of_ivar_pair
-    let t_of_sexp = ivar_pair_of_sexp
-  end
-  include T
-  include Comparable.Make(T)
-end
-*) 
-
-
 (* name with optional index *)
 type name_oidx = string * ivar option with compare, sexp
 

@@ -1,0 +1,16 @@
+group_setting 3.
+
+sample V,W.
+
+input [V,W] in G1.
+
+oracle o1(M:G2) =
+  sample R;
+  return [ R ] in G1,
+         [ R^-1, (M*V + W)*R^-1] in G2.
+
+win (wM:G2, wR:G1, wT:G2, wS:G2) = (forall i: wM <> M_i /\ wR*wT = 1 /\ wR*wS = V*wM + W).
+
+proof.
+
+

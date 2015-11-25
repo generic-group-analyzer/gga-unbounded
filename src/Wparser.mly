@@ -47,15 +47,12 @@
 %token <string> ONAME
 
 
-(*%token EXTRACT
-%token CASE_DIST*)
 %token GOTO
 %token COEFF
 %token SIMPLIFY
-(*%token ADMIT
+%token CASE_DIST
 %token CONTRADICTION
 %token UNIFORM
-%token SIMPLIFYVARS*)
 
 %token QUOTE
 
@@ -162,6 +159,8 @@ polys_group:
 { List.map (fun p -> (p,g)) ps}
 
 cmd :
+| GROUPSETTING ONE; DOT
+  { GroupSetting(I) }
 | GROUPSETTING i = INT; DOT
   { GroupSetting(match i with 1 -> I | 2 -> II | 3 -> III | _ -> failwith "invalid group setting") }
 | vs = samp_vars; DOT
@@ -180,28 +179,19 @@ cmd :
 cmds_t : cs = list(cmd); EOF; { cs };
 
 instr :
-(*| EXTRACT; LPAR; idxs = separated_list(COMMA,ivar); SEMICOLON; m = monom; RPAR; n = INT; DOT;
-  { Extract((idxs,Mon(m)),n) }
-| CASE_DIST; a = atom; DOT;
-  { CaseDistinction(a) }
-*)
 | GOTO; n = INT; DOT;
   { GoTo(n) }
 | COEFF; LPAR; uM = monom; RPAR; n = INT; DOT;
   { IntrCoeff(mon2umon uM, n) }
 | SIMPLIFY; DOT;
   { Simplify }
-(*
-| ADMIT; DOT;
-  { Admit }
+| CASE_DIST; a = atom; DOT;
+  { CaseDistinction(a) }
 | CONTRADICTION; DOT;
-  { Admit }
+  { Contradiction }
 | UNIFORM; DOT;
   { Uniform }
-| SIMPLIFY; DOT;
-  { Simplify }
-| SIMPLIFYVARS; DOT;
-  { SimplifyVars }
-*)
+
+
 
 instrs_t : instrs = list(instr); EOF; { instrs };

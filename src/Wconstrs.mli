@@ -19,13 +19,15 @@ type umonom = private { umonom_map : BI.t Uvar.Map.t }
   with sexp, compare
 val equal_umonom : umonom -> umonom -> bool
 
-type coeff = private { cmon_unif : umonom ; cmon : monom }
+type coeff = private { coeff_unif : umonom ; coeff_mon : monom }
   with sexp, compare
 val equal_coeff : coeff -> coeff -> bool
 
 type summand = Mon of monom | Coeff of coeff
+  with sexp, compare
+val equal_summand : summand -> summand -> bool
 
-type sum = private { ivarsK : (ivar * Ivar.Set.t) list; summand : summand; }
+type sum = private { sum_ivarsK : (ivar * Ivar.Set.t) list; sum_summand : summand; }
   with sexp, compare
 val equal_sum : sum -> sum -> bool
 
@@ -37,11 +39,11 @@ type poly = private { poly_map : BI.t Sum.Map.t }
   with sexp, compare
 val equal_poly : poly -> poly -> bool
 
-type constr = private { qvarsK : (ivar * Ivar.Set.t) list; is_eq : is_eq; poly : poly; }
+type constr = private { constr_ivarsK : (ivar * Ivar.Set.t) list; constr_is_eq : is_eq; constr_poly : poly; }
   with sexp, compare
 val equal_constr : constr -> constr -> bool
 
-type conj = private { fvarsK : (ivar * Ivar.Set.t) list; constrs : constr list; }
+type conj = private { conj_ivarsK : (ivar * Ivar.Set.t) list; conj_constrs : constr list; }
   with sexp, compare
 
 val equal_conj : conj -> conj -> bool
@@ -61,34 +63,20 @@ val ivars_poly   : poly        -> Ivar.Set.t
 val ivars_constr : constr      -> Ivar.Set.t
 val ivars_conj   : conj        -> Ivar.Set.t
 
-val free_ivars_sum         : sum         -> Ivar.Set.t
-(*val free_ivars_poly        : poly        -> Ivar.Set.t*)
-val free_ivars_constr      : constr      -> Ivar.Set.t
-val free_ivars_conj : conj -> Ivar.Set.t
-
-val bound_ivars_poly        : poly        -> Ivar.Set.t
-(*
-val bound_ivars_constr_conj : conj -> Ivar.Set.t*)
-
 val renaming_away_from : Ivar.Set.t -> Ivar.Set.t ->  ivar Ivar.Map.t * Ivar.Set.t
 val apply_renaming : ivar Ivar.Map.t -> ivar -> ivar
 
-val rename_sum    : sum    -> ivar Ivar.Map.t -> sum
-val rename_poly   : poly   -> ivar Ivar.Map.t -> poly
-val rename_constr : constr -> ivar Ivar.Map.t -> constr
-
-val map_idx_monom  : f:(ivar -> ivar) -> monom -> monom
-val map_idx_umonom : f:(ivar -> ivar) -> umonom -> umonom
-val map_idx_poly   : f:(ivar -> ivar) -> poly  -> poly
+val map_idx_monom   : f:(ivar -> ivar) -> monom   -> monom
+val map_idx_umonom  : f:(ivar -> ivar) -> umonom  -> umonom
+val map_idx_coeff   : f:(ivar -> ivar) -> coeff   -> coeff
+val map_idx_summand : f:(ivar -> ivar) -> summand -> summand
+val map_idx_sum     : f:(ivar -> ivar) -> sum     -> sum
+val map_idx_poly    : f:(ivar -> ivar) -> poly    -> poly
 
 val map_atom_monom : f:(key:atom -> data:BI.t -> Big_int.big_int Watom.Atom.Map.t -> Big_int.big_int Watom.Atom.Map.t)
   -> monom -> monom
 
 val new_ivar : Ivar.Set.t -> ivar -> ivar
-
-(* FIXME: NOT EXPORT THESE *)
-val monom_of_map : BI.t Atom.Map.t -> monom
-val poly_of_map : BI.t Sum.Map.t -> poly
 
 (* ** Smart constructors
  * ----------------------------------------------------------------------- *)
@@ -99,6 +87,9 @@ val mk_sum    : (ivar * Ivar.Set.t) list -> summand -> sum
 val mk_poly   : (BI.t * sum) list -> poly
 val mk_constr : (ivar * Ivar.Set.t) list -> is_eq -> poly -> constr
 val mk_conj   : (ivar * Ivar.Set.t) list -> constr list -> conj
+
+val mk_monom_of_map : BI.t Atom.Map.t -> monom
+val mk_poly_of_map  : BI.t Sum.Map.t  -> poly 
 
 (* val all_pairs: ivar list -> ivar_pair list *)
 (* val all_ivar_distinct_poly : poly -> poly *)
@@ -112,6 +103,7 @@ val mult_monom_atom : monom -> BI.t * atom -> monom
 val add_poly_term : poly ->  BI.t * sum -> poly
 val mult_monom : monom -> monom -> monom
 val mult_umonom : umonom -> umonom -> umonom
+val mult_summand : summand -> summand -> summand
 val mult_sum : sum -> sum -> sum
 val mult_term : BI.t * sum -> BI.t * sum -> BI.t * sum
 

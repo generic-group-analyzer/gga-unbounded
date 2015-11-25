@@ -15,7 +15,7 @@ SHRDIR := $(DESTDIR)$(PREFIX)/share/generic-unbounded
 
 .PHONY: install wsubt.native ubt.native notabs
 
-all: wsubt.native ubt.native
+all: wsubt.native
 
 ubt.native: notabs
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./ubt.native

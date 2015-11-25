@@ -1,5 +1,5 @@
+open Core_kernel.Std
 module YS = Yojson.Safe
-
 
 (* Set the env variable UBT_PATH *)
 let sage_script = Format.sprintf "sage -python %s/groebner_basis.py" (Sys.getenv "UBT_PATH")
@@ -27,6 +27,9 @@ let eval_sage sts cmd =
   let res = input_line c_in in
   (*i print_endline (">>> got "^res); i*)
   res
+  |> String.filter ~f:(fun c -> c <> '\n')
+  |> String.filter ~f:(fun c -> c <> ' ')
+  |> String.filter ~f:(fun c -> c <> '"')
 
 let stop_sage sts =
   if sts.sts_closed then failwith "sage process already closed";

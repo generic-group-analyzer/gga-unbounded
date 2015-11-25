@@ -1,10 +1,10 @@
 open Core_kernel.Std
 open Abbrevs
-open Wconstrs
-open Wrules
+
+(*open Wrules
 open Watom
 open Util
-
+*)
 
 (*
 type param_list = int Atom.Map.t with compare, sexp
@@ -283,34 +283,25 @@ let automatic_tool cmds _file =
 
 *)
 
-let analyze_unbounded _cmds _intrs = ()
-(*
 let analyze_unbounded cmds instrs =
-  let file = open_out "log" in
-  let shell = Unix.dup Unix.stdout in
-  Unix.dup2 (Unix.descr_of_out_channel file) Unix.stdout;
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
-  F.print_flush ();
-  close_out file;
-  Unix.dup2 shell Unix.stdout;
 
   if (L.length system = 0) then
-    F.printf "# Proven!\n(Group order >= %d)@\n" (Big_int.int_of_big_int !group_order_bound)
-
+    F.printf "# Proven!\n"
   else
     let constraints = L.nth_exn system (nth-1) in
-    F.printf "Working on goal %d out of %d." nth (L.length system);
-    F.printf "%s(Group order >= %d)@\n\n" ("       ") (Big_int.int_of_big_int !group_order_bound);
-    F.printf "%a" pp_constr_conj constraints;
-    let (contradiction, c) = Wrules.contradictions_msg constraints in
+    F.printf "Working on goal %d out of %d.\n" nth (L.length system);
+    F.printf "%a" WconstrsUtil.pp_conj constraints;
+    ()
+    (* let (contradiction, c) = Wrules.contradictions_msg constraints in
     if contradiction then
       F.printf "Contradiction!\n%a" pp_constr c
-    else ()
- *)
+    else ()*)
+
 
 let analyze_unbounded_ws cmds instrs =
-  let open Big_int in
+  (*let open Big_int in*)
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
   let buf  = Buffer.create 127 in
@@ -322,7 +313,7 @@ let analyze_unbounded_ws cmds instrs =
     let constraints = L.nth_exn system (nth-1) in
     F.fprintf fbuf
        "<p>Working on goal %d out of %d.</p>\n" nth (L.length system);
-    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints.constrs;
+    F.fprintf fbuf "%a" PPLatex.pp_conj_latex constraints;
     ()
   end;
   F.pp_print_flush fbuf ();
@@ -355,7 +346,7 @@ let analyze_unbounded_ws cmds instrs =
 
 *)
 let string_of_state st =
-  let open Big_int in
+  (*let open Big_int in*)
   let (system, nth) = st in
   let buf  = Buffer.create 127 in
   let fbuf = F.formatter_of_buffer buf in
@@ -366,7 +357,7 @@ let string_of_state st =
     let constraints = L.nth_exn system (nth-1) in
     F.fprintf fbuf
        "<p>Working on goal %d out of %d.</p>\n" nth (L.length system);
-    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints.constrs;
+    F.fprintf fbuf "%a" PPLatex.pp_conj_latex constraints;
    ()
   end;
   F.pp_print_flush fbuf ();

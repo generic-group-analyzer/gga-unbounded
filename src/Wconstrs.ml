@@ -20,7 +20,6 @@ type umonom = { umonom_map : BI.t Uvar.Map.t }
  with compare, sexp
 
 let monom_of_map  m = { monom_map  = m } (* DO NOT EXPORT *)
-let umonom_of_map m = { umonom_map = m } (* DO NOT EXPORT *)
 
 let monom_filter_vars p_var mon =
   monom_of_map (Map.filter mon.monom_map ~f:(fun ~key:k ~data:_d -> p_var k))
@@ -37,14 +36,14 @@ let mon2umon monom =
   in
   { umonom_map =  Uvar.Map.of_alist_exn (L.map map_list ~f:(fun (m,d) -> (uvar_f m,d))) }
 
-type coeff = { cmon_unif : umonom ; cmon : monom } with compare, sexp
+type coeff = { coeff_unif : umonom ; coeff_mon : monom } with compare, sexp
 
 type summand = Mon of monom | Coeff of coeff with compare, sexp
 
 (* [Sum ivars: summand] where summand can contain bound and free index variables *)
 type sum = {
-  ivarsK   : (ivar * Ivar.Set.t) list;
-  summand  : summand;
+  sum_ivarsK   : (ivar * Ivar.Set.t) list;
+  sum_summand  : summand;
 } with compare, sexp
 
 (* data structures with sums *)
@@ -68,39 +67,32 @@ let poly_of_map m = { poly_map = m } (* DO NOT EXPORT *)
 
 (* forall-constraint in paper *)
 type constr = {
-  qvarsK : (ivar * Ivar.Set.t) list;
-  is_eq  : is_eq;
-  poly   : poly;
+  constr_ivarsK : (ivar * Ivar.Set.t) list;
+  constr_is_eq  : is_eq;
+  constr_poly   : poly;
 } with compare, sexp
 
 (* constraint conjunction *)
 type conj = {
-  fvarsK  : (ivar * Ivar.Set.t) list;
-  constrs : constr list;
+  conj_ivarsK  : (ivar * Ivar.Set.t) list;
+  conj_constrs : constr list;
 } with compare, sexp
 
 (* ** Equality functions
  * ----------------------------------------------------------------------- *)
 
-let equal_is_eq       a b = compare_is_eq       a b = 0
-let equal_monom       a b = compare_monom       a b = 0
-let equal_umonom      a b = compare_umonom      a b = 0
-let equal_coeff       a b = compare_coeff       a b = 0
-let equal_summand     a b = compare_summand     a b = 0
-let equal_sum         a b = compare_sum         a b = 0
-let equal_poly        a b = compare_poly        a b = 0
-let equal_constr      a b = compare_constr      a b = 0
-let equal_conj        a b = compare_conj        a b = 0
+let equal_is_eq    a b = compare_is_eq    a b = 0
+let equal_monom    a b = compare_monom    a b = 0
+let equal_umonom   a b = compare_umonom   a b = 0
+let equal_coeff    a b = compare_coeff    a b = 0
+let equal_summand  a b = compare_summand  a b = 0
+let equal_sum      a b = compare_sum      a b = 0
+let equal_poly     a b = compare_poly     a b = 0
+let equal_constr   a b = compare_constr   a b = 0
+let equal_conj     a b = compare_conj     a b = 0
 
 (* ** Extracting index variables (all, free, bound)
  * ----------------------------------------------------------------------- *)
-
-(*
-let ivars_pairs pairs =
-  L.fold_left pairs
-   ~init:Ivar.Set.empty
-   ~f:(fun s (i,j) -> Set.union s (Ivar.Set.of_list [i;j]))
-*)
 
 let ivars_monom (mon : monom) =
   Map.fold mon.monom_map
@@ -109,15 +101,15 @@ let ivars_monom (mon : monom) =
 
 let ivars_umonom umon = ivars_monom (umon2mon umon)
 
-let ivars_coeff (coeff : coeff) = ivars_monom coeff.cmon
+let ivars_coeff (coeff : coeff) = ivars_monom coeff.coeff_mon
 
 let ivars_summand = function
   | Mon(m) -> ivars_monom m
   | Coeff(c) -> ivars_coeff c
 
 let ivars_sum sum =
-  Set.union (ivars_summand sum.summand) (Ivar.Set.of_list (unzip1 sum.ivarsK))
-  |> Set.union (L.fold_left (unzip2 sum.ivarsK)
+  Set.union (ivars_summand sum.sum_summand) (Ivar.Set.of_list (unzip1 sum.sum_ivarsK))
+  |> Set.union (L.fold_left (unzip2 sum.sum_ivarsK)
                  ~init:Ivar.Set.empty
                  ~f:Set.union
                )
@@ -130,58 +122,21 @@ let ivars_poly (poly : poly) =
        )
 
 let ivars_constr (constr : constr) =
-  Set.union (ivars_poly constr.poly) (Ivar.Set.of_list (unzip1 constr.qvarsK))
-  |> Set.union (L.fold_left (unzip2 constr.qvarsK)
+  Set.union (ivars_poly constr.constr_poly) (Ivar.Set.of_list (unzip1 constr.constr_ivarsK))
+  |> Set.union (L.fold_left (unzip2 constr.constr_ivarsK)
                  ~init:Ivar.Set.empty
                  ~f:Set.union
                )
 
 let ivars_conj (conj : conj) =
-  L.fold_left conj.constrs
+  L.fold_left conj.conj_constrs
     ~init:Ivar.Set.empty
     ~f:(fun se1 t -> Set.union se1 (ivars_constr t))
-  |> Set.union (Ivar.Set.of_list (unzip1 conj.fvarsK))
-  |> Set.union (L.fold_left (unzip2 conj.fvarsK)
+  |> Set.union (Ivar.Set.of_list (unzip1 conj.conj_ivarsK))
+  |> Set.union (L.fold_left (unzip2 conj.conj_ivarsK)
                  ~init:Ivar.Set.empty
                  ~f:Set.union
                )
-
-let free_ivars_sum s =
-  Set.diff (ivars_sum s) (Ivar.Set.of_list (unzip1 s.ivarsK))
-
-let free_ivars_poly (poly : poly) =
-  Map.fold poly.poly_map
-    ~init:Ivar.Set.empty
-    ~f:(fun ~key:s ~data:_c se -> Set.union se (free_ivars_sum s))
-
-let free_ivars_constr c =
-  Set.diff (free_ivars_poly c.poly) (Ivar.Set.of_list (unzip1 c.qvarsK))
-
-let free_ivars_conj conj =
-  let free_in_constrs =
-    L.fold_left conj.constrs
-     ~init:Ivar.Set.empty
-     ~f:(fun s c -> Set.union s (free_ivars_constr c))
-  in
-  let free_in_exists = Ivar.Set.of_list (unzip1 conj.fvarsK) in
-  if (Set.subset free_in_constrs free_in_exists) then
-    free_in_exists
-  else
-    failwith "There are free variables that are not defined in the Exists quantification"
-
-
-let bound_ivars_poly (poly : poly) =
-  Map.fold poly.poly_map
-    ~init:Ivar.Set.empty
-    ~f:(fun ~key:s ~data:_c se -> Set.union se (Ivar.Set.of_list (unzip1 s.ivarsK)))
-(*
-let bound_ivars_conj constraints =
-  L.fold_left constraints
-    ~init:Ivar.Set.empty
-    ~f:(fun se c ->
-          Set.union se (bound_ivars_poly c.poly)
-          |> Set.union (Ivar.Set.of_list c.qvars))
-*)
 
 (* ** Renaming: I
  * ----------------------------------------------------------------------- *)
@@ -226,13 +181,13 @@ let mk_monom atoms =
     ~f:(fun m (inv,a) -> mult_monom_atom m (bi_of_inv inv,a))
 
 let mk_coeff umonom monom =
-  { cmon_unif = umonom ; cmon = monom }
+  { coeff_unif = umonom ; coeff_mon = monom }
 
 let well_formed_exceptions varsK =
   let rec aux indices sets =
     match indices, sets with
     | [], [] -> true
-    | i :: rest_indices, set :: rest_sets ->
+    | _i :: rest_indices, set :: rest_sets ->
       if (L.exists rest_indices ~f:(fun j -> Set.mem set j)) then false
       else aux rest_indices rest_sets
     | _ -> assert false
@@ -242,7 +197,7 @@ let well_formed_exceptions varsK =
 
 let mk_sum ivarsK (summand : summand) =
   if (well_formed_exceptions ivarsK) then
-    { ivarsK = ivarsK; summand = summand }
+    { sum_ivarsK = ivarsK; sum_summand = summand }
   else
     failwith "Not well formed sum"
 
@@ -265,12 +220,22 @@ let mk_poly terms =
 let mk_constr qvarsK is_eq (poly : poly) =
   let qvarsK = L.filter qvarsK ~f:(fun (i,_) -> Set.mem (ivars_poly poly) i) in
   if (well_formed_exceptions qvarsK) then
-    { qvarsK = qvarsK; is_eq = is_eq; poly = poly }
+    { constr_ivarsK = qvarsK; constr_is_eq = is_eq; constr_poly = poly }
   else
     failwith "Not well formed constr"
 
 let mk_conj fvarsK constrs =
-  { fvarsK = fvarsK; constrs = constrs }
+  { conj_ivarsK = fvarsK; conj_constrs = constrs }
+
+let mk_monom_of_map map =
+  if L.exists (Map.data map) ~f:BI.is_zero then
+    failwith "monom cannot containt a map to zero"
+  else monom_of_map map
+
+let mk_poly_of_map map =
+  if L.exists (Map.data map) ~f:BI.is_zero then
+    failwith "poly cannot containt a map to zero"
+  else poly_of_map map
 
 (* ** Arithmetic operations
  * ----------------------------------------------------------------------- *)
@@ -290,7 +255,7 @@ let map_idx_umonom ~f (u : umonom) =
   mon2umon (map_idx_monom ~f (umon2mon u))
 
 let map_idx_coeff ~f (c : coeff) =
-  mk_coeff (map_idx_umonom ~f c.cmon_unif) (map_idx_monom ~f c.cmon)
+  mk_coeff (map_idx_umonom ~f c.coeff_unif) (map_idx_monom ~f c.coeff_mon)
 
 let map_idx_summand ~f = function
   | Mon(m) -> Mon(map_idx_monom ~f m)
@@ -307,10 +272,10 @@ let add_poly p1 p2 =
   poly_of_map (Map.merge p1.poly_map p2.poly_map ~f:add_term)
 
 let map_idx_sum ~f (s : sum) =
-  let ivars, isetsK = L.unzip s.ivarsK in
+  let ivars, isetsK = L.unzip s.sum_ivarsK in
   mk_sum
     (L.zip_exn (L.map ~f ivars) (L.map ~f:(Ivar.Set.map ~f) isetsK) )
-    (map_idx_summand ~f s.summand)
+    (map_idx_summand ~f s.sum_summand)
 
 let map_idx_poly ~f (p : poly) =
   Map.fold p.poly_map
@@ -345,15 +310,15 @@ let mult_summand s1 s2 =
   | _ -> failwith "We don't allow multiplication of Coeff's"
 
 let mult_sum s1 s2 =
-  let free_vars = Set.union (free_ivars_sum s1) (free_ivars_sum s2) in
-  let (rn1,taken) = renaming_away_from free_vars (Ivar.Set.of_list (unzip1 s1.ivarsK)) in
-  let ivars1 = L.map (unzip1 s1.ivarsK) ~f:(apply_renaming rn1) in
-  let isetsK1 = L.map (unzip2 s1.ivarsK) ~f:(fun set -> Ivar.Set.map set ~f:(apply_renaming rn1)) in
-  let summand1 = map_idx_summand  ~f:(apply_renaming rn1) s1.summand in
-  let (rn2,_) = renaming_away_from taken (Ivar.Set.of_list (unzip1 s2.ivarsK)) in
-  let ivars2 = L.map (unzip1 s2.ivarsK) ~f:(apply_renaming rn2)in
-  let isetsK2 = L.map (unzip2 s2.ivarsK) ~f:(fun set -> Ivar.Set.map set ~f:(apply_renaming rn2)) in
-  let summand2 = map_idx_summand ~f:(apply_renaming rn2) s2.summand in
+  let used_vars = Set.union (ivars_sum s1) (ivars_sum s2) in
+  let (rn1,taken) = renaming_away_from used_vars (Ivar.Set.of_list (unzip1 s1.sum_ivarsK)) in
+  let ivars1 = L.map (unzip1 s1.sum_ivarsK) ~f:(apply_renaming rn1) in
+  let isetsK1 = L.map (unzip2 s1.sum_ivarsK) ~f:(fun set -> Ivar.Set.map set ~f:(apply_renaming rn1)) in
+  let summand1 = map_idx_summand  ~f:(apply_renaming rn1) s1.sum_summand in
+  let (rn2,_) = renaming_away_from taken (Ivar.Set.of_list (unzip1 s2.sum_ivarsK)) in
+  let ivars2 = L.map (unzip1 s2.sum_ivarsK) ~f:(apply_renaming rn2)in
+  let isetsK2 = L.map (unzip2 s2.sum_ivarsK) ~f:(fun set -> Ivar.Set.map set ~f:(apply_renaming rn2)) in
+  let summand2 = map_idx_summand ~f:(apply_renaming rn2) s2.sum_summand in
   mk_sum (L.zip_exn (ivars1 @ ivars2) (isetsK1 @ isetsK2)) (mult_summand summand1 summand2)
 
 let mult_term (c1,s1) (c2,s2) =
@@ -383,23 +348,3 @@ module SP = struct
   let of_atom a = of_monom [(NoInv,a)]
   let one = of_const BI.one
 end
-
-(* ** Renaming: II
- * ----------------------------------------------------------------------- *)
-
-let rename_sum s rn =
-  let ivars = L.map (unzip1 s.ivarsK) ~f:(apply_renaming rn) in
-  let isetsK = L.map (unzip2 s.ivarsK) ~f:(fun set -> Ivar.Set.map set ~f:(apply_renaming rn)) in
-  let summand = map_idx_summand ~f:(apply_renaming rn) s.summand in
-  mk_sum (L.zip_exn ivars isetsK) summand
-
-let rename_poly (p : poly) rn =
-  Map.fold p.poly_map
-     ~init:SP.zero
-     ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(c,rename_sum s rn)]) ) )
-
-let rename_constr c rn =
-  let qvars = L.map (unzip1 c.qvarsK) ~f:(apply_renaming rn) in
-  let qsetsK = L.map (unzip2 c.qvarsK) ~f:(fun set -> Ivar.Set.map set ~f:(apply_renaming rn)) in
-  let poly = rename_poly c.poly rn in
-  mk_constr (L.zip_exn qvars qsetsK) c.is_eq poly

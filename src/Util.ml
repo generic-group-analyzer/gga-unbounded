@@ -47,6 +47,12 @@ let repeat_element x n =
   in
   aux [] n
 
+let rec dedup_preserve_order ~equal = function
+  | [] -> []
+  | a :: rest ->
+    if L.mem rest a ~equal then dedup_preserve_order ~equal rest
+    else a :: (dedup_preserve_order ~equal rest)  
+
 (* insert x at all positions into a list *)
 let rec insert x list =
   match list with

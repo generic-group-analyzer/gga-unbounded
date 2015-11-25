@@ -47,17 +47,12 @@ rule lex = parse
   | "win"    { WIN }
   | "in"     { IN }
 
-(*  | "extract"  { EXTRACT }
-  | "case_distinction"  { CASE_DIST }*)
-  | "goto"     { GOTO }
-  | "coeff"    { COEFF }
-  | "simplify" { SIMPLIFY }
-(*
-  | "admit"    { ADMIT }
-  | "contradiction" { CONTRADICTION }
-  | "uniform" { UNIFORM }
-  | "simplify" { SIMPLIFY }
-  | "simplify_vars" { SIMPLIFYVARS }*)
+  | "goto"             { GOTO }
+  | "coeff"            { COEFF }
+  | "simplify"         { SIMPLIFY }
+  | "case_distinction" { CASE_DIST }
+  | "contradiction"    { CONTRADICTION }
+  | "uniform_ivars"    { UNIFORM }
 
   | "G1"             { GROUP(G1) }
   | "G2"             { GROUP(G2) }

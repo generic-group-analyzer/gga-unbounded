@@ -3,6 +3,17 @@
 open Core_kernel.Std
 open Abbrevs
 
+let split_string_on_word string word =
+  let n = String.length word in
+  let rec aux k =
+    if (k+n >= String.length string) then string, ""
+    else if (String.sub string ~pos:k ~len:n) = word then
+      (String.sub string ~pos:0 ~len:k),
+      (String.sub string ~pos:(k+n) ~len:((String.length string)-(k+n)) )
+    else aux (k+1)
+  in
+  aux 0    
+
 let input_file filename =
   let in_channel = open_in filename in
   let rec go lines =
@@ -17,14 +28,11 @@ let input_file filename =
   String.concat ~sep:"\n" (L.rev lines)
 
 let main =
-  if Array.length Sys.argv <> 3 then
-    output_string stderr (F.sprintf "usage: %s <definition_file> <instructions_file / 'automatic'> \n" Sys.argv.(0))
+  if Array.length Sys.argv <> 2 then
+    output_string stderr (F.sprintf "usage: %s <scheme file>\n" Sys.argv.(0))
   else
-    let scmds = input_file Sys.argv.(1) in
-    if Sys.argv.(2) = "automatic" then
+    let definition, proof = split_string_on_word (input_file Sys.argv.(1)) "proof." in
+    if proof = "" then
       assert false
-(*      let filename = String.prefix Sys.argv.(1) ((String.length Sys.argv.(1)) - 4) in
-      Analyze.automatic_tool scmds (filename ^ ".prf")*)
     else
-      let instrs = input_file Sys.argv.(2) in
-      Analyze.analyze_unbounded scmds instrs
+      Analyze.analyze_unbounded definition proof

@@ -1,4 +1,4 @@
-map G1 * G1 -> GT.
+group_setting 1.
 
 oracle o1(m:Fp) =
   return [] in G1.
