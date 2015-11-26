@@ -33,6 +33,6 @@ let main =
   else
     let definition, proof = split_string_on_word (input_file Sys.argv.(1)) "proof." in
     if proof = "" then
-      assert false
+      Analyze.automatic_prover definition
     else
       Analyze.analyze_unbounded definition proof

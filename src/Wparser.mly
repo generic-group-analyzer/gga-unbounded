@@ -53,10 +53,10 @@
 %token CASE_DIST
 %token CONTRADICTION
 %token UNIFORM
+%token DIVIDE_PARAM
+%token DIVIDE_VAR
 
 %token QUOTE
-
-%token ONE
 
 /************************************************************************/
 /* Priority & associativity */
@@ -97,8 +97,11 @@ oexp_atom:
 | a = atom; EXP; LPAR; n = INT; RPAR   { repeat_element ((if n < 0 then Inv else NoInv),a) (abs n) }
 
 monom:
-| ONE;                                 { mk_monom [] };
 | atoms=separated_list(STAR,oexp_atom) { mk_monom (L.concat atoms) };
+
+monom_or_one:
+| i = INT  { if i <> 1 then failwith "only 1 accepted here" else mk_monom [] }
+| m = monom { m }
 
 summand:
 | m = monom    { Mon(m) };
@@ -108,7 +111,6 @@ sum:
    { mk_sum (L.map ~f:(fun s -> ({ name = s; id = 0}, Ivar.Set.empty)) ids ) m };
 
 poly :
-| ONE;                       { SP.one }
 | n = INT                    { SP.of_const (BI.of_int n) }
 | a = atom                   { SP.of_atom a }
 | a = atom; EXP; n = INT
@@ -159,8 +161,6 @@ polys_group:
 { List.map (fun p -> (p,g)) ps}
 
 cmd :
-| GROUPSETTING ONE; DOT
-  { GroupSetting(I) }
 | GROUPSETTING i = INT; DOT
   { GroupSetting(match i with 1 -> I | 2 -> II | 3 -> III | _ -> failwith "invalid group setting") }
 | vs = samp_vars; DOT
@@ -181,7 +181,7 @@ cmds_t : cs = list(cmd); EOF; { cs };
 instr :
 | GOTO; n = INT; DOT;
   { GoTo(n) }
-| COEFF; LPAR; uM = monom; RPAR; n = INT; DOT;
+| COEFF; LPAR; uM = monom_or_one; RPAR; n = INT; DOT;
   { IntrCoeff(mon2umon uM, n) }
 | SIMPLIFY; DOT;
   { Simplify }
@@ -191,7 +191,9 @@ instr :
   { Contradiction }
 | UNIFORM; DOT;
   { Uniform }
-
-
+| DIVIDE_PARAM; a = atom; DOT;
+  { DivideByParam(a) }
+| DIVIDE_VAR; a = atom; DOT;
+  { DivideByVar(a) }
 
 instrs_t : instrs = list(instr); EOF; { instrs };

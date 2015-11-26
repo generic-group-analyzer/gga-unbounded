@@ -114,5 +114,10 @@ let pp_conj fmt conj =
        F.fprintf f "  %s. %a\n" (string_of_int n) pp_constr c;
        F.fprintf f "%t" (aux (n+1) rest)
   in
-  F.fprintf fmt "";
+  let () =
+    if (L.length conj.conj_ivarsK > 0) then
+      F.fprintf fmt "exists %a.\n"
+        pp_varsK conj.conj_ivarsK
+    else ()
+  in
   aux 1 conj.conj_constrs fmt

@@ -7,15 +7,35 @@ input [V,W] in G1.
 oracle o1(M:G2) =
   sample R;
   return [ R ] in G1,
-         [ R, M*V + R^2 + W] in G2.
+         [ R, M*V + W + R^2] in G2.
 
-win (wM:G2, wR1:G1, wR2:G2, wS:G2) = (forall i: wM <> M_i /\ wR1 = wR2 /\ wS = V*wM + wR1*wR2 + W).
+win (wM:G2, wR1:G1, wR2:G2, wS:G2) = (wS = V*wM + wR1*wR2 + W /\ wR1 = wR2 /\  forall i: wM <> M_i).
 
 proof.
 
+coeff(R_i^2) 2.
+simplify.
 coeff(1) 2.
+coeff(R_i) 2.
 coeff(V) 2.
 coeff(W) 2.
-coeff(R_i * R_j) 3.
-coeff(R_i^2) 3.
+coeff(V) 1.  (* This line is not needed *)
 simplify.
+
+coeff(W) 1.
+coeff(R_i^2) 1.
+coeff(R_i*R_j) 1.
+coeff(R_i) 1.
+coeff(1) 1.
+simplify.
+
+case_distinction p9_i.
+  simplify.
+  contradiction.
+simplify.
+divide_by_param p9_i'.
+simplify.
+simplify.
+divide_by_var V.
+simplify.
+contradiction.

@@ -1,11 +1,10 @@
 open Core_kernel.Std
 open Abbrevs
-
-(*open Wrules
-open Watom
 open Util
-*)
-
+open Watom
+open Wconstrs
+open WconstrsUtil
+open Wrules
 (*
 type param_list = int Atom.Map.t with compare, sexp
 type idx_order_list = ivar list list with compare, sexp
@@ -283,70 +282,157 @@ let automatic_tool cmds _file =
 
 *)
 
+let coeff_everywhere_constr (c : constr) (n : int) (context : context_ivars) =
+  let used_ivars = Set.union (Ivar.Set.of_list (unzip1 context)) (ivars_constr c) in
+  let c_bound_ivars = Set.diff (ivars_constr c) (Ivar.Set.of_list (unzip1 context)) in
+  let (rn,_) = renaming_away_from used_ivars c_bound_ivars in
+  let ivars_context = (unzip1 context) in
+  try
+    match (L.filter (mons c.constr_poly) ~f:(fun m -> equal_monom m (uvars_monom m))) with
+    | [] | _ :: [] -> []
+    | monomials ->
+      L.fold_left monomials
+        ~init:[]
+        ~f:(fun l m ->
+            let m = map_idx_monom ~f:(apply_renaming rn) m in
+            F.printf "coeff(%a) %d.\n" pp_monom m n; F.print_flush();
+            let bound_ivars =
+              Set.to_list (Set.filter (ivars_monom m) ~f:(fun i -> not(L.mem (ivars_context) i)))
+            in
+            let quant = Eval.maximal_quant ivars_context [] bound_ivars in
+            l @ (introduce_coeff c quant (mon2umon m) context)
+          )
+  with _ -> []
+
+let introduce_coeff_everywhere (conj : conj) =
+  let rec aux new_constrs n = function
+    | [] -> new_constrs
+    | c :: rest ->
+      if (c.constr_is_eq = Eq) then
+        aux (new_constrs @ (coeff_everywhere_constr c n conj.conj_ivarsK)) (n+1) rest
+      else
+        aux new_constrs (n+1) rest
+  in
+  mk_conj conj.conj_ivarsK (conj.conj_constrs @ (aux [] 1 conj.conj_constrs))
+
+let get_atoms_sum (s : sum) =
+  match s.sum_summand with
+  | Mon(mon) -> Atom.Set.of_list (unzip1 (Map.to_alist mon.monom_map))
+  | Coeff(_) -> Atom.Set.empty 
+
+let get_atoms_poly (p : poly) =
+  Map.fold p.poly_map ~init:Atom.Set.empty ~f:(fun ~key:s ~data:_ se -> Set.union se (get_atoms_sum s))
+
+let get_atoms_constr (c : constr) = get_atoms_poly c.constr_poly
+
+let get_atoms_conj (c : conj) =
+  L.fold_left c.conj_constrs ~init:Atom.Set.empty ~f:(fun s c -> Set.union s (get_atoms_constr c))
+
+let divide_by_every_variable (conj : conj) =
+  let rec aux conj = function
+    | [] -> conj
+    | v :: rest ->
+      let conj' = divide_conj_by v conj in
+      if (equal_conj conj conj') then aux conj rest
+      else
+        let () = F.printf "divide_by_var %a.\n" pp_atom v in
+        aux conj' (v :: rest)
+  in
+  let vars = Set.filter (get_atoms_conj conj) ~f:(function | Uvar(_,None) -> true | _ -> false) in
+  aux conj (Set.to_list vars)
+
+let get_not_null_params (conj : conj) =
+  L.fold_left conj.conj_constrs
+   ~init:[]
+   ~f:(fun l c ->
+       match (Map.to_alist c.constr_poly.poly_map), c.constr_is_eq with
+       | (s,_) :: [], InEq ->
+         begin match s.sum_ivarsK, s.sum_summand with
+           | [], Mon(mon) ->
+             begin match Map.to_alist mon.monom_map with
+               | (Param(name, Some i), _) :: [] ->
+                 if (L.mem (unzip1 conj.conj_ivarsK) i ~equal:equal_ivar)
+                 then l @ [Param(name, Some i)]
+                 else l
+               | _ -> l
+             end
+           | _ -> l
+         end
+       | _ -> l
+     )
+
+let divide_by_not_null_params (conj : conj) =
+  let rec aux conj = function
+    | [] -> conj
+    | p :: rest ->
+      let conj' = divide_conj_by p conj in
+      if (equal_conj conj conj') then aux conj rest
+      else
+        let () = F.printf "divide_by_param %a.\n" pp_atom p in
+        aux conj' (p :: rest)
+  in
+  aux conj (get_not_null_params conj)
+
+let rec automatic_algorithm (used_parameters : atom list) (constraints : conj list) (advK : advK) =
+  if constraints = [] then true
+  else if L.length constraints > 50 then false
+  else
+    let conj = L.hd_exn constraints |> simplify advK in
+    F.printf "simplify.\n";
+    match contradiction conj with
+    | Some _ -> 
+      F.printf "contradiction.\n";
+      automatic_algorithm used_parameters (L.tl_exn constraints) advK
+    | None -> 
+      let conj = introduce_coeff_everywhere conj
+                 |> simplify advK
+                 |> divide_by_every_variable
+                 |> divide_by_not_null_params
+      in
+      F.printf "simplify.\n";
+      begin match contradiction conj with
+        | Some _ ->
+          F.printf "contradiction.\n";
+          automatic_algorithm used_parameters (L.tl_exn constraints) advK
+        | None ->
+          let parameters = Set.to_list (get_atoms_conj conj)
+                           |> L.filter ~f:is_param
+                           |> L.filter ~f:(fun p -> not (L.mem used_parameters p ~equal:equal_atom))
+          in
+          match L.hd parameters with
+          | None -> false
+          | Some p ->
+            F.printf "case_distinction %a.\n" pp_atom p;
+            let cases = case_distinction conj p in
+            automatic_algorithm (p :: used_parameters) (cases @ L.tl_exn constraints) advK
+      end
+
+let automatic_prover cmds =
+  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
+  let advK = Eval.adv_of_k1k2 (k1,k2) in
+  let t1 = Unix.gettimeofday() in
+  let proven = automatic_algorithm [] [constraints] advK in
+  let t2 = Unix.gettimeofday() in
+  if proven then
+    let () = F.printf "Proven!\nTime %F seconds\n" (t2 -. t1) in
+    exit 0
+  else
+    let () = F.printf "Not proven!\nTime: %F seconds\n" (t2 -. t1) in
+    exit 1    
+
 let analyze_unbounded cmds instrs =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
 
   if (L.length system = 0) then
-    F.printf "# Proven!\n"
+    F.printf "Proven!\n"
   else
     let constraints = L.nth_exn system (nth-1) in
     F.printf "Working on goal %d out of %d.\n" nth (L.length system);
     F.printf "%a" WconstrsUtil.pp_conj constraints;
     ()
-    (* let (contradiction, c) = Wrules.contradictions_msg constraints in
-    if contradiction then
-      F.printf "Contradiction!\n%a" pp_constr c
-    else ()*)
 
-
-let analyze_unbounded_ws cmds instrs =
-  (*let open Big_int in*)
-  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
-  let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
-  let buf  = Buffer.create 127 in
-  let fbuf = F.formatter_of_buffer buf in
-  begin match system with
-  | [] ->
-    F.fprintf fbuf "<p>Proven!\n</p>"
-  | _::_ ->
-    let constraints = L.nth_exn system (nth-1) in
-    F.fprintf fbuf
-       "<p>Working on goal %d out of %d.</p>\n" nth (L.length system);
-    F.fprintf fbuf "%a" PPLatex.pp_conj_latex constraints;
-    ()
-  end;
-  F.pp_print_flush fbuf ();
-  Buffer.contents buf
-(*
-let analyze_unbounded_ws cmds instrs =
-  let open Big_int in
-  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
-  let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
-
-  let buf  = Buffer.create 127 in
-  let fbuf = F.formatter_of_buffer buf in
-  begin match system with
-  | [] ->
-    F.fprintf fbuf "<p>Proven!\n(Group order >= %s)\n</p>" (string_of_big_int !group_order_bound)
-  | _::_ ->
-    let constraints = L.nth_exn system (nth-1) in
-    F.fprintf fbuf
-       "<p>Working on goal %d out of %d.  (Group order >= %s)</p>\n"
-       nth (L.length system) (string_of_big_int !group_order_bound);
-    F.fprintf fbuf "%a" PPLatex.pp_constr_conj_latex constraints;
-    let (contradiction, c) = Wrules.contradictions_msg constraints in
-    if contradiction then
-      let () = F.fprintf fbuf "\n<p>Contradiction!\n</p>" in
-      F.fprintf fbuf "<p><script type=\"math/tex\" mode=\"display\">%a\n</script></p>" PPLatex.pp_constr_latex c
-    else ()
-  end;
-  F.pp_print_flush fbuf ();
-  Buffer.contents buf
-
-*)
 let string_of_state st =
-  (*let open Big_int in*)
   let (system, nth) = st in
   let buf  = Buffer.create 127 in
   let fbuf = F.formatter_of_buffer buf in

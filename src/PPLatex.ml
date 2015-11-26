@@ -85,7 +85,7 @@ let pp_poly_latex fmt poly =
   match Map.to_alist mpos, Map.to_alist mneg with
   | [], [] ->
     F.fprintf fmt "0"
-  | [], negs ->
+  | [], negs when L.length negs > 1 ->
     F.fprintf fmt "-\\left(%a\\right)" (pp_list " + " pp_term_latex) negs
   | pos,[] ->
     F.fprintf fmt "%a" (pp_list " + " pp_term_latex) pos

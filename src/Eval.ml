@@ -405,6 +405,8 @@ type instr =
   | CaseDistinction of atom
   | Contradiction
   | Uniform
+  | DivideByParam   of atom
+  | DivideByVar     of atom
 
 let adv_of_k1k2 (k1,k2) =
   let advMsets1 = {
@@ -423,10 +425,10 @@ let adv_of_k1k2 (k1,k2) =
   in
   { g1 = advMsets1; g2 = advMsets2 }
 
-let rec maximal_quant output = function
+let rec maximal_quant add_excepts output = function
   | [] -> output
   | i :: rest ->
-    maximal_quant (output @ [(i, Ivar.Set.of_list (unzip1 output))]) rest
+    maximal_quant add_excepts (output @ [(i, Ivar.Set.of_list (add_excepts @ (unzip1 output)))]) rest
 
 let eval_instr (k1,k2) system nth instr =
   let advK = adv_of_k1k2 (k1,k2) in (*FIXME : Get rid of this *)
@@ -441,7 +443,7 @@ let eval_instr (k1,k2) system nth instr =
       let bound_ivars = 
         Set.to_list (Set.filter (ivars_umonom uM) ~f:(fun i -> not(L.mem (unzip1 conj.conj_ivarsK) i)))
       in
-      let quant = maximal_quant conj.conj_ivarsK bound_ivars in
+      let quant = maximal_quant (unzip1 conj.conj_ivarsK) [] bound_ivars in
       let new_constrs = introduce_coeff (L.nth_exn conj.conj_constrs n_eq) quant uM (conj.conj_ivarsK) in
       mk_conj conj.conj_ivarsK (conj.conj_constrs @ new_constrs)
     in
@@ -470,6 +472,18 @@ let eval_instr (k1,k2) system nth instr =
     
   | Uniform ->
     (list_map_nth system nth opening, nth)
+
+  | DivideByParam(a) ->
+    let par =
+      match a with
+      | Uvar(name, None)   -> Param(name, None)
+      | Uvar(name, Some i) -> Param(name, Some i)
+      | _ -> assert false
+    in
+    (list_map_nth system nth (divide_conj_by par), nth)
+
+  | DivideByVar(var) ->
+    (list_map_nth system nth (divide_conj_by var), nth)
 
 let eval_instrs instrs (k1,k2) system nth =
   L.fold_left instrs

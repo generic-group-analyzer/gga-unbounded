@@ -218,7 +218,11 @@ let mk_poly terms =
     ~f:add_poly_term
 
 let mk_constr qvarsK is_eq (poly : poly) =
-  let qvarsK = L.filter qvarsK ~f:(fun (i,_) -> Set.mem (ivars_poly poly) i) in
+  let polyivars = ivars_poly poly in
+  let not_used_qvars = L.filter (unzip1 qvarsK) ~f:(fun i -> not(Set.mem polyivars i)) in
+  let qvarsK = L.filter qvarsK ~f:(fun (i,_) -> Set.mem (ivars_poly poly) i)
+               |> L.map ~f:(fun (i,s) -> (i, Set.diff s (Ivar.Set.of_list not_used_qvars) ))
+  in
   if (well_formed_exceptions qvarsK) then
     { constr_ivarsK = qvarsK; constr_is_eq = is_eq; constr_poly = poly }
   else
