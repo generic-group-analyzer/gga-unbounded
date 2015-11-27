@@ -278,6 +278,19 @@ let hvars_monom  (mon : monom) = monom_filter_vars is_hvar mon
 let params_monom (mon : monom) = monom_filter_vars is_param mon
 let not_params_monom (mon : monom) = monom_filter_vars (fun v -> not(is_param v)) mon
 
+let get_atoms_sum (s : sum) =
+  match s.sum_summand with
+  | Mon(mon) -> Atom.Set.of_list (unzip1 (Map.to_alist mon.monom_map))
+  | Coeff(_) -> Atom.Set.empty 
+
+let get_atoms_poly (p : poly) =
+  Map.fold p.poly_map ~init:Atom.Set.empty ~f:(fun ~key:s ~data:_ se -> Set.union se (get_atoms_sum s))
+
+let get_atoms_constr (c : constr) = get_atoms_poly c.constr_poly
+
+let get_atoms_conj (c : conj) =
+  L.fold_left c.conj_constrs ~init:Atom.Set.empty ~f:(fun s c -> Set.union s (get_atoms_constr c))
+
 let handle_vars_list (mon : monom) =
   let rec aux output = function
     | [] -> output
@@ -505,7 +518,7 @@ let normalize_ivars (conj : conj) (ex_name : string) (fa_name : string) (s_name 
 
 let new_name names =
   let rec aux k =
-    let name = Int.to_string k in
+    let name = "k'" ^ (Int.to_string k) in
     if (L.mem names name) then aux (k+1)
     else name
   in
@@ -946,20 +959,25 @@ let divide_sum_by (a : atom) (s : sum) =
 let divide_poly_by (a : atom) (p : poly) =
   try Map.fold p.poly_map
          ~init:SP.zero
-         ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(c, divide_sum_by a s)])))
-  with _ -> p
+         ~f:(fun ~key:s ~data:c p' -> SP.(p' +! (mk_poly [(c, divide_sum_by a s)]))), true
+  with _ -> p, false
 
 let divide_constr_by (a : atom) (constr : constr) =
-  mk_constr constr.constr_ivarsK constr.constr_is_eq (divide_poly_by a constr.constr_poly)
+  let new_poly, divided = divide_poly_by a constr.constr_poly in
+  (mk_constr constr.constr_ivarsK constr.constr_is_eq new_poly), divided
 
 let divide_conj_by (a : atom) (conj : conj) =
   match L.find (conj.conj_constrs) ~f:(equal_constr (mk_constr [] InEq (SP.of_atom a))) with
   | None ->
     begin match a with
-      | Uvar(_,_) -> mk_conj conj.conj_ivarsK (L.map conj.conj_constrs ~f:(divide_constr_by a))
+      | Uvar(_,_) ->
+        let (new_constrs, divided) = L.unzip (L.map conj.conj_constrs ~f:(divide_constr_by a)) in
+        (mk_conj conj.conj_ivarsK new_constrs, L.exists divided ~f:(fun b -> b))
       | _ -> failwith "atom might be null, division is not allowed"
     end
-  | Some c -> mk_conj conj.conj_ivarsK ((L.map conj.conj_constrs ~f:(divide_constr_by a)) @ [c])
+  | Some c ->
+    let (new_constrs, divided) = L.unzip (L.map conj.conj_constrs ~f:(divide_constr_by a)) in
+    mk_conj conj.conj_ivarsK (new_constrs @ [c]), L.count divided ~f:(fun b -> b) > 1
 
 (* ** Simplify *)
 
@@ -995,6 +1013,29 @@ let simplify_eqs_in_others (conj : conj) =
   in         
   mk_conj conj.conj_ivarsK (f [] conj.conj_constrs)
 
+let remove_independent_equations (conj : conj) =
+  (* We say an equation is independent if it has a parameter that only occurs in it *)
+  (* FIXME : To be less incomplete, only remove things when the parameter degree is one *)
+  let p_occurs_in_constrs constrs p =
+    L.fold_left constrs
+     ~init:false
+     ~f:(fun b c ->
+         let params = get_atoms_constr c |> Set.filter ~f:is_param in
+         b || (L.exists (Set.to_list params) ~f:(fun p' -> (atom_name p') = (atom_name p)) )
+       )
+  in
+  let rec aux new_constrs = function
+    | [] -> new_constrs
+    | c :: rest ->
+      let vars = get_atoms_constr c |> Set.filter ~f:(fun p -> not (is_param p)) in
+      let params = get_atoms_constr c |> Set.filter ~f:is_param in
+      if Set.exists params ~f:(fun p -> not (p_occurs_in_constrs (new_constrs @ rest) p) ) &&
+         Set.is_empty vars
+      then aux new_constrs rest
+      else aux (new_constrs @ [c]) rest
+  in
+  mk_conj conj.conj_ivarsK (aux [] conj.conj_constrs)
+
 let simplify (advK : advK) (conj : conj) =
   clear_trivial conj
   |> simplify_coeff_conj advK
@@ -1002,7 +1043,6 @@ let simplify (advK : advK) (conj : conj) =
   |> groebner_basis_simplification
   |> simplify_eqs_in_others
   |> clear_trivial
-
 
 (* ** Old functions FIXME *)
 (* The previous Eval.ml needs these functions, we will get rid of them soon *)

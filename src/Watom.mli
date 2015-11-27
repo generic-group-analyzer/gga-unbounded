@@ -73,6 +73,7 @@ val is_hvar   : atom -> bool
 val bi_of_inv : inv -> BI.t
 
 val ivars_atom : atom -> Ivar.Set.t
+val atom_name  : atom -> string
 
 val map_idx  : f:(ivar -> ivar) -> atom -> atom
 

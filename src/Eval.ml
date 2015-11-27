@@ -407,6 +407,7 @@ type instr =
   | Uniform
   | DivideByParam   of atom
   | DivideByVar     of atom
+  | ClearIndpEqs
 
 let adv_of_k1k2 (k1,k2) =
   let advMsets1 = {
@@ -480,10 +481,15 @@ let eval_instr (k1,k2) system nth instr =
       | Uvar(name, Some i) -> Param(name, Some i)
       | _ -> assert false
     in
-    (list_map_nth system nth (divide_conj_by par), nth)
+    let f conj = let (conj',_) = divide_conj_by par conj in conj' in
+    (list_map_nth system nth f, nth)
 
   | DivideByVar(var) ->
-    (list_map_nth system nth (divide_conj_by var), nth)
+    let f conj = let (conj',_) = divide_conj_by var conj in conj' in
+    (list_map_nth system nth f, nth)
+
+  | ClearIndpEqs ->
+    (list_map_nth system nth remove_independent_equations, nth)
 
 let eval_instrs instrs (k1,k2) system nth =
   L.fold_left instrs

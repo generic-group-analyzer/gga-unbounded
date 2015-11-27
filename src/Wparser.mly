@@ -55,6 +55,7 @@
 %token UNIFORM
 %token DIVIDE_PARAM
 %token DIVIDE_VAR
+%token CLEAR_INDP_EQS
 
 %token QUOTE
 
@@ -195,5 +196,7 @@ instr :
   { DivideByParam(a) }
 | DIVIDE_VAR; a = atom; DOT;
   { DivideByVar(a) }
+| CLEAR_INDP_EQS; DOT;
+  { ClearIndpEqs }
 
 instrs_t : instrs = list(instr); EOF; { instrs };

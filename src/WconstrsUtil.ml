@@ -16,7 +16,7 @@ let pp_gname fmt = function
 
 let pp_ivar fmt { name; id } =
   if (id = 0) then F.fprintf fmt "%s" name
-  else F.fprintf fmt "%s" (name ^ (String.make id '\''))
+  else F.fprintf fmt "%s'%d" name id
 
 let pp_name_idx fmt (s,i) =
   F.fprintf fmt "%s_%a" s pp_ivar i

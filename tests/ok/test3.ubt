@@ -10,8 +10,5 @@ win (a:Fp, b:Fp, c:Fp) =
 proof.
   
 simplify.
-(*case_distinction a_i.
-  admit.
-  simplify.
-*)
+
 

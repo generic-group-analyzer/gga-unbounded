@@ -108,6 +108,11 @@ let ivars_atom = function
   | Hvar hv          -> Ivar.Set.singleton hv.hv_ivar
   | _                -> Ivar.Set.empty
 
+let atom_name = function
+  | Uvar (name, _) -> name
+  | Param (name, _) -> name
+  | Hvar hv -> hv.hv_name
+
 (* ** Constructors
  * ----------------------------------------------------------------------- *)
 

@@ -1,5 +1,6 @@
 Working on goal 1 out of 1.
-  1. (sum k': a_k') = 0
-  2. -(a_i7) = 0
-  3. 0 = 0
-  4. forall j'. b_j' = 0
+  1. forall j'1. a_j'1*b_j'1 + (sum k'1 <> {j'1}: a_k'1*b_k'1) - 2 * b_j'1 - (sum k'1 <> {j'1}: b_k'1) = 0
+  2. (sum k'1: a_k'1) = 0
+  3. (sum k'1: a_k'1*b_k'1) = 0
+  4. (sum k'1: b_k'1) = 0
+

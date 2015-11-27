@@ -3,9 +3,9 @@ group_setting 1.
 oracle o1(m:Fp) =
   return [] in G1.
 
-win (a:Fp, b:Fp) = ( forall j: (sum i: a_i * b_i ) - b_j = (sum j1: b_j1) + a_i7  /\
-                     forall i5,j: (sum i1: a_i5*b_i1) = b_j                       /\
-                     (sum i3: a_i3) = 0                                           /\
+win (a:Fp, b:Fp) = ( forall j: (sum i: a_i * b_i ) - b_j = (sum j1: b_j1)  /\
+                     (sum j: a_j*b_j) = 0                        /\
+                     (sum i3: a_i3) = 0                                    /\
                      (sum i: a_i) - (sum j: b_j) = 0
 	                	).
 	                	

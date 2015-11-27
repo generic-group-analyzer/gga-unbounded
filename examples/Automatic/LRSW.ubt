@@ -4,7 +4,7 @@ sample X,Y.
 
 input [1,X,Y] in G1.
 
-oracle o1(m:G1) = 
+oracle o1(m:Fp) = 
   sample A;
   return [A, Y*A, X*A + m*X*Y*A] in G1.
 
