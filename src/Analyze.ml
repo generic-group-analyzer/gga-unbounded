@@ -111,42 +111,52 @@ let parameters_to_split (conj : conj) (used_params : atom list) =
       )
   |> List.rev
 
-let rec automatic_algorithm (depth : int) (used_params : atom list) (constrs : conj list) (advK : advK) =
-  if constrs = [] then true
-  else if L.length constrs > 50 then false
+let rec automatic_algorithm (used_params : atom list) (disjunction : conj list) (advK : advK) =
+  if (L.length disjunction) = 0 then true
+  else if L.length disjunction > 50 then false
   else
-    let conj = L.hd_exn constrs |> simplify advK in
+    let disjunction =  dedup_preserve_order ~equal:equal_conj disjunction in
+    let depth = (L.length disjunction) - 1 in
+    let conj = L.hd_exn disjunction |> simplify advK in
+    let () = F.printf "%a\n" pp_conj conj in
+    F.print_flush();
     F.printf "%ssimplify.\n" (String.make depth ' ') ;
-    match contradiction conj with
+    begin match contradiction conj with
     | Some _ -> 
       F.printf "%scontradiction.\n" (String.make depth ' ');
-      automatic_algorithm (depth-1) used_params (L.tl_exn constrs) advK
+      automatic_algorithm used_params (L.tl_exn disjunction) advK
     | None -> 
-      let conj = introduce_coeff_everywhere depth conj
-                 |> simplify advK
-                 |> (fun c -> let () = F.printf "%ssimplify.\n" (String.make depth ' ') in c)
-                 |> divide_by_every_variable depth
-                 |> divide_by_not_null_params depth
-      in
-      begin match contradiction conj with
-        | Some _ ->
-          F.printf "%scontradiction.\n" (String.make depth ' ');
-          automatic_algorithm (depth-1) used_params (L.tl_exn constrs) advK
-        | None ->
-          let parameters = parameters_to_split conj used_params in
-          match L.hd parameters with
-          | None -> false
-          | Some p ->
-            F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
-            let cases = case_distinction conj p in
-            automatic_algorithm (depth+1) (p :: used_params) (cases @ L.tl_exn constrs) advK
-      end
+      let disj' = assure_laurent_polys conj in
+      if (disj' <> []) then
+        let () = F.printf "assure_Laurent\n" in
+        automatic_algorithm used_params (disj' @ disjunction) advK
+      else
+        let conj = introduce_coeff_everywhere depth conj
+                   |> simplify advK
+                   |> (fun c -> let () = F.printf "%ssimplify.\n" (String.make depth ' ') in c)
+                   |> divide_by_every_variable depth
+                   |> divide_by_not_null_params depth
+        in
+        begin match contradiction conj with
+          | Some _ ->
+            F.printf "%scontradiction.\n" (String.make depth ' ');
+            automatic_algorithm used_params (L.tl_exn disjunction) advK
+          | None ->
+            let parameters = parameters_to_split conj used_params in
+            match L.hd parameters with
+            | None -> false
+            | Some p ->
+              F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
+              let cases = case_distinction conj p in
+              automatic_algorithm (p :: used_params) (cases @ L.tl_exn disjunction) advK
+        end
+    end
 
 let automatic_prover cmds =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let advK = Eval.adv_of_k1k2 (k1,k2) in
   let t1 = Unix.gettimeofday() in
-  let proven = automatic_algorithm 0 [] [constraints] advK in
+  let proven = automatic_algorithm [] [constraints] advK in
   let t2 = Unix.gettimeofday() in
   if proven then
     let () = F.printf "Proven!\nTime %F seconds\n" (t2 -. t1) in

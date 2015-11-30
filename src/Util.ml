@@ -29,6 +29,7 @@ module BI = struct
   let sign = sign_big_int
 end
 
+
 (* ======================================================================= *)
 (* List functions *)
 
@@ -46,6 +47,11 @@ let repeat_element x n =
     else aux (x :: output) (k-1)
   in
   aux [] n
+
+let rec stringlist2string = function
+  | [] -> ""
+  | a :: [] -> a
+  | a :: rest -> a ^ "," ^ (stringlist2string rest)
 
 let rec dedup_preserve_order ~equal = function
   | [] -> []

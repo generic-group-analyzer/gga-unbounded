@@ -7,6 +7,8 @@ import sys
 import ast
 import traceback
 
+from laurent_polys import *
+
 def _parseJSON(obj):
   """Convert unicode strings to standard strings"""
   if isinstance(obj, dict):
@@ -120,6 +122,46 @@ def interp(req):
 
     # Print the output in Ocaml format.
     return polylist_to_Ocaml([reduced_poly])
+
+  elif cmd == "Laurent":
+    polylist = [req["f"], req["g"]]
+    n_variables = len(polylist[0][0][1])
+    n_params = req["nparams"]
+    
+    R = PolynomialRing(QQ, n_variables, 'x')
+
+    for i in range(len(polylist)):
+      for j in range(len(polylist[i])):
+          for k in range(len(polylist[i][j][1])):
+            d = polylist[i][j][1][k]
+            if (d < 0):
+                for j1 in range(len(polylist[0])):
+                  polylist[0][j1][1][k] -= d
+                for j1 in range(len(polylist[1])):
+                  polylist[1][j1][1][k] -= d
+
+
+    polynomials = polys_of_polylist(polylist, R)
+    f = polynomials[0]
+    g = polynomials[1]
+
+    disjunction_cases = constraintsForLaurent(R, n_params, f, g)
+
+    disj_polylist = []
+    for conj in disjunction_cases:
+      disj_polylist.append(polys_to_polylist(conj,R))
+
+    # Print the output in Ocaml format.
+    output_list = []
+    for conj in disj_polylist:
+      output_list.append(polylist_to_Ocaml(conj))
+
+    output = ""
+    for i in range(len(output_list)):
+      output += output_list[i] + "|"
+
+    return output[:-1]
+
 
 def main():
   try:

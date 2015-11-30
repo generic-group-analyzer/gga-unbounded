@@ -20,6 +20,7 @@ class ParamPoly(object):
     self.polynomial = self.poly2parampoly(R,self.P,self.V,p)
     
   def poly2parampoly(self, R,P,V, polynomial):
+
     variables = R.gens()
     new_variables = P.gens() + V.gens()
 
@@ -34,6 +35,9 @@ class ParamPoly(object):
       poly += term
 
     return poly
+
+  def __mul__(self, other):
+    return ParamPoly(self.old_R, self.old_polynomial * other.old_polynomial, len(self.parameters))
 
   def coeffs_monoms(self):
     old_coeffs = self.old_polynomial.coefficients()
@@ -62,75 +66,40 @@ class ParamPoly(object):
     for i in range(len(factors)):
         new_factors += [factors[i][0] for j in range(factors[i][1])]
     return [ParamPoly(self.old_R, f, len(self.parameters)) for f in new_factors]
-    
+
   def __str__(self):
     return str(self.polynomial)
 
+def reduce_gcd(first, second):
+  factors_first = first.factorize()
+  factors_second = second.factorize()
+  
+  output1 = factors_first[0]
+  for f in factors_first[1:]:
+    if f not in factors_second:  output1 *= f
 
-def matchingFactor(f1,f2):
-  constrs = []
-  for (coeffs1, monoms1) in f1.coeffs_monoms():
-    new_constr = coeffs1
-    for (coeffs2, monoms2) in f2.coeffs_monoms():
-      if (monoms1 == monoms2):
-        new_constr -= coeffs2
-        break
-    constrs.append(new_constr)
-  for (coeffs2, monoms2) in f2.coeffs_monoms():
-    new_constr = -coeffs2
-    for (coeffs1, monoms1) in f1.coeffs_monoms():
-      if (monoms2 == monoms1):
-        new_constr += coeffs1
-        break
-    constrs.append(new_constr)
-  return unique(constrs)
+  output2 = factors_second[0]
+  for f in factors_second[1:]:
+    if f not in factors_first:  output2 *= f
 
+  return output1, output2
 
 def constraintsForLaurent(R, n, num, den):
   Num = ParamPoly(R, num, n)
   Den = ParamPoly(R, den, n)
-  
+
   num_factors = Num.factorize()
   den_factors = Den.factorize()
 
-  all_cases = [([], num_factors)]    # No restrictions and all the numerator factors are available.
+  disjunct_cases = [[]]
 
-  alternative_cases = []
-  for f in num_factors:
-    alternative_cases.append((matchingFactor(f,ParamPoly(R,0*R.gens()[0],n)) ,[]))
-    
-  for f in den_factors:
-    coeffs = [eq for (eq, mon) in f.coeffs_monoms()]
-    if len(coeffs) > 1:   # We need to reduce this factor.
-      new_all_cases = []
-      new_constrs = sorted([coeffs[:i] + coeffs[i+1:] for i in range(len(coeffs))])
-      for (constr, factors) in all_cases:
-        for new in new_constrs:
-          new_all_cases.append((new + constr, factors))
-          
-      for (constrs, factors) in all_cases:
-        for j in range(len(factors)):
-          new_all_cases.append((matchingFactor(f, factors[j]) + constrs, factors[:j] + factors[j+1:]))
-      
-      all_cases = new_all_cases
-      
-    else:
-      alternative_cases.append(([f.old_polynomial],[]))
+  for gi in den_factors:
+    new_disjunct_cases = []
+    for dcase in disjunct_cases:
+      if gi in num_factors:  continue
+      new_disjunct_cases.append(dcase + [Num.old_polynomial % gi.old_polynomial] )
+      for coeff in gi.coeffs_monoms():
+        new_disjunct_cases.append(dcase + [gi.old_polynomial - (coeff[0]*coeff[1])] )
+    disjunct_cases = new_disjunct_cases
 
-  return [constr for (constr, f) in (all_cases+alternative_cases)]
-
-
-def filter_constraints(constraints, R):
-  constraints = [R.ideal(c).groebner_basis() for c in constraints]  
-  output = []
-  for c in constraints:
-    new_c = []
-    for conj in c:
-      #if (conj == 0):    continue
-      if (conj.monomials() == [1]):
-          new_c = []
-          break
-      new_c.append(conj)
-    if new_c != []:
-      output.append(new_c)
-  return output
+  return disjunct_cases

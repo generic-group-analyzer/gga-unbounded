@@ -101,7 +101,8 @@ let ivars_monom (mon : monom) =
 
 let ivars_umonom umon = ivars_monom (umon2mon umon)
 
-let ivars_coeff (coeff : coeff) = ivars_monom coeff.coeff_mon
+let ivars_coeff (coeff : coeff) = 
+  Set.union (ivars_monom coeff.coeff_mon) (ivars_umonom coeff.coeff_unif)
 
 let ivars_summand = function
   | Mon(m) -> ivars_monom m

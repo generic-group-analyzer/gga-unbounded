@@ -1,3 +1,4 @@
+
 (* * Constraint solving rules *)
 
 (* ** Imports *)
@@ -795,12 +796,7 @@ let rec gb_system_of_gb_polys output = function
 let groebner_basis (param_polys : poly list) (abs : abstraction) =
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
-  let groebner_basis =
-    call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n")
-    |> String.filter ~f:(fun c -> c <> '\n')
-    |> String.filter ~f:(fun c -> c <> ' ')
-    |> String.filter ~f:(fun c -> c <> '"')
-  in
+  let groebner_basis = call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   poly_system_of_gb_string groebner_basis abs
 
 let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstraction) =
@@ -1068,6 +1064,120 @@ let power_poly (p : poly) (e : BI.t) =
   let rec aux p' n = if BI.is_one n then p' else aux SP.(p' *! p) BI.(n -! one) in
   if BI.(compare e zero) < 0 then failwith "Not supported"
   else if BI.(compare e zero) = 0 then SP.one else aux p e
+
+
+(* ** Laurent polynomials rule *)
+(* This rule adds conditions on the parameters to make the handle variables be Laurent
+   polynomials (and not rational functions) *)
+
+let laurent_polys_rule (c : constr) (h : atom) (f : poly) (g : poly) =
+  (* f and g have no summations and not handle variables *)
+  let atoms = Set.union (get_atoms_poly f) (get_atoms_poly g) |> Set.to_list in
+  let parameters = L.filter atoms ~f:is_param in
+  let unif_vars  = L.filter atoms ~f:is_uvar in
+  let variables = parameters @ unif_vars in
+  
+  let sum2string (s : sum) =
+    match s.sum_summand, s.sum_ivarsK with
+    | Mon(mon), [] ->
+      L.fold_left variables
+       ~init:[]
+       ~f:(fun l v -> l @ [BI.to_string (degree v mon)] )
+      |> stringlist2string
+    | _ -> assert false
+  in
+
+  let poly2string (p : poly) =
+    Map.fold p.poly_map
+       ~init:[]
+       ~f:(fun ~key:s ~data:c output ->
+           output @ ["(" ^ (BI.to_string c) ^ ",[" ^ (sum2string s) ^ "])"]
+         )
+    |> stringlist2string
+  in
+
+  let degrees2sum (degrees : BI.t list) =
+    let rec aux mon vars degs = 
+      match vars, degs with
+      | [],[] -> mon
+      | v :: rest_vars, d :: rest_degs -> aux (mult_monom_atom mon (d,v)) rest_vars rest_degs
+      | _ -> assert false
+    in
+    mk_sum [] (Mon(aux (mk_monom []) variables degrees))
+  in
+
+  let string2poly (s : string) =
+    L.map (String.split s ~on:'t')
+        ~f:(fun t -> 
+          let coeffs = String.split t ~on:','
+                       |> L.map ~f:Big_int.big_int_of_string
+          in
+          (L.hd_exn coeffs, L.tl_exn coeffs)
+        )
+    |> L.fold_left
+        ~init:SP.zero
+        ~f:(fun p (c,degrees) -> SP.(p +! (mk_poly [(c, degrees2sum degrees)])))
+  in
+
+  F.printf "%s\n" ("{'cmd':'Laurent','f':[" ^ (poly2string f) ^ "],'g':[" ^ (poly2string g) ^ 
+              "],'nparams':" ^ (string_of_int (L.length parameters)) ^ "}\n");
+  F.print_flush();
+  (call_Sage ("{'cmd':'Laurent','f':[" ^ (poly2string f) ^ "],'g':[" ^ (poly2string g) ^ 
+              "],'nparams':" ^ (string_of_int (L.length parameters)) ^ "}\n")
+   |> String.split ~on:'|'
+   |> L.map ~f:(fun l -> L.map (String.split l ~on:'p')
+                   ~f:(fun p_string -> mk_constr c.constr_ivarsK Eq (string2poly p_string) ))
+  )
+  @
+  [
+    [mk_constr c.constr_ivarsK Eq f; mk_constr c.constr_ivarsK Eq g];
+    [mk_constr c.constr_ivarsK Eq f; mk_constr c.constr_ivarsK Eq (SP.of_atom h)];
+  ]
+  
+let assure_laurent_polys (conj : conj) =
+  let f (c : constr) =
+    match Set.to_list (get_atoms_poly c.constr_poly |> Set.filter ~f:is_hvar) with
+    | [] -> None
+    | h :: [] ->
+      begin try
+        Some
+          (h, Map.fold c.constr_poly.poly_map
+                 ~init:(SP.zero, SP.zero)
+                 ~f:(fun ~key:s ~data:c (f,g) ->
+                     begin match s.sum_summand, s.sum_ivarsK with
+                       | Mon(mon), [] ->
+                         begin match hvars mon with
+                           | [] -> (SP.(f +! (mk_poly [(c,s)])), g)
+                           | (h2, d) :: [] ->
+                             if (equal_atom h h2) && (BI.equal d BI.one) then
+                               (g, SP.(g +! (mk_poly[(c,s)])))
+                             else assert false
+                           | _ -> assert false
+                         end
+                       | _ -> assert false
+                     end
+                   )
+          )
+        with | _ -> None
+      end
+    | _ -> None
+  in
+  let rec aux = function
+    | [] -> []
+    | c :: rest ->
+      match f c with
+      | None -> aux rest
+      | Some (h,(f,g)) -> (* h*g-f = 0 *)
+        if (equal_poly f SP.zero) then
+          let c1 = mk_constr c.constr_ivarsK Eq (SP.of_atom h) in
+          let c2 = mk_constr c.constr_ivarsK Eq f in
+          [mk_conj conj.conj_ivarsK (conj.conj_constrs @ [c1]);
+           mk_conj conj.conj_ivarsK (conj.conj_constrs @ [c2])]
+        else
+          L.map (laurent_polys_rule c h f g)
+            ~f:(fun l -> mk_conj conj.conj_ivarsK (conj.conj_constrs @ l))
+  in
+  aux conj.conj_constrs
 
 (* ** Case distinctions *)
 
