@@ -162,6 +162,34 @@ def interp(req):
 
     return output[:-1]
 
+  elif cmd == "factor":
+    f = req["f"]
+
+    if f == []:  return ""
+
+    n_variables = len(f[0][1]) 
+    if n_variables == 0:    return str(f[0][0])
+
+    R = PolynomialRing(QQ, n_variables, 'x')
+
+    for j in range(len(f)):
+      for k in range(len(f[j][1])):
+        d = f[j][1][k]
+        if (d < 0):
+          for j1 in range(len(f)):
+            f[j1][1][k] -= d
+
+    f = polys_of_polylist([f], R)[0]
+
+    factors = [factor[0] for factor in f.factor()]
+
+    # Make integer every coefficient. (Return this information!!!)
+    factors, common_den = integer_coefficients(factors, R)
+    factors = polys_to_polylist(factors, R)
+
+    # Print the output in Ocaml format.
+    return polylist_to_Ocaml(factors)
+
 
 def main():
   try:

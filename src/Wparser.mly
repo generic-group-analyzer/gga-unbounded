@@ -54,8 +54,11 @@
 %token CONTRADICTION
 %token UNIFORM
 %token DIVIDE_PARAM
-%token DIVIDE_VAR
+%token UNIFORM_VARS
+%token ASSURE_LAURENT
 %token CLEAR_INDP_EQS
+%token SPLIT_IN_FACTORS
+%token SIMPLIFY_COEFFS
 
 %token QUOTE
 
@@ -194,9 +197,15 @@ instr :
   { Uniform }
 | DIVIDE_PARAM; a = atom; DOT;
   { DivideByParam(a) }
-| DIVIDE_VAR; a = atom; DOT;
-  { DivideByVar(a) }
+| UNIFORM_VARS; DOT;
+  { UniformVars }
+| ASSURE_LAURENT; DOT;
+  { AssureLaurent }
 | CLEAR_INDP_EQS; DOT;
   { ClearIndpEqs }
+| SPLIT_IN_FACTORS; a = INT; DOT;
+  { SplitInFactors(a) }
+| SIMPLIFY_COEFFS; DOT;
+  { SimplifyCoeffs }
 
 instrs_t : instrs = list(instr); EOF; { instrs };

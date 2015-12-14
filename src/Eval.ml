@@ -406,8 +406,11 @@ type instr =
   | Contradiction
   | Uniform
   | DivideByParam   of atom
-  | DivideByVar     of atom
+  | UniformVars
+  | AssureLaurent
   | ClearIndpEqs
+  | SplitInFactors of int
+  | SimplifyCoeffs
 
 let adv_of_k1k2 (k1,k2) =
   let advMsets1 = {
@@ -460,7 +463,7 @@ let eval_instr (k1,k2) system nth instr =
       | Uvar(name, Some i) -> Param(name, Some i)
       | _ -> assert false
     in
-    let cases = case_distinction (L.nth_exn system (nth-1) ) par in
+    let cases,_ = case_distinction (L.nth_exn system (nth-1) ) par in
     let case1 = L.nth_exn cases 0 in
     let case2 = L.nth_exn cases 1 in
     (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> [case1] @ [case2])), nth)
@@ -484,12 +487,30 @@ let eval_instr (k1,k2) system nth instr =
     let f conj = let (conj',_) = divide_conj_by par conj in conj' in
     (list_map_nth system nth f, nth)
 
-  | DivideByVar(var) ->
-    let f conj = let (conj',_) = divide_conj_by var conj in conj' in
-    (list_map_nth system nth f, nth)
+  | UniformVars  ->
+    (list_map_nth system nth uniform_vars, nth)
+
+  | AssureLaurent ->
+    let new_cases = assure_laurent_polys (L.nth_exn system (nth-1)) in
+    if new_cases = [] then failwith "New constraints were not found after applying 'assure_Laurent'"
+    else
+      (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> new_cases)), nth)
 
   | ClearIndpEqs ->
     (list_map_nth system nth remove_independent_equations, nth)
+
+  | SplitInFactors(n_eq) ->
+    let n_eq = n_eq - 1 in
+    let conj = L.nth_exn system (nth-1) in
+    let new_cases =
+      let c = L.nth_exn conj.conj_constrs n_eq in
+      let other_constrs = L.filter conj.conj_constrs ~f:(fun c' -> not (equal_constr c c')) in
+      L.map (split_in_factors conj.conj_ivarsK c ) ~f:(fun c' -> mk_conj conj.conj_ivarsK (c' :: other_constrs))
+    in
+    (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> new_cases)), nth)
+
+  | SimplifyCoeffs ->
+        (list_map_nth system nth (simplify_coeff_conj advK), nth)
 
 let eval_instrs instrs (k1,k2) system nth =
   L.fold_left instrs

@@ -53,8 +53,11 @@ rule lex = parse
   | "contradiction"    { CONTRADICTION }
   | "uniform_ivars"    { UNIFORM }
   | "divide_by_param"  { DIVIDE_PARAM }
-  | "divide_by_var"    { DIVIDE_VAR }
+  | "uniform_vars"     { UNIFORM_VARS }
+  | "assure_Laurent"   { ASSURE_LAURENT }
   | "clear_independent_eqs"   { CLEAR_INDP_EQS }
+  | "split_in_factors" { SPLIT_IN_FACTORS }
+  | "simp_Coeff"      { SIMPLIFY_COEFFS }
 
   | "G1"             { GROUP(G1) }
   | "G2"             { GROUP(G2) }

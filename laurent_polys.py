@@ -84,6 +84,12 @@ def reduce_gcd(first, second):
 
   return output1, output2
 
+def product(list_polys):
+  p = list_polys[0]
+  for p2 in list_polys[1:]:
+    p *= p2
+  return p  
+
 def constraintsForLaurent(R, n, num, den):
   Num = ParamPoly(R, num, n)
   Den = ParamPoly(R, den, n)
@@ -96,10 +102,18 @@ def constraintsForLaurent(R, n, num, den):
   for gi in den_factors:
     new_disjunct_cases = []
     for dcase in disjunct_cases:
-      if gi in num_factors:  continue
-      new_disjunct_cases.append(dcase + [Num.old_polynomial % gi.old_polynomial] )
-      for coeff in gi.coeffs_monoms():
-        new_disjunct_cases.append(dcase + [gi.old_polynomial - (coeff[0]*coeff[1])] )
+      if gi.old_polynomial in [p.old_polynomial for p in num_factors]:
+          list = []
+          for p in num_factors:
+            if p.old_polynomial != gi.old_polynomial:
+              list.append(p.old_polynomial)
+          new_disjunct_cases.append(dcase + [product(list)])
+          continue
+      else:
+        new_disjunct_cases.append(dcase + [Num.old_polynomial % gi.old_polynomial] )
+      if len(gi.coeffs_monoms()) > 1:
+        for coeff in gi.coeffs_monoms():
+          new_disjunct_cases.append(dcase + [gi.old_polynomial - (coeff[0]*coeff[1])] )
     disjunct_cases = new_disjunct_cases
 
   return disjunct_cases
