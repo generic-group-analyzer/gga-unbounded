@@ -88,10 +88,9 @@ def interp(req):
 
     polynomials = polys_of_polylist(polylist, R)
     reduced = ideal(polynomials).groebner_basis()
-  
+
     # Make integer every coefficient. (Return this information!!!)
     reduced, common_den = integer_coefficients(reduced, R)
-     
     reduced_polylist = polys_to_polylist(reduced, R)
   
     # Print the output in Ocaml format.

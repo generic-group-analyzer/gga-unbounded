@@ -142,6 +142,18 @@ let split_in_factors_all (conj : conj) (depth : int) =
   in
   aux 1 [] (conj.conj_constrs)
 
+let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (conj : conj) =
+  let new_conj = divide_by_not_null_params depth conj
+                 |> divide_by_every_variable depth
+                 |> simplify advK
+  in
+  if (equal_conj conj new_conj || n = 0) then conj
+  else
+    let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
+    F.print_flush();
+    simplify_if_possible advK depth (n-1) new_conj
+
+
 let rec automatic_algorithm (used_params_global : (atom list * string list) list) (disjunction : conj list) (advK : advK) =
   if (L.length disjunction) = 0 then true
   else if L.length disjunction > 50 then false
@@ -154,18 +166,15 @@ let rec automatic_algorithm (used_params_global : (atom list * string list) list
     let depth = (L.length disjunction) - 1 in
     let used_params = L.hd_exn used_params_global in
 (*    let () = F.printf "%a\n" pp_conj (L.hd_exn disjunction) in *)
-    let conj = L.hd_exn disjunction |> simplify advK in
-    F.print_flush();
-    F.printf "%ssimplify.\n" (String.make depth ' ');
+    let conj = L.hd_exn disjunction in
+    let conj = simplify_if_possible advK depth 2 conj in
     begin match contradiction conj with
     | Some _ -> 
       F.printf "%scontradiction.\n" (String.make depth ' ');
       automatic_algorithm (L.tl_exn used_params_global) (L.tl_exn disjunction) advK
     | None -> 
       let conj = introduce_coeff_everywhere depth conj advK
-                 |> simplify advK
-                 |> (fun c -> let () = F.printf "%ssimplify.\n" (String.make depth ' ') in c)
-                 |> divide_by_not_null_params depth
+                 |> simplify_if_possible advK depth 2
       in
       begin match contradiction conj with
         | Some _ ->

@@ -144,14 +144,14 @@ let rec split_ivar_sum (s : sum) (i : ivar) (j : ivar) (context : context_ivars)
 let rec split_ivar_constr (c : constr) (i : ivar) (j : ivar) (context : context_ivars) =
   (* i is a qbound index and we split the constraint into two cases if j is not in the exceptions *)
   if (equal_ivar i j) then assert false
-  else
+  else  
     match (L.find c.constr_ivarsK ~f:(fun (i',_) -> equal_ivar i i')) with
     | None -> failwith "i is not a qbound index variable"
     | Some (_,exceptions) ->
       if Set.exists exceptions ~f:(fun k -> not(context_distinct k j context)) then [c]
       else
         let first,_ = L.find_exn c.constr_ivarsK ~f:(fun (k,_) -> equal_ivar i k || equal_ivar j k) in
-        if (equal_ivar first j) ||
+        if (equal_ivar first i) ||
            not (L.exists c.constr_ivarsK ~f:(fun (k,_) -> equal_ivar j k))
         then
           let qvarsK1 =
@@ -212,14 +212,39 @@ let all_ivars_distinct_sum (sum : sum) (context : context_ivars) =
     let bound_ivars = unzip1 s.sum_ivarsK in
     let local_context = update_context context s.sum_ivarsK in
     let not_distinct  = ivars_not_distinct (Ivar.Set.of_list (unzip1 local_context)) local_context
-                        |> L.filter ~f:(fun (i,j) -> L.mem bound_ivars i || L.mem bound_ivars j)
+                        |> L.filter ~f:(fun (i,j) ->
+                            L.mem bound_ivars i || L.mem bound_ivars j)
     in
+    let rec aux2 s = function
+      | [] ->
+        if L.length not_distinct > 0 then assert false
+        else [s]
+      | (i,j) :: rest ->
+        let new_sums =
+          if (L.mem bound_ivars i) then split_ivar_sum s i j local_context
+          else if (L.mem bound_ivars j) then split_ivar_sum s j i local_context
+          else assert false
+        in
+        if (L.length new_sums) = 1 then aux2 s rest
+        else L.concat (L.map new_sums ~f:aux)
+    in
+    aux2 s not_distinct
+(*
     match not_distinct with
     | [] -> [s]
     | (i,j) :: _ ->
-      if (L.mem bound_ivars i) then L.concat (L.map (split_ivar_sum s i j local_context) ~f:aux)
-      else if (L.mem bound_ivars j) then L.concat (L.map (split_ivar_sum s j i local_context) ~f:aux)
+      F.printf "%a\n" WconstrsUtil.pp_sum s;
+      F.printf "=%a %a=\n" WconstrsUtil.pp_ivar i WconstrsUtil.pp_ivar j;
+      F.print_flush();
+      if (L.mem bound_ivars i) then 
+        let () = F.printf "[[[%a]]]\n" (pp_list "," WconstrsUtil.pp_sum) (split_ivar_sum s i j local_context) in
+        F.print_flush();
+        L.concat (L.map (split_ivar_sum s i j local_context) ~f:aux)
+      else if (L.mem bound_ivars j) then
+        let () = F.printf "[[[%a]]]\n" (pp_list "," WconstrsUtil.pp_sum) (split_ivar_sum s j i local_context) in
+        F.print_flush(); L.concat (L.map (split_ivar_sum s j i local_context) ~f:aux)
       else assert false
+*)
   in
   aux sum
 
@@ -527,8 +552,8 @@ let new_name names =
     else name
   in
   aux 1  
-    
-let opening (conj : conj) =
+
+let normalize (conj : conj) =
   let names = ["i"; "j"; "k"] @ (L.map (Set.to_list (ivars_conj conj)) ~f:(fun i -> i.name)) in
   let ex_name = new_name names in
   let fa_name = new_name ([ex_name] @ names) in
@@ -536,9 +561,41 @@ let opening (conj : conj) =
   let conj = normalize_ivars conj ex_name fa_name s_name in
   normalize_ivars conj "i" "j" "k"
 
+let opening (conj : conj) =
+  let conj = normalize conj in
+  (*let qvars = L.fold_left conj.conj_constrs
+               ~init:Ivar.Set.empty
+               ~f:(fun s c -> Set.union s (Ivar.Set.of_list (unzip1 c.constr_ivarsK)))
+  in
+  let new_constrs =
+    L.map conj.conj_constrs
+      ~f:(fun c -> 
+          let new_qvars = Set.filter qvars ~f:(fun i -> not(L.mem (unzip1 c.constr_ivarsK) i))
+                          |> Set.to_list
+          in
+          let c_qvars = c.constr_ivarsK @ (L.zip_exn new_qvars (repeat_element Ivar.Set.empty (L.length new_qvars))) in
+          mk_constr c_qvars c.constr_is_eq (all_ivars_distinct_poly c.constr_poly c_qvars)
+        )
+  in
+  mk_conj conj.conj_ivarsK new_constrs*)
+  conj
+
 let closing (conj : conj) =
-  let conj = opening conj in
-  mk_conj conj.conj_ivarsK (dedup_preserve_order conj.conj_constrs ~equal:equal_constr)
+  let conj = normalize conj in
+  (* let new_constrs = conj.conj_constrs
+    |> L.map ~f:(fun c -> 
+        let polyivars = ivars_poly c.constr_poly in
+        let not_used_qvars = L.filter (unzip1 c.constr_ivarsK) ~f:(fun i -> not(Set.mem polyivars i)) in
+        let qvarsK = L.filter c.constr_ivarsK ~f:(fun (i,_) -> Set.mem (ivars_poly c.constr_poly) i)
+                     |> L.map ~f:(fun (i,s) -> (i, Set.diff s (Ivar.Set.of_list not_used_qvars) ))
+        in
+        mk_constr qvarsK c.constr_is_eq c.constr_poly
+      )
+    |> dedup_preserve_order ~equal:equal_constr
+  in
+  *)
+  let new_constrs = dedup_preserve_order ~equal:equal_constr conj.conj_constrs in
+  mk_conj conj.conj_ivarsK new_constrs  
 
 let maximal_excp_sets_sum (s : sum) (context : context_ivars) =
   let context = update_context context s.sum_ivarsK in
@@ -635,6 +692,8 @@ let abs_sum2degrees (s : sum) (abs : abstraction) =
   in
   aux [] abs.abstracts
 
+exception Not_Valid_Sum_Degree
+
 let abs_degrees2sum (degrees : BI.t list) (abs : abstraction) =
   let sums = L.map (L.zip_exn abs.abstracts degrees)
       ~f:(function
@@ -642,7 +701,7 @@ let abs_degrees2sum (degrees : BI.t list) (abs : abstraction) =
             if (BI.is_one d) then [s]
             else if (BI.is_zero d) then []
             else if (BI.equal d (BI.of_int 2)) then [ mult_sum s s ]
-            else assert false
+            else raise Not_Valid_Sum_Degree
           | P(p), d ->
             if (BI.is_zero d) then []
             else [mk_sum [] (Mon(mk_monom_of_map (Atom.Map.of_alist_exn [(Param(p), d)] )))]
@@ -657,12 +716,12 @@ let poly2gb_poly (p : poly) (abs : abstraction) =
   Map.fold p.poly_map
      ~init:[]
      ~f:(fun ~key:s ~data:c l -> l @ [(c, abs_sum2degrees s abs)])
-
+(*
 let gb_poly2poly (gbp : gb_poly) (abs : abstraction) =
   L.fold_left gbp
    ~init:SP.zero
    ~f:(fun p (c,l) -> SP.(p +! (mk_poly [(c, abs_degrees2sum l abs)])) )
-
+*)
 let string_of_gb_poly (gbp : gb_poly) =
   let rec aux output = function
     | [] -> output
@@ -688,7 +747,10 @@ let poly_system_of_gb_string (s : string) (abs : abstraction) =
   if s = "" then []
   else
     let polynomials = String.split s ~on:'p' in
-    L.map polynomials ~f:(fun s' -> poly_of_gb_string s' abs)
+    L.map polynomials ~f:(fun s' -> try poly_of_gb_string s' abs with     
+                                      | Not_Valid_Sum_Degree -> SP.zero
+                                      | _ -> assert false
+                         )
 
 let param_poly_equation (c : constr) =
   let is_param_sum (s : sum) =
@@ -793,12 +855,17 @@ let rec gb_system_of_gb_polys output = function
   | gp :: rest -> gb_system_of_gb_polys (output ^ (string_of_gb_poly gp) ^ ",") rest
 
 let groebner_basis (param_polys : poly list) (abs : abstraction) =
+  let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero)) in
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
+(*  pp_abstraction abs;
+  F.printf "%s\n"  ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n");
+  F.print_flush();*)
   let groebner_basis = call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   poly_system_of_gb_string groebner_basis abs
 
 let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstraction) =
+  let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero)) in
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let gb_poly_to_reduce = poly2gb_poly poly_to_reduce abs in
@@ -862,6 +929,8 @@ let groebner_basis_simplification (conj : conj) =
                  )
           in
           mk_constr binder Eq p)
+      |> L.map ~f:(fun c -> all_ivars_distinct_constr c conj.conj_ivarsK)
+      |> L.concat
     in
     (* Phase 2: Simplification below binders *)
     let param_poly_constrs_without_sums =
@@ -873,6 +942,7 @@ let groebner_basis_simplification (conj : conj) =
     let simplified_rest =
       L.map rest_constraints
        ~f:(fun c ->
+            let () = if (maximal_excp_sets_constr c []) then () else assert false in
             let xpoly = xpoly_of_poly c.constr_poly in
             L.map xpoly
              ~f:(fun x ->
@@ -1078,8 +1148,9 @@ let uniform_vars (conj : conj) =
 
 let simplify (advK : advK) (conj : conj) =
   clear_trivial conj
-  |> all_ivars_distinct_conj
   |> simplify_coeff_conj advK
+  |> opening
+  |> all_ivars_distinct_conj
   |> groebner_basis_simplification
   |> simplify_eqs_in_others
   |> uniform_vars
@@ -1311,7 +1382,7 @@ let case_distinction (conj : conj) (p : atom) =
       let c2 = mk_constr [] InEq (SP.of_atom (Param(name, Some j))) in
       [ mk_conj  conj.conj_ivarsK             (conj.conj_constrs @ [c1]);
         mk_conj (conj.conj_ivarsK @ [(j,iE)]) (conj.conj_constrs @ [c2])
-        |> opening
+        |> normalize
       ], Some j
   | _ -> failwith "parameter expected"
 

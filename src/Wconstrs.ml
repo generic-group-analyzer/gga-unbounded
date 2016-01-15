@@ -7,7 +7,7 @@ open Abbrevs
 open Watom
 
 (* ** Constraint expressions and constraints
- * ======================================================================= *)
+ * ----------------------------------------------------------------------- *)
 
 type is_eq = Eq | InEq with compare, sexp
 
@@ -196,7 +196,16 @@ let well_formed_exceptions varsK =
   let indices, setsK = L.unzip varsK in
   aux indices setsK
 
+let fix_exceptions varsK =
+  let order (i,iset) (j,jset) =
+    if (Set.mem jset i) then -1
+    else if (Set.mem iset j) then 1
+    else 0      
+  in
+  L.sort ~cmp:order varsK
+
 let mk_sum ivarsK (summand : summand) =
+  let ivarsK = fix_exceptions ivarsK in
   if (well_formed_exceptions ivarsK) then
     { sum_ivarsK = ivarsK; sum_summand = summand }
   else
@@ -221,7 +230,7 @@ let mk_poly terms =
 let mk_constr qvarsK is_eq (poly : poly) =
   let polyivars = ivars_poly poly in
   let not_used_qvars = L.filter (unzip1 qvarsK) ~f:(fun i -> not(Set.mem polyivars i)) in
-  let qvarsK = L.filter qvarsK ~f:(fun (i,_) -> Set.mem (ivars_poly poly) i)
+  let qvarsK = L.filter qvarsK ~f:(fun (i,_) -> Set.mem polyivars i)
                |> L.map ~f:(fun (i,s) -> (i, Set.diff s (Ivar.Set.of_list not_used_qvars) ))
   in
   if (well_formed_exceptions qvarsK) then
