@@ -46,6 +46,8 @@ val equal_constr : constr -> constr -> bool
 type conj = private { conj_ivarsK : (ivar * Ivar.Set.t) list; conj_constrs : constr list; }
   with sexp, compare
 
+exception Mult_Coeff_by_Var
+
 val equal_conj : conj -> conj -> bool
 
 (* ** Extracting, mapping, and renaming index variables

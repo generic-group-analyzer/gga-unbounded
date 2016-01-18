@@ -143,20 +143,24 @@ let split_in_factors_all (conj : conj) (depth : int) =
   aux 1 [] (conj.conj_constrs)
 
 let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (conj : conj) =
-  let new_conj = divide_by_not_null_params depth conj
-                 |> divide_by_every_variable depth
-                 |> simplify advK
-  in
-  if (equal_conj conj new_conj || n = 0) then conj
+  if n = 0 then conj
   else
-    let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
-    F.print_flush();
-    simplify_if_possible advK depth (n-1) new_conj
+    let new_conj = divide_by_not_null_params depth conj
+                   |> divide_by_every_variable depth
+                   |> simplify advK
+    in
+    if (equal_conj conj new_conj) then conj
+    else
+      let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
+      F.print_flush();
+      simplify_if_possible advK depth (n-1) new_conj
 
 
 let rec automatic_algorithm (used_params_global : (atom list * string list) list) (disjunction : conj list) (advK : advK) =
   if (L.length disjunction) = 0 then true
-  else if L.length disjunction > 50 then false
+  else if L.length disjunction > 50 then
+    let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex (L.hd_exn disjunction) in
+    false
   else
     let used_params_global, disjunction = 
       dedup_preserve_order ~equal:(fun (_,c1) (_,c2)-> equal_conj c1 c2)
@@ -202,7 +206,10 @@ let rec automatic_algorithm (used_params_global : (atom list * string list) list
               F.printf "[%a]\n" (pp_list ", " pp_atom) parameters;
               F.print_flush();*)
               match L.hd parameters with
-              | None -> false
+              | None ->
+                let conj = simplify_if_possible advK depth 5 conj in
+                let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex conj in
+                false
               | Some p ->
                 F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
                 let cases, new_idx = case_distinction conj p in

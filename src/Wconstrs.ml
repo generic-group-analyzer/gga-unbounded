@@ -318,9 +318,18 @@ let mult_monom (m1 : monom) (m2 : monom) =
 let mult_umonom (um1 : umonom) (um2 : umonom) =
   mon2umon (mult_monom (umon2mon um1) (umon2mon um2))
 
+exception Mult_Coeff_by_Var
+
+let mult_monom_by_coeff (m : monom) (c : coeff) =
+  if equal_monom (monom_filter_vars is_param m) m then
+    Coeff({ coeff_unif = c.coeff_unif; coeff_mon = (mult_monom m c.coeff_mon) })
+  else raise Mult_Coeff_by_Var
+
 let mult_summand s1 s2 =
   match s1,s2 with
   | Mon(m1), Mon(m2) -> Mon(mult_monom m1 m2)
+  | Coeff(c), Mon(m) -> mult_monom_by_coeff m c
+  | Mon(m), Coeff(c) -> mult_monom_by_coeff m c
   | _ -> failwith "We don't allow multiplication of Coeff's"
 
 let mult_sum s1 s2 =

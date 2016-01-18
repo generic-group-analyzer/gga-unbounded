@@ -620,6 +620,7 @@ let maximal_exception_sets (conj : conj) =
 type abstract =
   | Sigma of sum
   | P of param
+  | C of coeff
   with compare, sexp
 
 type abstraction = { abstracts : abstract list } with compare
@@ -632,6 +633,9 @@ let mk_abstraction (abstracts : abstract list) =
     | Sigma(s), P(_) -> if (equal_sum sum_one s) then  1 else -1
     | P(_), Sigma(s) -> if (equal_sum sum_one s) then -1 else  1
     | P(p1), P(p2) -> (Set.length (ivars_atom (Param p2))) - (Set.length (ivars_atom (Param p1)))
+    | C(c1), C(c2) -> compare_coeff c1 c2
+    | C(_), _ -> -1
+    | _ , C(_) -> 1
   in
   let abstracts = L.dedup abstracts ~compare:compare_abstract in
   let abstracts = L.sort ~cmp:prefered_order (L.sort ~cmp:compare_abstract abstracts) in
@@ -640,6 +644,7 @@ let mk_abstraction (abstracts : abstract list) =
 let pp_abstract = function
   | Sigma(s) -> F.printf "%a " PPLatex.pp_sum_latex s
   | P(p) -> F.printf "%a " PPLatex.pp_param_latex p
+  | C(c) -> F.printf "%a " PPLatex.pp_coeff_latex c
 
 let pp_abstraction abs =
   L.iter abs.abstracts ~f:(fun a -> let () = pp_abstract a in F.print_flush())
@@ -663,7 +668,7 @@ let extract_abstracts_sum (s : sum) =
     if equal_sum sigma (mk_sum [] (Mon(mk_monom_of_map Atom.Map.empty))) &&
        L.length non_bound > 0 then non_bound
     else (Sigma(sigma), BI.one) :: non_bound
-  | Coeff(_) -> failwith "parameter polynomial expected"
+  | Coeff(c) -> [(C(c), BI.one)]
 
 let abstraction_from_parampolys (parampolys : poly list) =
   let extract_abstracts_poly (p : poly) =
@@ -693,6 +698,7 @@ let abs_sum2degrees (s : sum) (abs : abstraction) =
   aux [] abs.abstracts
 
 exception Not_Valid_Sum_Degree
+exception Not_Valid_Coeff_Degree
 
 let abs_degrees2sum (degrees : BI.t list) (abs : abstraction) =
   let sums = L.map (L.zip_exn abs.abstracts degrees)
@@ -705,6 +711,10 @@ let abs_degrees2sum (degrees : BI.t list) (abs : abstraction) =
           | P(p), d ->
             if (BI.is_zero d) then []
             else [mk_sum [] (Mon(mk_monom_of_map (Atom.Map.of_alist_exn [(Param(p), d)] )))]
+          | C(c), d ->
+            if (BI.is_zero d) then []
+            else if (BI.is_one d) then [mk_sum [] (Coeff(c))]
+            else raise Not_Valid_Coeff_Degree
         )
         |> L.concat
   in
@@ -762,6 +772,18 @@ let param_poly_equation (c : constr) =
   (Map.fold c.constr_poly.poly_map
      ~init:true
      ~f:(fun ~key:s ~data:_ b -> b && (is_param_sum s) )
+  )
+
+let without_variables_but_possibly_coeffs (c : constr) =
+  let is_valid_sum (s : sum) =
+    match s.sum_summand with
+    | Coeff(_) -> true
+    | Mon(mon) -> equal_monom (params_monom mon) mon
+  in
+  c.constr_is_eq = Eq &&
+  (Map.fold c.constr_poly.poly_map
+     ~init:true
+     ~f:(fun ~key:s ~data:_ b -> b && (is_valid_sum s) )
   )
 
 let without_summations (c : constr) =
@@ -832,7 +854,7 @@ let poly_of_xterm (x : xterm) =
          else
            let new_summand =
              match x.xterm_summand with
-             | Mon(mon) -> mult_summand (Mon(mon)) s.sum_summand
+             | Mon(mon) ->  mult_summand (Mon(mon)) s.sum_summand
              | Coeff(coeff) ->
                begin match s.sum_summand with
                  | Mon(m) -> Coeff(mk_coeff coeff.coeff_unif (mult_monom m coeff.coeff_mon))
@@ -842,10 +864,14 @@ let poly_of_xterm (x : xterm) =
            SP.(p +! (mk_poly [(c, mk_sum x.xterm_ivarsK new_summand)]))
      )
 
-let poly_of_xpoly (xp : xpoly) =
-  L.fold_left xp.xpoly_list
+let poly_of_xpoly (xp : xpoly) (xp_aux : xpoly) =
+  L.fold_left (L.zip_exn xp.xpoly_list xp_aux.xpoly_list)
    ~init:SP.zero
-   ~f:(fun p x -> SP.(p +! (poly_of_xterm x)))
+   ~f:(fun p (x, xaux) ->
+      try SP.(p +! (poly_of_xterm x)) with
+        | Mult_Coeff_by_Var -> SP.(p +! (poly_of_xterm xaux))
+        | _ -> assert false
+     )
 
 (* *** Groebner basis solving *)
 
@@ -934,10 +960,10 @@ let groebner_basis_simplification (conj : conj) =
     in
     (* Phase 2: Simplification below binders *)
     let param_poly_constrs_without_sums =
-      L.filter new_constrs ~f:(fun c -> (param_poly_equation c) && (without_summations c))
+      L.filter new_constrs ~f:(fun c -> (without_variables_but_possibly_coeffs c) && (without_summations c))
     in
     let rest_constraints =
-      L.filter new_constrs ~f:(fun c -> not(param_poly_equation c) || not(without_summations c))
+      L.filter new_constrs ~f:(fun c -> not(without_variables_but_possibly_coeffs c) || not(without_summations c))
     in
     let simplified_rest =
       L.map rest_constraints
@@ -968,7 +994,7 @@ let groebner_basis_simplification (conj : conj) =
                  in
                  let abs = abstraction_from_parampolys (x.xterm_param_poly :: param_polys) in
                  let reduced = gb_reduce param_polys x.xterm_param_poly abs in
-                 { x with xterm_param_poly = reduced }
+                 { x with xterm_param_poly = reduced }, x
                else
                  let param_polys = L.map ~f:(fun c -> c.constr_poly) param_poly_constrs_without_sums in
                  let ivars_polys =
@@ -994,10 +1020,11 @@ let groebner_basis_simplification (conj : conj) =
                  in
                  let abs = abstraction_from_parampolys (x.xterm_param_poly :: param_polys) in
                  let reduced = gb_reduce param_polys x.xterm_param_poly abs in
-                 { x with xterm_param_poly = reduced }
+                 { x with xterm_param_poly = reduced }, x
              )
 
-            |> (fun list -> mk_constr delta_binder c.constr_is_eq (poly_of_xpoly { xpoly_list = list}))
+            |> (fun list -> mk_constr delta_binder c.constr_is_eq
+                   (poly_of_xpoly { xpoly_list = (unzip1 list) } { xpoly_list  = (unzip2 list) } ))
           )
     in
     mk_conj conj.conj_ivarsK (simplified_rest @ param_poly_constrs_without_sums)
