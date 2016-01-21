@@ -101,6 +101,13 @@ let most_frequent_sign list =
   if (2 * positive) >= L.length list then BI.one
   else BI.(opp one)
 
+let rec before_in_list ~equal i j = function
+  | [] -> false
+  | a :: rest ->
+    if (equal a i) then L.mem rest j ~equal
+    else if (equal a j) then false
+    else before_in_list ~equal i j rest
+
 let list_map_nth list n f =
   let rec aux hd k = function
     | [] -> failwith "list_map_nth: n is greater than list length"

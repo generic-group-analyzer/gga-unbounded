@@ -6,6 +6,15 @@ open Wconstrs
 open WconstrsUtil
 open Wrules
 
+type proof_branch = {
+  branch_conj : conj;
+  branch_used_params : atom list * string list;
+  branch_free_ivars_order : ivar list;
+}
+
+let mk_proof_branch conj used_params ivars_order =
+  { branch_conj = conj; branch_used_params = used_params; branch_free_ivars_order = ivars_order }
+
 let coeff_everywhere_constr (depth : int ) (c : constr) (n : int) (conj : conj) advK =
   let context = conj.conj_ivarsK in
   let used_ivars = Set.union (Ivar.Set.of_list (unzip1 context)) (ivars_constr c) in
@@ -35,7 +44,7 @@ let coeff_everywhere_constr (depth : int ) (c : constr) (n : int) (conj : conj) 
           )
   with _ -> []
 
-let introduce_coeff_everywhere (depth : int) (conj : conj) advK =
+let introduce_coeff_everywhere (depth : int) (advK : advK) (conj : conj) =
   let rec aux new_constrs n = function
     | [] -> new_constrs
     | c :: rest ->
@@ -100,14 +109,14 @@ let rec count_atom (counter : int) (p : atom) = function
     if Set.mem (get_atoms_constr c) p then count_atom (counter+1) p rest
     else count_atom counter p rest
 
-let parameters_to_split (conj : conj) (used_params : atom list * string list) =
-  let i = { name = new_name (L.map (Set.to_list (ivars_conj conj)) ~f:(fun i -> i.name)); id = 0 } in
+let parameters_to_split (branch : proof_branch) =
+  let i = { name = new_name (L.map (Set.to_list (ivars_conj branch.branch_conj)) ~f:(fun i -> i.name)); id = 0 } in
    
-  let parameters = Set.to_list (get_atoms_conj conj) |> L.filter ~f:is_param in
-  let frequencies = L.map parameters ~f:(fun p -> count_atom 0 p conj.conj_constrs) in
+  let parameters = Set.to_list (get_atoms_conj branch.branch_conj) |> L.filter ~f:is_param in
+  let frequencies = L.map parameters ~f:(fun p -> count_atom 0 p branch.branch_conj.conj_constrs) in
   let (_, sorted_params) = quicksort_double (>) frequencies parameters in
 
-  let not_bound_params, bound_params = used_params in
+  let not_bound_params, bound_params = branch.branch_used_params in
 
   L.fold_left sorted_params
    ~init:[]
@@ -142,94 +151,133 @@ let split_in_factors_all (conj : conj) (depth : int) =
   in
   aux 1 [] (conj.conj_constrs)
 
-let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (conj : conj) =
-  if n = 0 then conj
-  else
-    let new_conj = divide_by_not_null_params depth conj
-                   |> divide_by_every_variable depth
-                   |> simplify advK
-    in
-    if (equal_conj conj new_conj) then conj
+let simplify_coeffs_with_order (depth : int) (order : ivar list) (conj : conj) =
+  let simp_sum (c : BI.t) (s : sum) =
+    match s.sum_summand with
+    | Mon(_) -> mk_poly [(c, s)]
+    | Coeff(coeff) ->
+      let handle_vars = handle_vars_list coeff.coeff_mon in
+      begin match handle_vars with
+        | [] -> mk_poly [(c, s)]
+        | (Hvar h1) :: [] ->
+          if (Set.exists (ivars_monom (umon2mon coeff.coeff_unif))
+                 ~f:(fun j -> Util.before_in_list ~equal:equal_ivar h1.hv_ivar j order)) then
+            let () = F.printf "%ssimplified_coeffs_with_index_order.\n" (String.make depth ' ') in
+            SP.zero
+          else
+            mk_poly [(c, s)]
+        | _ -> assert false (* FIXME "Not supported yet" *) 
+      end
+  in
+  let simp_poly (p : poly) =
+    Map.fold p.poly_map
+       ~init:SP.zero
+       ~f:(fun ~key:s ~data:c p' ->
+           SP.(p' +! (simp_sum c s))
+         )
+  in
+  let simp_constr (c : constr) = mk_constr c.constr_ivarsK c.constr_is_eq (simp_poly c.constr_poly) in
+  mk_conj conj.conj_ivarsK (L.map conj.conj_constrs ~f:simp_constr)
+
+exception Found_contradiction
+
+let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (order : ivar list) (conj : conj) =
+  match contradiction conj with
+  | Some _ ->
+    F.printf "%scontradiction.\n" (String.make depth ' ');
+    raise Found_contradiction
+  | None ->
+    if n = 0 then conj
     else
-      let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
-      F.print_flush();
-      simplify_if_possible advK depth (n-1) new_conj
+      let new_conj = divide_by_not_null_params depth conj
+                     |> divide_by_every_variable depth
+                     |> simplify_coeffs_with_order depth order
+                     |> simplify advK
+      in
+      if (equal_conj conj new_conj) then conj
+      else
+        let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
+        F.print_flush();
+        simplify_if_possible advK depth (n-1) order new_conj
+          
 
-
-let rec automatic_algorithm (used_params_global : (atom list * string list) list) (disjunction : conj list) (advK : advK) =
-  if (L.length disjunction) = 0 then true
-  else if L.length disjunction > 50 then
-    let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex (L.hd_exn disjunction) in
+let rec automatic_algorithm (goals : proof_branch list) (advK : advK) =
+  if (L.length goals) = 0 then true
+  else if L.length goals > 100 then
+    let current_branch = L.hd_exn goals in
+    let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in
     false
   else
-    let used_params_global, disjunction = 
-      dedup_preserve_order ~equal:(fun (_,c1) (_,c2)-> equal_conj c1 c2)
-        (L.zip_exn used_params_global disjunction)
-      |> L.unzip
+    let goals = dedup_preserve_order goals 
+        ~equal:(fun g1 g2 -> equal_conj g1.branch_conj g2.branch_conj)
     in
-    let depth = (L.length disjunction) - 1 in
-    let used_params = L.hd_exn used_params_global in
-(*    let () = F.printf "%a\n" pp_conj (L.hd_exn disjunction) in *)
-    let conj = L.hd_exn disjunction in
-    let conj = simplify_if_possible advK depth 2 conj in
-    begin match contradiction conj with
-    | Some _ -> 
-      F.printf "%scontradiction.\n" (String.make depth ' ');
-      automatic_algorithm (L.tl_exn used_params_global) (L.tl_exn disjunction) advK
-    | None -> 
-      let conj = introduce_coeff_everywhere depth conj advK
-                 |> simplify_if_possible advK depth 2
+    let depth = (L.length goals) - 1 in
+    let current_branch = L.hd_exn goals in
+    let used_params = current_branch.branch_used_params in
+    let ivars_order = current_branch.branch_free_ivars_order in
+    let conj = current_branch.branch_conj in
+    try
+      let conj = simplify_if_possible advK depth 2 ivars_order conj
+                 |> introduce_coeff_everywhere depth advK
+                 |> simplify_if_possible advK depth 2 ivars_order
       in
-      begin match contradiction conj with
-        | Some _ ->
-          F.printf "%scontradiction.\n" (String.make depth ' ');
-          automatic_algorithm (L.tl_exn used_params_global) (L.tl_exn disjunction) advK
-        | None ->
-          let disj' = split_in_factors_all conj depth in
-          if (L.length disj' > 1) then
-            automatic_algorithm 
-              ((repeat_element used_params (L.length disj')) @ (L.tl_exn used_params_global))
-              (disj' @ (L.tl_exn disjunction)) advK
-          else
-            let disj' = assure_laurent_polys conj in
-            if (disj' <> []) then
-              let () = F.printf "assure_Laurent.\n" in
-              automatic_algorithm
-                ((repeat_element used_params (L.length disj')) @ (L.tl_exn used_params_global))
-                (disj' @ (L.tl_exn disjunction)) advK
-            else
-              let parameters = parameters_to_split conj used_params in
-              let not_bound_params, bound_params = used_params in
-  (*            F.printf "%a\n" pp_conj conj;
-              F.printf "[%a]\n" (pp_list ", " pp_atom) not_bound_params;
-              F.printf "[%a]\n" (pp_list ", " pp_string) bound_params;
-              F.printf "[%a]\n" (pp_list ", " pp_atom) parameters;
-              F.print_flush();*)
-              match L.hd parameters with
-              | None ->
-                let conj = simplify_if_possible advK depth 5 conj in
+
+      let disj' = split_in_factors_all conj depth in
+      if (L.length disj' > 1) then
+        let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
+        automatic_algorithm (new_branches @ (L.tl_exn goals)) advK
+      else
+        let disj' = assure_laurent_polys conj in
+        if (disj' <> []) then
+          let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
+          let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
+          automatic_algorithm (new_branches @ (L.tl_exn goals)) advK
+        else
+          let parameters = parameters_to_split (mk_proof_branch conj used_params ivars_order) in
+          let not_bound_params, bound_params = used_params in
+          
+          match L.hd parameters with
+          | None ->
+            let not_ordered_ivars = L.filter (unzip1 conj.conj_ivarsK)
+                                     ~f:(fun i -> not(L.mem ivars_order i ~equal:equal_ivar))
+            in
+            begin match not_ordered_ivars with
+              | [] -> 
+                let conj = simplify_if_possible advK depth 5 ivars_order conj in
                 let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex conj in
                 false
-              | Some p ->
-                F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
-                let cases, new_idx = case_distinction conj p in
-                let second_list =
-                  match new_idx with
-                  | None -> bound_params
-                  | Some _ -> (atom_name p) :: bound_params
+              | i :: _ ->
+                let all_possible_orders = Util.insert i ivars_order in
+                let new_branches = L.map all_possible_orders
+                                    ~f:(fun o -> mk_proof_branch conj used_params o)
                 in
-                automatic_algorithm ([(p :: not_bound_params, second_list);
-                                      (p :: not_bound_params, bound_params)] @
-                                     (L.tl_exn used_params_global))
-                  (cases @ L.tl_exn disjunction) advK
-      end
-    end
-
+                F.printf "%sadd_ivar_to_order %a\n" (String.make depth ' ') pp_ivar i;
+                automatic_algorithm (new_branches @ (L.tl_exn goals)) advK
+            end
+          | Some p ->
+            F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
+            let cases, new_idx = case_distinction conj p in
+            let second_list =
+              match new_idx with
+              | None -> bound_params
+              | Some _ -> (atom_name p) :: bound_params
+            in
+            let branch1 =
+              mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order
+            in
+            let branch2 =
+              mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order
+            in
+            automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) advK
+    with
+    | Found_contradiction ->
+      automatic_algorithm (L.tl_exn goals) advK
+   
 let automatic_prover cmds =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let advK = Eval.adv_of_k1k2 (k1,k2) in
   let t1 = Unix.gettimeofday() in
-  let proven = automatic_algorithm [[],[]] [constraints] advK in
+  let proven = automatic_algorithm [mk_proof_branch constraints ([],[]) []] advK in
   let t2 = Unix.gettimeofday() in
   if proven then
     let () = F.printf "Proven!\nTime %F seconds\n" (t2 -. t1) in

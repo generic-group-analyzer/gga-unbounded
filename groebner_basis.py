@@ -189,14 +189,19 @@ def interp(req):
     # Print the output in Ocaml format.
     return polylist_to_Ocaml(factors)
 
-
 def main():
+  hashTable = {}
   try:
     while True:
       inp = sys.stdin.readline()
       if (inp == ''): break
-      cmd = ast.literal_eval(inp)
-      result = interp(cmd)
+      try:
+        result = hashTable[inp]
+      except Exception:
+        cmd = ast.literal_eval(inp)
+        result = interp(cmd)
+        hashTable[inp] = result
+
       o = json.dumps(result)
       print(json.dumps(result))
       sys.stdout.flush()
