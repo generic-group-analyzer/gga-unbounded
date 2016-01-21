@@ -10,7 +10,21 @@ type proof_branch = {
   branch_conj : conj;
   branch_used_params : atom list * string list;
   branch_free_ivars_order : ivar list;
-}
+} with compare, sexp
+
+(* data structures with proof branches *)
+module Proof_branch = struct
+  module T = struct
+    type t = proof_branch
+    let compare = compare_proof_branch
+    let sexp_of_t = sexp_of_proof_branch
+    let t_of_sexp = proof_branch_of_sexp
+  end
+  include T
+  include Comparable.Make(T)
+end
+
+let equal_proof_branch b1 b2 = compare_proof_branch b1 b2 = 0
 
 let mk_proof_branch conj used_params ivars_order =
   { branch_conj = conj; branch_used_params = used_params; branch_free_ivars_order = ivars_order }
@@ -199,85 +213,108 @@ let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (order : ivar
         let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
         F.print_flush();
         simplify_if_possible advK depth (n-1) order new_conj
-          
 
-let rec automatic_algorithm (goals : proof_branch list) (advK : advK) =
+let rec update_table_and_sons table sons current_branch =
+  let table = Set.add table current_branch in
+  let f = fun (l,_b) -> L.mem l current_branch ~equal:equal_proof_branch in
+  match L.find sons ~f with
+  | None -> table, sons
+  | Some (l,b) ->
+    let brothers = L.filter l ~f:(fun b' -> not(equal_proof_branch b' current_branch)) in
+    let this_son = (brothers, b) in
+    let rest_sons = this_son :: (L.filter sons ~f:(fun s -> not(f s))) in
+    match brothers with
+    | [] -> update_table_and_sons table rest_sons b
+    |  _ -> table, (this_son :: rest_sons)
+
+let rec automatic_algorithm (goals : proof_branch list) (table : Proof_branch.Set.t) (sons : (proof_branch list * proof_branch) list ) (advK : advK) =
   if (L.length goals) = 0 then true
   else if L.length goals > 100 then
     let current_branch = L.hd_exn goals in
     let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in
     false
   else
-    let goals = dedup_preserve_order goals 
+    let goals = dedup_preserve_order goals
         ~equal:(fun g1 g2 -> equal_conj g1.branch_conj g2.branch_conj)
     in
     let depth = (L.length goals) - 1 in
     let current_branch = L.hd_exn goals in
-    let used_params = current_branch.branch_used_params in
-    let ivars_order = current_branch.branch_free_ivars_order in
-    let conj = current_branch.branch_conj in
-    try
-      let conj = simplify_if_possible advK depth 2 ivars_order conj
-                 |> introduce_coeff_everywhere depth advK
-                 |> simplify_if_possible advK depth 2 ivars_order
-      in
-
-      let disj' = split_in_factors_all conj depth in
-      if (L.length disj' > 1) then
-        let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
-        automatic_algorithm (new_branches @ (L.tl_exn goals)) advK
-      else
-        let disj' = assure_laurent_polys conj in
-        if (disj' <> []) then
-          let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
+    if Set.exists table ~f:(fun b -> equal_proof_branch b current_branch) then
+      let () = F.printf "%sbranch_already_explored.\n" (String.make depth ' ') in
+      automatic_algorithm (L.tl_exn goals) table sons advK
+    else
+      let used_params = current_branch.branch_used_params in
+      let ivars_order = current_branch.branch_free_ivars_order in
+      let conj = current_branch.branch_conj in
+      try
+        let conj = simplify_if_possible advK depth 2 ivars_order conj
+                   |> introduce_coeff_everywhere depth advK
+                   |> simplify_if_possible advK depth 2 ivars_order
+        in
+        
+        let disj' = split_in_factors_all conj depth in
+        if (L.length disj' > 1) then
           let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
-          automatic_algorithm (new_branches @ (L.tl_exn goals)) advK
+          let new_sons = sons @ [(new_branches, current_branch)] in
+          automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
         else
-          let parameters = parameters_to_split (mk_proof_branch conj used_params ivars_order) in
-          let not_bound_params, bound_params = used_params in
-          
-          match L.hd parameters with
-          | None ->
-            let not_ordered_ivars = L.filter (unzip1 conj.conj_ivarsK)
-                                     ~f:(fun i -> not(L.mem ivars_order i ~equal:equal_ivar))
-            in
-            begin match not_ordered_ivars with
-              | [] -> 
-                let conj = simplify_if_possible advK depth 5 ivars_order conj in
-                let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex conj in
-                false
-              | i :: _ ->
-                let all_possible_orders = Util.insert i ivars_order in
-                let new_branches = L.map all_possible_orders
-                                    ~f:(fun o -> mk_proof_branch conj used_params o)
-                in
-                F.printf "%sadd_ivar_to_order %a\n" (String.make depth ' ') pp_ivar i;
-                automatic_algorithm (new_branches @ (L.tl_exn goals)) advK
-            end
-          | Some p ->
-            F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
-            let cases, new_idx = case_distinction conj p in
-            let second_list =
-              match new_idx with
-              | None -> bound_params
-              | Some _ -> (atom_name p) :: bound_params
-            in
-            let branch1 =
-              mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order
-            in
-            let branch2 =
-              mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order
-            in
-            automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) advK
+          let disj' = assure_laurent_polys conj in
+          if (disj' <> []) then
+            let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
+            let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
+            let new_sons = sons @ [(new_branches, current_branch)] in
+            automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
+          else
+            let parameters = parameters_to_split (mk_proof_branch conj used_params ivars_order) in
+            let not_bound_params, bound_params = used_params in
+            
+            match L.hd parameters with
+            | None ->
+              let not_ordered_ivars = L.filter (unzip1 conj.conj_ivarsK)
+                  ~f:(fun i -> not(L.mem ivars_order i ~equal:equal_ivar))
+              in
+              begin match not_ordered_ivars with
+                | [] -> 
+                  let conj = simplify_if_possible advK depth 5 ivars_order conj in
+                  let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex conj in
+                  false
+                | i :: _ ->
+                  let all_possible_orders = Util.insert i ivars_order in
+                  let new_branches = L.map all_possible_orders
+                      ~f:(fun o -> mk_proof_branch conj used_params o)
+                  in
+                  F.printf "%sadd_ivar_to_order %a\n" (String.make depth ' ') pp_ivar i;
+                  let new_sons = sons @ [(new_branches, current_branch)] in
+                  automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
+              end
+            | Some p ->
+              F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
+              let cases, new_idx = case_distinction conj p in
+              let second_list =
+                match new_idx with
+                | None -> bound_params
+                | Some _ -> (atom_name p) :: bound_params
+              in
+              let branch1 =
+                mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order
+              in
+              let branch2 =
+                mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order
+              in
+              let new_sons = sons @ [([branch1; branch2], current_branch)] in
+              automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) table new_sons advK
     with
     | Found_contradiction ->
-      automatic_algorithm (L.tl_exn goals) advK
+      let table, sons = update_table_and_sons table sons current_branch in
+      automatic_algorithm (L.tl_exn goals) table sons advK
    
 let automatic_prover cmds =
   let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let advK = Eval.adv_of_k1k2 (k1,k2) in
   let t1 = Unix.gettimeofday() in
-  let proven = automatic_algorithm [mk_proof_branch constraints ([],[]) []] advK in
+  let proven =
+    automatic_algorithm [mk_proof_branch constraints ([],[]) []] Proof_branch.Set.empty [] advK
+  in
   let t2 = Unix.gettimeofday() in
   if proven then
     let () = F.printf "Proven!\nTime %F seconds\n" (t2 -. t1) in
