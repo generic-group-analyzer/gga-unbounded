@@ -356,7 +356,9 @@ let introduce_coeff_sum (c : BI.t) (s : sum) (uM : umonom) (context : context_iv
               L.concat (L.map sums ~f:aux)
           end
       end
-    | _ -> failwith "coeff of coeff is not supported"
+    | Coeff(coeff) ->
+      if equal_monom (umon2mon coeff.coeff_unif) (mk_monom []) then [s]
+      else []
   in
   L.fold_left (aux s)
    ~init:SP.zero
@@ -371,11 +373,9 @@ let introduce_coeff (c : constr) (quant : (ivar * Ivar.Set.t) list) (uM : umonom
   if (c.constr_is_eq = InEq) then failwith "impossible to introduce coeff in inequalities"
   else
     if Set.is_empty (Set.inter (Ivar.Set.of_list (unzip1 quant)) (ivars_constr c)) then
-      if contains_coeff_constr c then failwith "expression already contains coeff"
-      else
-        let context' = update_context context (c.constr_ivarsK @ quant) in
-        mk_constr (c.constr_ivarsK @ quant) Eq (introduce_coeff_poly c.constr_poly uM context')
-        |> (fun c -> all_ivars_distinct_constr c [])
+      let context' = update_context context (c.constr_ivarsK @ quant) in
+      mk_constr (c.constr_ivarsK @ quant) Eq (introduce_coeff_poly c.constr_poly uM context')
+      |> (fun c -> all_ivars_distinct_constr c [])
     else
       failwith "ivars intersection is not empty"
 
@@ -1191,7 +1191,7 @@ let mons (p : poly) =
   Map.fold p.poly_map
     ~init:[]
     ~f:(fun ~key:s ~data:_c list ->
-      let mon = match s.sum_summand with | Mon(m) -> m | _ -> assert false in
+      let mon = match s.sum_summand with | Mon(m) -> m | Coeff(_) -> mk_monom [] in
       (Map.filter mon.monom_map ~f:(fun ~key:v ~data:_e -> not (is_param v))) :: list)
   |> L.map ~f:mk_monom_of_map
   |> L.dedup ~compare:compare_monom
