@@ -190,6 +190,13 @@ let rec quicksort_double gt list aux_list =
       s1 @ [x] @ s2, aux_s1 @ [u] @ aux_s2
   | _ -> failwith "lists must have the same length"
 
+let cross_lists list1 list2 =
+  let rec aux output = function
+    | [] -> output
+    | a :: rest -> aux (output @ (L.map list2 ~f:(fun b -> (a,b)))) rest
+  in
+  aux [] list1
+
 (* ======================================================================= *)
 (* Pretty printing *)
 

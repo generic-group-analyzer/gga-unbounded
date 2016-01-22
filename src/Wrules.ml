@@ -467,6 +467,65 @@ let eval_contMon uM advMsets forbidden_idxs =
      ~f:(fun b j -> b || (if L.mem forbidden_idxs j ~equal:equal_ivar then false
                           else aux2 j advMsets.sm_orcl))
 
+let cancelation_monomials advMsets1 advMsets2 =
+  let f m = map_idx_umonom ~f:(fun _ -> { name = "fake"; id = 0 }) m in
+  L.filter (cross_lists (L.map advMsets1.tm_orcl ~f) (L.map advMsets2.tm_orcl ~f)
+           |> L.map ~f:(fun (m1,m2) -> mult_umonom m1 m2)
+           )
+   ~f:(fun m -> Set.is_empty (ivars_umonom m))
+
+let satisfiable_system_double uM advMsets1 advMsets2 =
+  satisfiable_system uM (advMsets1.tm_glob @ advMsets2.tm_glob @
+                         cancelation_monomials advMsets1 advMsets2)
+
+let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
+  let ivarsM = ivars_umonom m in
+  if Set.is_empty ivarsM then satisfiable_system_double m advMsets1 advMsets2
+  else
+    if Set.is_empty (Set.inter ivarsM (Set.inter (Ivar.Set.of_list forb1) (Ivar.Set.of_list forb2)))
+    then false
+    else
+      let try1 =
+        L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb1)))
+         ~init:false
+         ~f:(fun b j ->
+             b || (L.exists (L.map advMsets1.tm_orcl
+                         ~f:(fun m' ->
+                             let m'' = mult_umonom m (inv_umonom m') in
+                             canMult_double m'' advMsets1 advMsets2 (j :: forb1) forb2))
+               ~f:(fun b -> b))
+           )  
+      in
+      if try1 then true
+      else
+        L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb2)))
+         ~init:false
+         ~f:(fun b j ->
+             b || (L.exists (L.map advMsets2.tm_orcl
+                         ~f:(fun m' ->
+                             let m'' = mult_umonom m (inv_umonom m') in
+                             canMult_double m'' advMsets1 advMsets2 forb1 (j :: forb2)))
+               ~f:(fun b -> b))
+           )  
+
+let combine_monoms advMsets forbidden_idxs ivars_uM =
+  (L.map advMsets.sm_glob ~f:(fun m -> (m, forbidden_idxs) )) @
+  L.fold_left ivars_uM
+   ~init:[]
+   ~f:(fun l j -> l @ (L.map advMsets.sm_orcl
+                         ~f:(fun m -> (map_idx_umonom ~f:(fun _ -> j) m, j :: forbidden_idxs) )))
+
+let eval_contMon_double uM advMsets1 advMsets2 forbidden_idxs1 forbidden_idxs2 =
+  let ivars_uM = Set.to_list (ivars_umonom uM) in
+  let monoms1 = combine_monoms advMsets1 forbidden_idxs1 ivars_uM in
+  let monoms2 = combine_monoms advMsets2 forbidden_idxs2 ivars_uM in
+  L.fold_left (cross_lists monoms1 monoms2)
+   ~init:false
+   ~f:(fun b ((m1, forb1) ,(m2, forb2)) ->
+       let m' = mult_umonom (mult_umonom uM (inv_umonom m1)) (inv_umonom m2) in
+       b || (canMult_double m' advMsets1 advMsets2 forb1 forb2)
+     )
+
 let contMon coeff advK =
   let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
   let handle_vars = handle_vars_list coeff.coeff_mon in
@@ -475,7 +534,10 @@ let contMon coeff advK =
   | (Hvar h1) :: [] ->
     let advMsets = adv_sets advK h1.hv_gname in
     eval_contMon uM advMsets [h1.hv_ivar]
-  | (Hvar _h1) :: (Hvar _h2) :: [] -> true (* FIXME "Not supported yet" *)
+  | (Hvar h1) :: (Hvar h2) :: [] ->
+    let advMsets1 = adv_sets advK h1.hv_gname in
+    let advMsets2 = adv_sets advK h2.hv_gname in
+    eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar]
   | _ -> assert false
 
 let simplify_coeff_sum (c : BI.t) (s : sum) (context : context_ivars) (advK : advK) =
@@ -1173,6 +1235,48 @@ let uniform_vars_constr (context : context_ivars) (c : constr) =
 let uniform_vars (conj : conj) =
   mk_conj conj.conj_ivarsK (L.map conj.conj_constrs ~f:(uniform_vars_constr conj.conj_ivarsK))
 
+let simplify_null_handle_var_sum hvar c s = 
+  match s.sum_summand with
+  | Mon(mon) ->
+    let hvars_to_compare, _ = hvars mon |> L.unzip in
+    if (L.mem hvars_to_compare hvar ~equal:equal_atom) then []
+    else [(c,s)]
+  | Coeff(coeff) ->
+    let hvars_to_compare, _ = hvars coeff.coeff_mon |> L.unzip in
+    if (L.mem hvars_to_compare hvar ~equal:equal_atom) then []
+    else [(c,s)]
+
+let simplify_null_handle_var_constr hvar c =
+  mk_constr c.constr_ivarsK c.constr_is_eq
+    (Map.fold c.constr_poly.poly_map
+        ~init:SP.zero
+        ~f:(fun ~key:s ~data:c p'->
+            SP.(p' +! (mk_poly (simplify_null_handle_var_sum hvar c s)))
+          )
+    )
+
+let simplify_null_handle_vars (conj : conj) =
+  let rec aux output = function
+    | [] -> output
+    | c :: rest ->
+      if (c.constr_is_eq = Eq) then
+        begin match Map.to_alist c.constr_poly.poly_map with
+        | (s,_c) :: [] ->
+          begin match s.sum_summand with
+            | Mon(mon) when s.sum_ivarsK = [] ->
+              begin match Map.to_alist mon.monom_map with
+                | (Hvar(hv),_d) :: [] ->
+                  aux (L.map output ~f:(fun c -> simplify_null_handle_var_constr (Hvar(hv)) c )) rest
+                | _ -> aux output rest
+              end
+            | _ -> aux output rest
+          end
+        | _ -> aux output rest
+        end
+      else aux output rest
+  in
+  mk_conj conj.conj_ivarsK (aux conj.conj_constrs conj.conj_constrs)
+
 let simplify (advK : advK) (conj : conj) =
   clear_trivial conj
   |> simplify_coeff_conj advK
@@ -1181,6 +1285,7 @@ let simplify (advK : advK) (conj : conj) =
   |> groebner_basis_simplification
   |> simplify_eqs_in_others
   |> uniform_vars
+  |> simplify_null_handle_vars
 (*  |> remove_independent_equations*)
   |> clear_trivial
 

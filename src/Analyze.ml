@@ -180,7 +180,16 @@ let simplify_coeffs_with_order (depth : int) (order : ivar list) (conj : conj) =
             SP.zero
           else
             mk_poly [(c, s)]
-        | _ -> assert false (* FIXME "Not supported yet" *) 
+        | (Hvar h1) :: (Hvar h2) :: [] ->
+          let ivars = ivars_monom (umon2mon coeff.coeff_unif) in
+          if Set.exists ivars ~f:(fun j -> (before_in_list ~equal:equal_ivar h1.hv_ivar j order) &&
+                                           (before_in_list ~equal:equal_ivar h2.hv_ivar j order))
+          then
+            let () = F.printf "%ssimplified_coeffs_with_index_order.\n" (String.make depth ' ') in
+            SP.zero
+          else
+            mk_poly [(c, s)]
+        | _ -> assert false
       end
   in
   let simp_poly (p : poly) =
@@ -239,6 +248,7 @@ let rec automatic_algorithm (goals : proof_branch list) (table : Proof_branch.Se
     in
     let depth = (L.length goals) - 1 in
     let current_branch = L.hd_exn goals in
+    let () = F.printf "%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in
     if Set.exists table ~f:(fun b -> equal_proof_branch b current_branch) then
       let () = F.printf "%sbranch_already_explored.\n" (String.make depth ' ') in
       automatic_algorithm (L.tl_exn goals) table sons advK
@@ -259,6 +269,7 @@ let rec automatic_algorithm (goals : proof_branch list) (table : Proof_branch.Se
           automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
         else
           let disj' = assure_laurent_polys conj in
+          F.printf "[%a]\n" (pp_list "," PPLatex.pp_conj_latex) disj';
           if (disj' <> []) then
             let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
             let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
