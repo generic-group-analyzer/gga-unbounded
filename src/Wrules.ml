@@ -478,6 +478,29 @@ let satisfiable_system_double uM advMsets1 advMsets2 =
   satisfiable_system uM (advMsets1.tm_glob @ advMsets2.tm_glob @
                          cancelation_monomials advMsets1 advMsets2)
 
+exception Not_simplifiable
+
+type canMultObj = {
+  monomial : umonom;
+  sets1 : advMsets;
+  sets2 : advMsets;
+  forb1 : ivar list;
+  forb2 : ivar list;
+} with compare, sexp
+
+module CanMultObj = struct
+  module T = struct
+    type t = canMultObj
+    let compare = compare_canMultObj
+    let sexp_of_t = sexp_of_canMultObj
+    let t_of_sexp = canMultObj_of_sexp
+  end
+  include T
+  include Comparable.Make(T)
+end
+
+let canMultTable = ref CanMultObj.Map.empty
+
 let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
   let ivarsM = ivars_umonom m in
   if Set.is_empty ivarsM then satisfiable_system_double m advMsets1 advMsets2
@@ -485,28 +508,38 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
     if Set.is_empty (Set.inter ivarsM (Set.inter (Ivar.Set.of_list forb1) (Ivar.Set.of_list forb2)))
     then false
     else
-      let try1 =
-        L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb1)))
-         ~init:false
-         ~f:(fun b j ->
-             b || (L.exists (L.map advMsets1.tm_orcl
-                         ~f:(fun m' ->
-                             let m'' = mult_umonom m (inv_umonom m') in
-                             canMult_double m'' advMsets1 advMsets2 (j :: forb1) forb2))
-               ~f:(fun b -> b))
-           )  
-      in
-      if try1 then true
-      else
-        L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb2)))
-         ~init:false
-         ~f:(fun b j ->
-             b || (L.exists (L.map advMsets2.tm_orcl
-                         ~f:(fun m' ->
-                             let m'' = mult_umonom m (inv_umonom m') in
-                             canMult_double m'' advMsets1 advMsets2 forb1 (j :: forb2)))
-               ~f:(fun b -> b))
-           )  
+      let obj = { monomial = m; sets1 = advMsets1; sets2 = advMsets2; forb1 = forb1; forb2 = forb2; } in
+      match Map.find !canMultTable obj with
+      | None -> 
+        let try1 =
+          L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb1)))
+           ~init:false
+           ~f:(fun b j ->
+               b || (L.exists (L.map advMsets1.tm_orcl
+                                 ~f:(fun m' ->
+                                     let m'' = mult_umonom m (inv_umonom m') in
+                                     canMult_double m'' advMsets1 advMsets2 (j :: forb1) forb2))
+                       ~f:(fun b -> b))
+             )  
+        in
+        if try1 then
+          let () = canMultTable := Map.add !canMultTable ~key:obj ~data:true in
+          true
+        else
+          let try2 =
+            L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb2)))
+              ~init:false
+              ~f:(fun b j ->
+                  b || (L.exists (L.map advMsets2.tm_orcl
+                                    ~f:(fun m' ->
+                                        let m'' = mult_umonom m (inv_umonom m') in
+                                        canMult_double m'' advMsets1 advMsets2 forb1 (j :: forb2)))
+                          ~f:(fun b -> b))
+                )
+          in
+          let () = canMultTable := Map.add !canMultTable ~key:obj ~data:try2 in
+          try2
+      | Some answer -> answer
 
 let combine_monoms advMsets forbidden_idxs ivars_uM =
   (L.map advMsets.sm_glob ~f:(fun m -> (m, forbidden_idxs) )) @
@@ -519,12 +552,17 @@ let eval_contMon_double uM advMsets1 advMsets2 forbidden_idxs1 forbidden_idxs2 =
   let ivars_uM = Set.to_list (ivars_umonom uM) in
   let monoms1 = combine_monoms advMsets1 forbidden_idxs1 ivars_uM in
   let monoms2 = combine_monoms advMsets2 forbidden_idxs2 ivars_uM in
-  L.fold_left (cross_lists monoms1 monoms2)
-   ~init:false
-   ~f:(fun b ((m1, forb1) ,(m2, forb2)) ->
-       let m' = mult_umonom (mult_umonom uM (inv_umonom m1)) (inv_umonom m2) in
-       b || (canMult_double m' advMsets1 advMsets2 forb1 forb2)
-     )
+  try
+    let () = L.iter (cross_lists monoms1 monoms2)
+        ~f:(fun ((m1, forb1) ,(m2, forb2)) ->
+            let m' = mult_umonom (mult_umonom uM (inv_umonom m1)) (inv_umonom m2) in
+            if canMult_double m' advMsets1 advMsets2 forb1 forb2 then raise Not_simplifiable
+            else ()
+          )
+    in
+    false
+  with
+  | Not_simplifiable -> true
 
 let contMon coeff advK =
   let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
@@ -946,9 +984,6 @@ let groebner_basis (param_polys : poly list) (abs : abstraction) =
   let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero)) in
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
-(*  pp_abstraction abs;
-  F.printf "%s\n"  ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n");
-  F.print_flush();*)
   let groebner_basis = call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   poly_system_of_gb_string groebner_basis abs
 
