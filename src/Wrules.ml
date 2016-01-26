@@ -229,22 +229,6 @@ let all_ivars_distinct_sum (sum : sum) (context : context_ivars) =
         else L.concat (L.map new_sums ~f:aux)
     in
     aux2 s not_distinct
-(*
-    match not_distinct with
-    | [] -> [s]
-    | (i,j) :: _ ->
-      F.printf "%a\n" WconstrsUtil.pp_sum s;
-      F.printf "=%a %a=\n" WconstrsUtil.pp_ivar i WconstrsUtil.pp_ivar j;
-      F.print_flush();
-      if (L.mem bound_ivars i) then 
-        let () = F.printf "[[[%a]]]\n" (pp_list "," WconstrsUtil.pp_sum) (split_ivar_sum s i j local_context) in
-        F.print_flush();
-        L.concat (L.map (split_ivar_sum s i j local_context) ~f:aux)
-      else if (L.mem bound_ivars j) then
-        let () = F.printf "[[[%a]]]\n" (pp_list "," WconstrsUtil.pp_sum) (split_ivar_sum s j i local_context) in
-        F.print_flush(); L.concat (L.map (split_ivar_sum s j i local_context) ~f:aux)
-      else assert false
-*)
   in
   aux sum
 
@@ -901,7 +885,7 @@ type xterm = {
   xterm_summand : summand;
 } with compare, sexp
 
-(* xterm_param_poly is supposed to not contain Coeff, Uvars, Hvars and Summations. *)
+(* xterm_param_poly is supposed to not contain Uvars, Hvars and Summations. *)
 
 type xpoly = { xpoly_list : xterm list }
 
@@ -992,6 +976,10 @@ let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstracti
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let gb_poly_to_reduce = poly2gb_poly poly_to_reduce abs in
+
+  let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'reduce','system':" ^ gb_system ^
+               ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n") in
+
   let reduced =
     call_Sage ("{'cmd':'reduce','system':" ^ gb_system ^
                ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n")
@@ -1088,6 +1076,7 @@ let groebner_basis_simplification (conj : conj) =
                    |> permute_param_polys
                      ((L.dedup ~compare:compare_ivar (unzip1 x_ivars)) @
                       (L.slice (unzip1 delta_binder) (L.length x_ivars) (L.length delta_binder)))
+                   |> L.dedup ~compare:compare_poly
                  in
                  let abs = abstraction_from_parampolys (x.xterm_param_poly :: param_polys) in
                  let reduced = gb_reduce param_polys x.xterm_param_poly abs in
@@ -1114,6 +1103,7 @@ let groebner_basis_simplification (conj : conj) =
                  in
                  let param_polys = L.map param_polys ~f:(fun p -> rename_poly p rn)
                                    |> permute_param_polys (L.dedup ~compare:compare_ivar (unzip1 x_ivars))
+                                   |> L.dedup ~compare:compare_poly
                  in
                  let abs = abstraction_from_parampolys (x.xterm_param_poly :: param_polys) in
                  let reduced = gb_reduce param_polys x.xterm_param_poly abs in
@@ -1182,7 +1172,41 @@ let clear_trivial (conj : conj) =
   in
   mk_conj conj.conj_ivarsK (L.filter conj.conj_constrs ~f)
 
+let matching_sums (i1,s1) (i2,s2) =
+  if (L.length i1) < (L.length i2) then false
+  else
+    let ivars1 = (unzip1 i1) @ (unzip1 s1.sum_ivarsK) in
+    let ivars2 = (unzip1 i2) @ (unzip1 s2.sum_ivarsK) in
+    if (L.length ivars1) <> (L.length ivars2) then false
+    else
+      let j = new_name (L.map (ivars1 @ ivars2) ~f:(fun x -> x.name)) in
+      let aux_ivars = L.map (range 1 (L.length ivars1)) ~f:(fun n -> { name = j; id = n }) in
+      let rn1 = Ivar.Map.of_alist_exn (L.zip_exn ivars1 aux_ivars) in
+      let rn2 = Ivar.Map.of_alist_exn (L.zip_exn aux_ivars ivars2) in
+      let aux_sum1 = mk_sum (i1 @ s1.sum_ivarsK) s1.sum_summand in
+      let aux_sum2 = mk_sum (i2 @ s2.sum_ivarsK) s2.sum_summand in
+      let aux_sum1 = rename_sum aux_sum1 rn1 in
+      let aux_sum1 = rename_sum aux_sum1 rn2 in
+      equal_sum aux_sum1 aux_sum2
+
+let simplify_sums (c : constr) (to_simplify : constr) =
+  if c.constr_is_eq = InEq then to_simplify
+  else
+    match Map.to_alist c.constr_poly.poly_map with
+    | (s,_) :: [] ->
+      let new_poly = 
+        Map.fold to_simplify.constr_poly.poly_map
+           ~init:SP.zero
+           ~f:(fun ~key:s' ~data:c' p' ->
+               if (matching_sums (c.constr_ivarsK, s) (to_simplify.constr_ivarsK, s')) then p'
+               else SP.(p' +! (mk_poly [(c',s')]))
+             )
+      in
+      mk_constr to_simplify.constr_ivarsK to_simplify.constr_is_eq new_poly
+    | _ -> to_simplify
+
 let simplify_constr_with_constr (c : constr) (to_simplify : constr) =
+  let to_simplify = simplify_sums c to_simplify in
   if c.constr_is_eq = InEq || not(equal_ivarsK c.constr_ivarsK to_simplify.constr_ivarsK) then
     to_simplify
   else
@@ -1312,6 +1336,30 @@ let simplify_null_handle_vars (conj : conj) =
   in
   mk_conj conj.conj_ivarsK (aux conj.conj_constrs conj.conj_constrs)
 
+let total_degree (m : monom) =
+  Map.fold m.monom_map
+     ~init:BI.zero
+     ~f:(fun ~key:_a ~data:d td -> BI.(td +! d))
+
+let remove_complex_equations (conj : conj) =
+  let not_complex_sum (s : sum) =
+    match s.sum_summand with
+    | Coeff(_) -> true
+    | Mon(mon) ->
+      if equal_monom (params_monom mon) mon then BI.compare (total_degree mon) (BI.of_int 3) <= 0
+      else true
+  in
+  let not_complex_constr (c : constr) =
+    (* We need inequalities to derive contradictions, so we keep them all *)
+    if c.constr_is_eq = InEq then true
+    else
+      Map.fold c.constr_poly.poly_map
+         ~init:true
+         ~f:(fun ~key:s ~data:_ b -> b && (not_complex_sum s))
+  in
+  mk_conj conj.conj_ivarsK (L.filter conj.conj_constrs ~f:not_complex_constr)
+
+
 let simplify (advK : advK) (conj : conj) =
   clear_trivial conj
   |> simplify_coeff_conj advK
@@ -1321,6 +1369,7 @@ let simplify (advK : advK) (conj : conj) =
   |> simplify_eqs_in_others
   |> uniform_vars
   |> simplify_null_handle_vars
+  |> remove_complex_equations (* we are still sound after removing some equations *)
 (*  |> remove_independent_equations*)
   |> clear_trivial
 
@@ -1424,7 +1473,6 @@ let laurent_polys_rule (c : constr) (h : atom) (f : poly) (g : poly) =
   let parameters = L.filter atoms ~f:is_param in
   let unif_vars  = L.filter atoms ~f:is_uvar in
   let variables = parameters @ unif_vars in
-
   (call_Sage
      ("{'cmd':'Laurent','f':[" ^ (poly2string f variables []) ^ "],'g':[" ^ (poly2string g variables []) ^ 
       "],'nparams':" ^ (string_of_int (L.length parameters)) ^ "}\n")
