@@ -65,6 +65,7 @@ type eval_state = {
   es_orvars   : atom list;
 
   es_mwcond   : conj option;
+  es_lcombs   : (group_name * poly) list;
 }
 
 let empty_eval_state = {
@@ -76,6 +77,7 @@ let empty_eval_state = {
   es_oparams  = [];
   es_orvars   = [];
   es_mwcond   = None;
+  es_lcombs   = [];
 }
 
 let atom_to_name = function
@@ -251,10 +253,10 @@ let iconds_to_wconds conds choices estate =
     mk_constr c.constr_ivarsK c.constr_is_eq new_poly
   in
   let conds = L.map conds ~f:trans_cond in
-  let (new_conds,_) =
+  let (new_conds,_, lcombshapes) =
     L.fold_left choices
-   ~init:(conds,estate)
-   ~f:(fun (conds,estate) choice ->
+   ~init:(conds,estate,[])
+   ~f:(fun (conds,estate,lcombshapes) choice ->
        match choice with
        | (v, Fp) ->
          let fp c =
@@ -266,7 +268,8 @@ let iconds_to_wconds conds choices estate =
            mk_constr c.constr_ivarsK c.constr_is_eq new_poly
          in
          (L.map conds ~f:fp,
-          { estate with es_oparams = estate.es_oparams @ [(atom_to_name v, Fp)] } )
+          { estate with es_oparams = estate.es_oparams @ [(atom_to_name v, Fp)] },
+         lcombshapes)
        | (v, GroupName gid) ->
           let (inputs,_) = L.filter estate.es_inputs ~f:(fun (_,g) -> equal_group_name g gid)
                           |> L.unzip in
@@ -294,9 +297,10 @@ let iconds_to_wconds conds choices estate =
                           ~f:(fun p lcomb -> SP.(p +! lcomb) ) in
           ((subst (mk_conj [] conds) v new_term).conj_constrs,
             { estate with es_oparams = estate.es_oparams @
-                                       (L.map (params @ params2) ~f:(fun p -> (p,Fp))) } ) )
+                                       (L.map (params @ params2) ~f:(fun p -> (p,Fp))) },
+          (gid, new_term) :: lcombshapes) )
   in
-  new_conds
+  new_conds, lcombshapes
 
 
 (* ** Interpret experiment definition
@@ -337,7 +341,9 @@ let eval_cmd estate cmd =
   | SetWinning(choices,conds), None ->
     let used_vars = L.map (L.concat_map conds.conj_constrs ~f:(fun c -> used_vars_p c.constr_poly)) ~f:atom_to_name in
     ensure_winning_valid estate choices used_vars;
-    { estate with es_mwcond = Some (mk_conj conds.conj_ivarsK (iconds_to_wconds conds.conj_constrs choices estate)) }
+    let wconstrs, lcombshapes = iconds_to_wconds conds.conj_constrs choices estate in
+    { estate with es_mwcond = Some (mk_conj conds.conj_ivarsK wconstrs); 
+                  es_lcombs = lcombshapes }
 
   | _, Some _ ->
     failwith "Setting the winning condition must be the last command."
@@ -388,10 +394,27 @@ let knowledge estate =
        | G2, None     -> (k1, update_k k2 non_recur recur recur_idx)
       )
 
+let lcombs_g1g2 lcombs =
+  L.fold_left lcombs
+   ~init:(None, None)
+   ~f:(fun (lcomb1, lcomb2) (gid, p) ->
+       match gid with
+       | G1 ->
+         begin match lcomb1 with
+           | None -> (Some p, lcomb2)
+           | Some _ -> (lcomb1, lcomb2)
+         end
+       | G2 ->
+         begin match lcomb2 with
+           | None -> (lcomb1, Some p)
+           | Some _ -> (lcomb1, lcomb2)
+         end
+     )
+
 let eval_cmds cmds =
   let es = L.fold_left cmds ~init:empty_eval_state ~f:eval_cmd in
   match es.es_mwcond with
-  | Some constraints -> (*uniform_bound*) constraints, knowledge es
+  | Some constraints -> constraints, knowledge es, (lcombs_g1g2 es.es_lcombs)
   | None             -> failwith "No winning constraints"
 
 

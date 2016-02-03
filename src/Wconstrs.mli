@@ -47,6 +47,7 @@ type conj = private { conj_ivarsK : (ivar * Ivar.Set.t) list; conj_constrs : con
   with sexp, compare
 
 exception Mult_Coeff_by_Var
+exception Mult_of_Coeffs
 
 val equal_conj : conj -> conj -> bool
 

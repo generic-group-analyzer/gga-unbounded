@@ -10,6 +10,8 @@ type proof_branch = {
   branch_conj : conj;
   branch_used_params : atom list * string list;
   branch_free_ivars_order : ivar list;
+  branch_unfolded_hvars : hvar list;
+  branch_coeff_only_if_simp : bool;
 } with compare, sexp
 
 (* data structures with proof branches *)
@@ -26,17 +28,25 @@ end
 
 let equal_proof_branch b1 b2 = compare_proof_branch b1 b2 = 0
 
-let mk_proof_branch conj used_params ivars_order =
-  { branch_conj = conj; branch_used_params = used_params; branch_free_ivars_order = ivars_order }
+let mk_proof_branch conj used_params ivars_order unfolded_hvars only_if_simp =
+  { branch_conj = conj; 
+    branch_used_params = used_params;
+    branch_free_ivars_order = ivars_order;
+    branch_unfolded_hvars = unfolded_hvars;
+    branch_coeff_only_if_simp = only_if_simp;
+  }
 
-let coeff_everywhere_constr (depth : int ) (c : constr) (n : int) (conj : conj) advK =
+let coeff_everywhere_constr (depth : int ) (c : constr) (n : int)  advK (only_if_simp : bool) (conj : conj) =
   let context = conj.conj_ivarsK in
   let used_ivars = Set.union (Ivar.Set.of_list (unzip1 context)) (ivars_constr c) in
   let c_bound_ivars = Set.diff (ivars_constr c) (Ivar.Set.of_list (unzip1 context)) in
   let (rn,_) = renaming_away_from used_ivars c_bound_ivars in
   let ivars_context = (unzip1 context) in
   try
-    match L.filter (mons c.constr_poly) ~f:(fun m -> equal_monom m (uvars_monom m)) with
+(*    match L.filter (mons c.constr_poly) ~f:(fun m -> equal_monom m (uvars_monom m)) with *)
+    match L.map (mons c.constr_poly) ~f:(fun m -> (uvars_monom m))
+          |> L.dedup ~compare:compare_monom
+    with
     | [] -> []
     | m :: [] when equal_monom m (mk_monom []) -> []
     | monomials ->
@@ -48,22 +58,25 @@ let coeff_everywhere_constr (depth : int ) (c : constr) (n : int) (conj : conj) 
               Set.to_list (Set.filter (ivars_monom m) ~f:(fun i -> not(L.mem (ivars_context) i)))
             in
             let quant = Eval.maximal_quant ivars_context [] bound_ivars in
-            let new_constrs = introduce_coeff c quant (mon2umon m) context in
-            if L.exists ~f:(fun c -> L.mem conj.conj_constrs c ~equal:equal_constr)
-                (L.map new_constrs ~f:(fun c -> simplify_coeff_constr c context advK)) then l
+            let new_constrs = introduce_coeff c quant (mon2umon m) context
+                              |> L.map ~f:(fun c -> simplify_coeff_constr c context advK)
+            in
+            if L.exists ~f:(fun c -> L.mem conj.conj_constrs c ~equal:equal_constr) new_constrs then l
             else
-              let () = F.printf "%scoeff(%a) %d.\n" (String.make depth ' ') pp_monom m n in
-              F.print_flush();
-              l @ new_constrs
+              if only_if_simp && (L.exists new_constrs ~f:(fun c -> contains_coeff_constr c)) then l
+              else
+                let () = F.printf "%scoeff(%a) %d.\n" (String.make depth ' ') pp_monom m n in
+                F.print_flush();
+                l @ new_constrs
           )
   with _ -> []
 
-let introduce_coeff_everywhere (depth : int) (advK : advK) (conj : conj) =
+let introduce_coeff_everywhere (depth : int) (advK : advK) (only_if_simp : bool) (conj : conj) =
   let rec aux new_constrs n = function
     | [] -> new_constrs
     | c :: rest ->
       if (c.constr_is_eq = Eq) then
-        aux (new_constrs @ (coeff_everywhere_constr depth c n conj advK)) (n+1) rest
+        aux (new_constrs @ (coeff_everywhere_constr depth c n advK only_if_simp conj)) (n+1) rest
       else
         aux new_constrs (n+1) rest
   in
@@ -123,10 +136,10 @@ let rec count_atom (counter : int) (p : atom) = function
     if Set.mem (get_atoms_constr c) p then count_atom (counter+1) p rest
     else count_atom counter p rest
 
-let parameters_to_split (branch : proof_branch) =
-  let i = { name = new_name (L.map (Set.to_list (ivars_conj branch.branch_conj)) ~f:(fun i -> i.name)); id = 0 } in
-   
-  let parameters = Set.to_list (get_atoms_conj branch.branch_conj) |> L.filter ~f:is_param in
+let parameters_to_split (branch : proof_branch) (free_indices : ivar list) =
+  (* let i = { name = new_name (L.map (Set.to_list (ivars_conj branch.branch_conj)) ~f:(fun i -> i.name)); id = 0 } in *)
+
+  let parameters = Set.to_list (get_atoms_conj branch.branch_conj)|> L.filter ~f:is_param in
   let frequencies = L.map parameters ~f:(fun p -> count_atom 0 p branch.branch_conj.conj_constrs) in
   let (_, sorted_params) = quicksort_double (>) frequencies parameters in
 
@@ -135,17 +148,55 @@ let parameters_to_split (branch : proof_branch) =
   L.fold_left sorted_params
    ~init:[]
    ~f:(fun l p ->
+        match p with
+        | Param(_, None) ->
+          if not(L.mem not_bound_params p ~equal:equal_atom) then l @ [p]
+          else l
+        | Param(name, Some j) ->
+          if L.mem free_indices j ~equal:equal_ivar then
+            if not(L.mem not_bound_params p ~equal:equal_atom) then l @ [p]
+            else l
+          else
+            if not(L.mem bound_params name ~equal:String.equal) && (L.length free_indices <= 1) then l @ [p]
+            else l
+        | _ -> assert false
+      )
+
+(*
+  L.fold_left sorted_params
+   ~init:([],[])
+   ~f:(fun (l1,l2) p ->
+        match p with
+        | Param(_, None) ->
+          if not(L.mem not_bound_params p ~equal:equal_atom) then l1 @ [p], l2
+          else l1, l2
+        | Param(name, Some j) ->
+          if L.mem free_indices j ~equal:equal_ivar then
+            if not(L.mem not_bound_params p ~equal:equal_atom) then l1 @ [p], l2
+            else l1, l2
+          else
+            if not(L.mem bound_params name ~equal:String.equal) && (L.length free_indices <= 5) then l1, l2 @ [p]
+            else l1, l2 
+        | _ -> assert false
+      )
+  |> (fun (l1,l2) -> l1 @ l2)
+*)
+(*
+  L.fold_left sorted_params
+   ~init:([],[])
+   ~f:(fun (l1,l2) p ->
        let additional_list =
-         if L.mem bound_params (atom_name p) then []
+         if L.mem bound_params (atom_name p) ~equal:String.equal then []
          else
            match p with
            | Param(_, None) -> []
            | Param(name, Some _) -> [Param(name, Some i)]
            | _ -> assert false
        in
-       if L.mem not_bound_params p ~equal:equal_atom then l @ additional_list
-       else l @ [p] @ additional_list
+       if L.mem not_bound_params p ~equal:equal_atom then l1, l2 @ additional_list
+       else l1 @ [p], l2 @ additional_list
       )
+  |> (fun (l1,l2) -> l1 @ l2)*)
 
 let split_in_factors_all (conj : conj) (depth : int) =
   let rec aux k previous = function
@@ -223,21 +274,95 @@ let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (order : ivar
         F.print_flush();
         simplify_if_possible advK depth (n-1) order new_conj
 
-let rec update_table_and_sons table sons current_branch =
-  let table = Set.add table current_branch in
-  let f = fun (l,_b) -> L.mem l current_branch ~equal:equal_proof_branch in
-  match L.find sons ~f with
-  | None -> table, sons
-  | Some (l,b) ->
-    let brothers = L.filter l ~f:(fun b' -> not(equal_proof_branch b' current_branch)) in
-    let this_son = (brothers, b) in
-    let rest_sons = this_son :: (L.filter sons ~f:(fun s -> not(f s))) in
-    match brothers with
-    | [] -> update_table_and_sons table rest_sons b
-    |  _ -> table, (this_son :: rest_sons)
+let is_single_param_poly (p : poly) =
+  match Map.to_alist p.poly_map with
+  | (s,_) :: [] ->
+    begin match s.sum_summand with
+      | Mon(mon)
+        when L.length (params mon) = 1 && L.length (uvars mon) = 0 && L.length (hvars mon) = 0 ->
+        let (param, degree) = L.hd_exn (params mon) in
+        if BI.is_one degree then Some param
+        else None
+      | _ -> None
+    end
+  | _ -> None  
 
-let rec automatic_algorithm (goals : proof_branch list) (table : Proof_branch.Set.t) (sons : (proof_branch list * proof_branch) list ) (advK : advK) =
-  if (L.length goals) = 0 then true
+let update_used_params used_params conj =
+  let rec aux used_free used_bound = function
+    | [] -> used_free, used_bound
+    | c :: rest ->
+      match is_single_param_poly c.constr_poly with
+      | None -> aux used_free used_bound rest
+      | Some p ->
+        begin match p with
+          | Param(name, Some i) when L.mem (unzip1 c.constr_ivarsK) i ~equal:equal_ivar ->
+            if L.mem used_bound name then aux used_free used_bound rest
+            else aux used_free (name :: used_bound) rest
+          | _ ->
+            if L.mem used_free p ~equal:equal_atom then aux used_free used_bound rest
+            else aux (p :: used_free) used_bound rest
+        end
+  in
+  let used_free, used_bound = used_params in
+  aux used_free used_bound conj.conj_constrs
+
+let unfold_hvars conj unfolded_hvars lcombs =
+  let unfold h used =
+    let expression =
+      match h.hv_gname, lcombs with
+      | G1, (Some p, _) -> p
+      | G2, (_, Some p) -> p
+      | _ -> assert false
+    in
+    let old_parameters = Set.to_list (get_atoms_poly expression) |> L.filter ~f:is_param
+                         |> L.map ~f:(fun p -> atom_name p) 
+    in
+    let new_params = Eval.fresh_params (L.length old_parameters) used in
+    let rn = String.Map.of_alist_exn (L.zip_exn old_parameters new_params) in
+    let new_sum s =
+      match s.sum_summand with
+      | Coeff(_) -> s
+      | Mon(mon) ->
+        let sum_atoms, sum_degrees = Map.to_alist mon.monom_map |> L.unzip in
+        let new_atoms = L.map sum_atoms
+            ~f:(function | Param(name, v) -> Param(Map.find_exn rn name, v) | a -> a)
+        in
+        let new_monom = mk_monom_of_map (Atom.Map.of_alist_exn (L.zip_exn new_atoms sum_degrees)) in
+        let new_sum_ivarsK = match s.sum_ivarsK with
+          | [] -> []
+          | (i,iK) :: [] -> [i, Set.add iK h.hv_ivar]
+          | _ -> assert false
+        in
+        mk_sum new_sum_ivarsK (Mon(new_monom))        
+    in
+    let renamed_expression =
+      Map.fold expression.poly_map
+        ~init:SP.zero
+        ~f:(fun ~key:s ~data:c p' ->
+            SP.(p' +! (mk_poly [(c, new_sum s)]))
+          )
+    in
+    mk_constr [] Eq (SP.((of_atom (Hvar h)) -! renamed_expression))
+  in
+  let hvars = get_atoms_conj conj |> Set.filter ~f:is_hvar |> Set.to_list
+              |> L.map ~f:(function | Hvar hv -> hv | _ -> assert false)
+  in
+  L.fold_left hvars
+   ~init:(conj, unfolded_hvars)
+   ~f:(fun (conj', unfolded') h ->
+       if (L.mem unfolded' h ~equal:equal_hvar) || not(L.mem (unzip1 conj'.conj_ivarsK) h.hv_ivar ~equal:equal_ivar) then
+         (conj', unfolded')
+       else
+         let parameters = Set.to_list (get_atoms_conj conj') |> L.filter ~f:is_param
+                          |> L.map ~f:(fun p -> atom_name p)
+         in
+         (mk_conj conj'.conj_ivarsK (conj'.conj_constrs @ [unfold h parameters]), unfolded' @ [h])
+      )
+
+let unsolved_goals = ref 0
+
+let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (lcombs : poly option * poly option) =
+  if (L.length goals) = 0 then !unsolved_goals = 0
   else if L.length goals > 100 then
     let current_branch = L.hd_exn goals in
     let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in
@@ -248,39 +373,42 @@ let rec automatic_algorithm (goals : proof_branch list) (table : Proof_branch.Se
     in
     let depth = (L.length goals) - 1 in
     let current_branch = L.hd_exn goals in
-    let () = F.printf "%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in
-    if Set.exists table ~f:(fun b -> equal_proof_branch b current_branch) then
-      let () = F.printf "%sbranch_already_explored.\n" (String.make depth ' ') in
-      automatic_algorithm (L.tl_exn goals) table sons advK
-    else
-      let used_params = current_branch.branch_used_params in
-      let ivars_order = current_branch.branch_free_ivars_order in
-      let conj = current_branch.branch_conj in
-      try
-        let conj = simplify_if_possible advK depth 2 ivars_order conj
-                   |> introduce_coeff_everywhere depth advK
-                   |> simplify_if_possible advK depth 2 ivars_order
-        in
-        
-        let disj' = split_in_factors_all conj depth in
-        if (L.length disj' > 1) then
-          let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
-          let new_sons = sons @ [(new_branches, current_branch)] in
-          automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
+    (* let () = F.printf "%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in *)
+
+    let used_params = current_branch.branch_used_params in
+    let ivars_order = current_branch.branch_free_ivars_order in
+    let unfolded_hvars = current_branch.branch_unfolded_hvars in
+    let only_if_simp = current_branch.branch_coeff_only_if_simp in
+    let conj = current_branch.branch_conj in
+    (* let conj, unfolded_hvars = unfold_hvars conj unfolded_hvars lcombs in *)
+    try
+      let conj = simplify_if_possible advK depth 2 ivars_order conj
+                 |> introduce_coeff_everywhere depth advK only_if_simp
+                 |> simplify_if_possible advK depth 2 ivars_order 
+      in
+
+      let used_params = update_used_params used_params conj in
+      
+      let disj' = split_in_factors_all conj depth in
+      if (L.length disj' > 1) then
+        let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars only_if_simp) in
+        automatic_algorithm (new_branches @ (L.tl_exn goals)) advK lcombs
+      else
+        let disj' = assure_laurent_polys conj in
+        if (disj' <> []) then
+          let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
+          let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars only_if_simp) in
+          automatic_algorithm (new_branches @ (L.tl_exn goals)) advK lcombs
         else
-          let disj' = assure_laurent_polys conj in
-          F.printf "[%a]\n" (pp_list "," PPLatex.pp_conj_latex) disj';
-          if (disj' <> []) then
-            let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
-            let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order) in
-            let new_sons = sons @ [(new_branches, current_branch)] in
-            automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
-          else
-            let parameters = parameters_to_split (mk_proof_branch conj used_params ivars_order) in
-            let not_bound_params, bound_params = used_params in
-            
-            match L.hd parameters with
-            | None ->
+          let parameters = parameters_to_split (mk_proof_branch conj used_params ivars_order unfolded_hvars only_if_simp) (unzip1 conj.conj_ivarsK) in
+          let not_bound_params, bound_params = used_params in
+          
+          match L.hd parameters with
+          | None ->
+            if only_if_simp then
+              let new_branch = mk_proof_branch conj used_params ivars_order unfolded_hvars false in
+              automatic_algorithm (new_branch :: (L.tl_exn goals)) advK lcombs
+            else
               let not_ordered_ivars = L.filter (unzip1 conj.conj_ivarsK)
                   ~f:(fun i -> not(L.mem ivars_order i ~equal:equal_ivar))
               in
@@ -288,54 +416,55 @@ let rec automatic_algorithm (goals : proof_branch list) (table : Proof_branch.Se
                 | [] -> 
                   let conj = simplify_if_possible advK depth 5 ivars_order conj in
                   let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex conj in
-                  false
+                  unsolved_goals := !unsolved_goals + 1;
+                  automatic_algorithm (L.tl_exn goals) advK lcombs
+                  (* false *)
                 | i :: _ ->
                   let all_possible_orders = Util.insert i ivars_order in
                   let new_branches = L.map all_possible_orders
-                      ~f:(fun o -> mk_proof_branch conj used_params o)
+                      ~f:(fun o -> mk_proof_branch conj used_params o unfolded_hvars only_if_simp)
                   in
                   F.printf "%sadd_ivar_to_order %a\n" (String.make depth ' ') pp_ivar i;
-                  let new_sons = sons @ [(new_branches, current_branch)] in
-                  automatic_algorithm (new_branches @ (L.tl_exn goals)) table new_sons advK
+                  automatic_algorithm (new_branches @ (L.tl_exn goals)) advK lcombs
               end
-            | Some p ->
-              F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
-              let cases, new_idx = case_distinction conj p in
-              let second_list =
-                match new_idx with
-                | None -> bound_params
-                | Some _ -> (atom_name p) :: bound_params
-              in
-              let branch1 =
-                mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order
-              in
-              let branch2 =
-                mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order
-              in
-              let new_sons = sons @ [([branch1; branch2], current_branch)] in
-              automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) table new_sons advK
+
+          | Some p ->
+            F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
+            let cases, new_idx = case_distinction conj p in
+            let second_list =
+              match new_idx with
+              | None -> bound_params
+              | Some _ -> (atom_name p) :: bound_params
+            in
+            let branch1 =
+              mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order unfolded_hvars only_if_simp
+            in
+            let branch2 =
+              mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order unfolded_hvars only_if_simp
+            in
+            automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) advK lcombs
     with
     | Found_contradiction ->
-      let table, sons = update_table_and_sons table sons current_branch in
-      automatic_algorithm (L.tl_exn goals) table sons advK
+      automatic_algorithm (L.tl_exn goals) advK lcombs
    
 let automatic_prover cmds =
-  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
+  let constraints, (k1,k2), lcombs = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let advK = Eval.adv_of_k1k2 (k1,k2) in
   let t1 = Unix.gettimeofday() in
   let proven =
-    automatic_algorithm [mk_proof_branch constraints ([],[]) []] Proof_branch.Set.empty [] advK
+    automatic_algorithm [mk_proof_branch constraints ([],[]) [] [] true] advK lcombs
   in
   let t2 = Unix.gettimeofday() in
   if proven then
     let () = F.printf "Proven!\nTime %F seconds\n" (t2 -. t1) in
     exit 0
   else
+    let () = F.printf "There are %i unsolved goals\n" !unsolved_goals in
     let () = F.printf "Not proven!\nTime: %F seconds\n" (t2 -. t1) in
     exit 1    
 
 let analyze_unbounded cmds instrs =
-  let constraints, (k1,k2) = Wparse.p_cmds cmds |> Eval.eval_cmds in
+  let constraints, (k1,k2), _ = Wparse.p_cmds cmds |> Eval.eval_cmds in
   let (system, nth) = Eval.eval_instrs (Wparse.p_instrs instrs) (k1,k2) [constraints] 1 in
 
   if (L.length system = 0) then

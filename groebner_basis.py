@@ -1,5 +1,4 @@
-#!/bin/sh
-''''exec python -- "$0" ${1+"$@"} # '''
+#!/usr/bin/env sage
 
 from sage.all import *
 import json

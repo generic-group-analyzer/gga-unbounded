@@ -574,7 +574,8 @@ let simplify_coeff_sum (c : BI.t) (s : sum) (context : context_ivars) (advK : ad
       then SP.zero
       else (* We cannot simplify it *)
         let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
-        mk_poly [(c, mk_sum s.sum_ivarsK (Coeff(mk_coeff uM (hvars_monom coeff.coeff_mon))))]
+        let m = mult_monom (hvars_monom coeff.coeff_mon) (params_monom coeff.coeff_mon) in
+        mk_poly [(c, mk_sum s.sum_ivarsK (Coeff(mk_coeff uM m)))]
   | _ -> mk_poly [(c, s)]   (* It is already simplified *)
 
 let simplify_coeff_poly (p : poly) (context : context_ivars) (advK : advK)=
@@ -647,37 +648,10 @@ let normalize (conj : conj) =
 
 let opening (conj : conj) =
   let conj = normalize conj in
-  (*let qvars = L.fold_left conj.conj_constrs
-               ~init:Ivar.Set.empty
-               ~f:(fun s c -> Set.union s (Ivar.Set.of_list (unzip1 c.constr_ivarsK)))
-  in
-  let new_constrs =
-    L.map conj.conj_constrs
-      ~f:(fun c -> 
-          let new_qvars = Set.filter qvars ~f:(fun i -> not(L.mem (unzip1 c.constr_ivarsK) i))
-                          |> Set.to_list
-          in
-          let c_qvars = c.constr_ivarsK @ (L.zip_exn new_qvars (repeat_element Ivar.Set.empty (L.length new_qvars))) in
-          mk_constr c_qvars c.constr_is_eq (all_ivars_distinct_poly c.constr_poly c_qvars)
-        )
-  in
-  mk_conj conj.conj_ivarsK new_constrs*)
   conj
 
 let closing (conj : conj) =
   let conj = normalize conj in
-  (* let new_constrs = conj.conj_constrs
-    |> L.map ~f:(fun c -> 
-        let polyivars = ivars_poly c.constr_poly in
-        let not_used_qvars = L.filter (unzip1 c.constr_ivarsK) ~f:(fun i -> not(Set.mem polyivars i)) in
-        let qvarsK = L.filter c.constr_ivarsK ~f:(fun (i,_) -> Set.mem (ivars_poly c.constr_poly) i)
-                     |> L.map ~f:(fun (i,s) -> (i, Set.diff s (Ivar.Set.of_list not_used_qvars) ))
-        in
-        mk_constr qvarsK c.constr_is_eq c.constr_poly
-      )
-    |> dedup_preserve_order ~equal:equal_constr
-  in
-  *)
   let new_constrs = dedup_preserve_order ~equal:equal_constr conj.conj_constrs in
   mk_conj conj.conj_ivarsK new_constrs  
 
@@ -704,55 +678,58 @@ let maximal_exception_sets (conj : conj) =
 type abstract =
   | Sigma of sum
   | P of param
-  | C of coeff
   with compare, sexp
 
 type abstraction = { abstracts : abstract list } with compare
 
 let mk_abstraction (abstracts : abstract list) =
-  let sum_one = mk_sum [] (Mon(mk_monom [])) in
+  let is_sum_one = function
+    | Sigma(s) -> equal_sum s (mk_sum [] (Mon(mk_monom [])))
+    | _ -> false
+  in
   let prefered_order a1 a2 =
     match a1, a2 with
     | Sigma(s1), Sigma(s2) -> (L.length s2.sum_ivarsK) - (L.length s1.sum_ivarsK)
-    | Sigma(s), P(_) -> if (equal_sum sum_one s) then  1 else -1
-    | P(_), Sigma(s) -> if (equal_sum sum_one s) then -1 else  1
+    | Sigma(_), P(_) -> -1
+    | P(_), Sigma(_) ->  1
     | P(p1), P(p2) -> (Set.length (ivars_atom (Param p2))) - (Set.length (ivars_atom (Param p1)))
-    | C(c1), C(c2) -> compare_coeff c1 c2
-    | C(_), _ -> -1
-    | _ , C(_) -> 1
   in
-  let abstracts = L.dedup abstracts ~compare:compare_abstract in
+  let abstracts = L.dedup abstracts ~compare:compare_abstract
+                  |> L.filter ~f:(fun a -> not(is_sum_one a))
+  in
   let abstracts = L.sort ~cmp:prefered_order (L.sort ~cmp:compare_abstract abstracts) in
   { abstracts = abstracts }
 
 let pp_abstract = function
   | Sigma(s) -> F.printf "%a " PPLatex.pp_sum_latex s
   | P(p) -> F.printf "%a " PPLatex.pp_param_latex p
-  | C(c) -> F.printf "%a " PPLatex.pp_coeff_latex c
 
 let pp_abstraction abs =
   L.iter abs.abstracts ~f:(fun a -> let () = pp_abstract a in F.print_flush())
-  
+
 let extract_abstracts_sum (s : sum) =
-  match s.sum_summand with
-  | Mon(mon) ->
-    let f ~key:a ~data:_  =
-      begin match a with
-        | Param(_, None) -> false
-        | Param(_, Some i) -> L.mem ~equal:equal_ivar (unzip1 s.sum_ivarsK) i
-        | _ -> failwith "parameter polynomial expected"
-      end
-    in
-    let sigma = mk_sum s.sum_ivarsK (Mon(mk_monom_of_map (Map.filter mon.monom_map ~f))) in
-    let non_bound =
-      Map.filter mon.monom_map ~f:(fun ~key:a ~data:_d -> not (f ~key:a ~data:_d))
-      |> Map.to_alist
-      |> L.map ~f:(function | (Param(p), d) -> (P(p),d) | _ -> assert false)
-    in
-    if equal_sum sigma (mk_sum [] (Mon(mk_monom_of_map Atom.Map.empty))) &&
-       L.length non_bound > 0 then non_bound
-    else (Sigma(sigma), BI.one) :: non_bound
-  | Coeff(c) -> [(C(c), BI.one)]
+  let f ~key:a ~data:_  =
+    begin match a with
+      | Param(_, None) -> false
+      | Param(_, Some i) -> L.mem ~equal:equal_ivar (unzip1 s.sum_ivarsK) i
+      | _ -> true
+    end
+  in
+  let new_summand, summand_monom =
+    match s.sum_summand with
+    | Mon(mon) -> Mon(mk_monom_of_map (Map.filter mon.monom_map ~f)), mon
+    | Coeff(c) -> 
+      let coeff = mk_coeff c.coeff_unif (mk_monom_of_map (Map.filter c.coeff_mon.monom_map ~f)) in
+      Coeff(coeff), c.coeff_mon
+  in
+  let sigma = mk_sum s.sum_ivarsK new_summand in
+  let not_bound =
+    Map.filter summand_monom.monom_map ~f:(fun ~key:a ~data:_d -> not (f ~key:a ~data:_d))
+    |> Map.to_alist
+    |> L.map ~f:(function | (Param(p), d) -> (P(p),d) | _ -> assert false)
+  in
+  if equal_sum sigma (mk_sum [] (Mon(mk_monom []))) && L.length not_bound > 0 then not_bound
+  else (Sigma(sigma), BI.one) :: not_bound
 
 let abstraction_from_parampolys (parampolys : poly list) =
   let extract_abstracts_poly (p : poly) =
@@ -782,7 +759,6 @@ let abs_sum2degrees (s : sum) (abs : abstraction) =
   aux [] abs.abstracts
 
 exception Not_Valid_Sum_Degree
-exception Not_Valid_Coeff_Degree
 
 let abs_degrees2sum (degrees : BI.t list) (abs : abstraction) =
   let sums = L.map (L.zip_exn abs.abstracts degrees)
@@ -795,10 +771,6 @@ let abs_degrees2sum (degrees : BI.t list) (abs : abstraction) =
           | P(p), d ->
             if (BI.is_zero d) then []
             else [mk_sum [] (Mon(mk_monom_of_map (Atom.Map.of_alist_exn [(Param(p), d)] )))]
-          | C(c), d ->
-            if (BI.is_zero d) then []
-            else if (BI.is_one d) then [mk_sum [] (Coeff(c))]
-            else raise Not_Valid_Coeff_Degree
         )
         |> L.concat
   in
@@ -843,13 +815,14 @@ let poly_system_of_gb_string (s : string) (abs : abstraction) =
     let polynomials = String.split s ~on:'p' in
     L.map polynomials ~f:(fun s' -> try poly_of_gb_string s' abs with     
                                       | Not_Valid_Sum_Degree -> SP.zero
+                                      | Mult_of_Coeffs -> SP.zero
                                       | _ -> assert false
                          )
 
 let param_poly_equation (c : constr) =
   let is_param_sum (s : sum) =
     match s.sum_summand with
-    | Coeff(_) -> false
+    | Coeff(_) -> s.sum_ivarsK = [] && c.constr_ivarsK = []
     | Mon(mon) -> equal_monom (params_monom mon) mon
   in
   c.constr_is_eq = Eq &&
@@ -942,7 +915,7 @@ let poly_of_xterm (x : xterm) =
              | Coeff(coeff) ->
                begin match s.sum_summand with
                  | Mon(m) -> Coeff(mk_coeff coeff.coeff_unif (mult_monom m coeff.coeff_mon))
-                 | _ -> assert false
+                 | _ -> raise Mult_Coeff_by_Var
                end
            in
            SP.(p +! (mk_poly [(c, mk_sum x.xterm_ivarsK new_summand)]))
@@ -954,6 +927,7 @@ let poly_of_xpoly (xp : xpoly) (xp_aux : xpoly) =
    ~f:(fun p (x, xaux) ->
       try SP.(p +! (poly_of_xterm x)) with
         | Mult_Coeff_by_Var -> SP.(p +! (poly_of_xterm xaux))
+        | Mult_of_Coeffs    -> SP.(p +! (poly_of_xterm xaux))
         | _ -> assert false
      )
 
@@ -968,6 +942,7 @@ let groebner_basis (param_polys : poly list) (abs : abstraction) =
   let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero)) in
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
+  let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   let groebner_basis = call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   poly_system_of_gb_string groebner_basis abs
 
@@ -976,10 +951,6 @@ let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstracti
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let gb_poly_to_reduce = poly2gb_poly poly_to_reduce abs in
-
-  let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'reduce','system':" ^ gb_system ^
-               ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n") in
-
   let reduced =
     call_Sage ("{'cmd':'reduce','system':" ^ gb_system ^
                ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n")
@@ -1022,13 +993,14 @@ let groebner_basis_simplification (conj : conj) =
     let param_polys = L.filter conj.conj_constrs ~f:param_poly_equation
                       |> L.map ~f:(fun c -> c.constr_poly)
                       |> permute_param_polys (unzip1 delta_binder)
+                      |> L.dedup ~compare:compare_poly
     in
     let rest_constrs = L.filter conj.conj_constrs ~f:(fun c -> not (param_poly_equation c)) in
     let abs = abstraction_from_parampolys param_polys in
     let param_polys = groebner_basis param_polys abs in
     let new_constrs =
       rest_constrs @
-      L.map param_polys ~f:(fun p ->
+      (L.map param_polys ~f:(fun p ->
           let ivars_p = ivars_poly p in
           let ivars_d = Ivar.Set.of_list (unzip1 delta_binder) in
           let binder = L.map delta_binder
@@ -1042,6 +1014,7 @@ let groebner_basis_simplification (conj : conj) =
           mk_constr binder Eq p)
       |> L.map ~f:(fun c -> all_ivars_distinct_constr c conj.conj_ivarsK)
       |> L.concat
+      )
     in
     (* Phase 2: Simplification below binders *)
     let param_poly_constrs_without_sums =
@@ -1132,7 +1105,13 @@ let divide_monom_by (a : atom) (m : monom) =
 let divide_sum_by (a : atom) (s : sum) =
   match s.sum_summand with
   | Mon(mon) -> mk_sum s.sum_ivarsK (Mon(divide_monom_by a mon))
-  | _ -> failwith "impossible to divide in a Coeff expression"
+  | Coeff(coeff)->
+    begin match a with
+      | Param(_,_) ->
+        let new_coeff = mk_coeff coeff.coeff_unif (divide_monom_by a coeff.coeff_mon) in
+        mk_sum s.sum_ivarsK (Coeff(new_coeff))
+      | _ -> failwith "division of Coeff by variable not allowed"
+    end
 
 let divide_poly_by (a : atom) (p : poly) =
   if equal_poly SP.zero p then p, false
@@ -1557,23 +1536,37 @@ let split_in_factors (context : context_ivars) (c : constr) =
   if c.constr_is_eq = InEq then failwith "Impossible to split in factors an inequality"
   else if c.constr_ivarsK <> [] then failwith "Impossible to split in factors under a forall binder"
   else
-    let context = update_context context c.constr_ivarsK in
-    let atoms = Set.to_list (get_atoms_poly c.constr_poly)
-                |> L.filter ~f:(fun a ->
-                    match a with
-                    | Uvar(_, Some i) | Param(_, Some i) ->
-                      L.mem ~equal:equal_ivar (unzip1 context) i
-                    | Uvar(_, None) | Param(_, None) -> true
-                    | Hvar hv -> L.mem ~equal:equal_ivar (unzip1 context) hv.hv_ivar
-                  )
-    in
-    begin try
-        let sums = Set.to_list (get_raw_sums c.constr_poly) in
-        call_Sage ("{'cmd':'factor','f':[" ^ (poly2string c.constr_poly atoms sums) ^ "]}\n")
-        |> String.split ~on:'p'
-        |> L.map ~f:(fun p_string -> mk_constr c.constr_ivarsK Eq (string2poly p_string atoms sums))
-      with _ -> failwith "Equation contains Summations or Coeff"
-    end
+    let sum_is_coeff = function | Coeff(_) -> true | _ -> false in
+    match Map.to_alist c.constr_poly.poly_map with
+    | (s,constant) :: [] when (sum_is_coeff s.sum_summand) && s.sum_ivarsK = [] ->
+      begin match s.sum_summand with
+      | Coeff(coeff) ->
+        if (params coeff.coeff_mon = []) then [c]
+        else
+          let s1 = mk_sum [] (Coeff(mk_coeff coeff.coeff_unif (hvars_monom coeff.coeff_mon))) in
+          let s2 = mk_sum [] (Mon(params_monom coeff.coeff_mon)) in
+          [ mk_constr [] Eq (mk_poly [(constant,s1)]);
+            mk_constr [] Eq (mk_poly [(constant,s2)]) ]
+      | _ -> assert false
+      end
+    | _ ->
+      let context = update_context context c.constr_ivarsK in
+      let atoms = Set.to_list (get_atoms_poly c.constr_poly)
+                  |> L.filter ~f:(fun a ->
+                      match a with
+                      | Uvar(_, Some i) | Param(_, Some i) ->
+                        L.mem ~equal:equal_ivar (unzip1 context) i
+                      | Uvar(_, None) | Param(_, None) -> true
+                      | Hvar hv -> L.mem ~equal:equal_ivar (unzip1 context) hv.hv_ivar
+                    )
+      in
+      begin try
+          let sums = Set.to_list (get_raw_sums c.constr_poly) in
+          call_Sage ("{'cmd':'factor','f':[" ^ (poly2string c.constr_poly atoms sums) ^ "]}\n")
+          |> String.split ~on:'p'
+          |> L.map ~f:(fun p_string -> mk_constr c.constr_ivarsK Eq (string2poly p_string atoms sums))
+        with _ -> failwith "Equation contains Summations or Coeff"
+      end
 
 (* ** Case distinctions *)
 
