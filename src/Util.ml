@@ -29,7 +29,6 @@ module BI = struct
   let sign = sign_big_int
 end
 
-
 (* ======================================================================= *)
 (* List functions *)
 
@@ -227,14 +226,14 @@ let pp_if c pp1 pp2 fmt x =
 let pp_pair pp1 pp2 fmt (a,b) =
   F.fprintf fmt "(%a,%a)" pp1 a pp2 b
 
-let fsprintf fmt =
+let fsprintf fstring =
   let buf  = Buffer.create 127 in
-  let fbuf = F.formatter_of_buffer buf in
+  let fmt = F.formatter_of_buffer buf in
   F.kfprintf
     (fun _ ->
-      F.pp_print_flush fbuf ();
+      F.pp_print_flush fmt ();
       (Buffer.contents buf))
-    fbuf fmt
+    fmt fstring
 
 let group rel xs =
   let rec go xs y acc = match xs with
@@ -252,3 +251,7 @@ let sorted_nub cmp xs =
 let conc_map f xs = L.concat (L.map ~f xs)
 
 let (%) f g x = f (g x)
+
+let print_messages indent_level msgs =
+  L.iter msgs ~f:(fun m -> F.printf "%s%s" (String.make indent_level ' ') m);
+  F.print_flush()

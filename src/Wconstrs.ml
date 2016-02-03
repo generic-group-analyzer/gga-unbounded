@@ -5,7 +5,7 @@ open Core_kernel.Std
 open Util
 open Abbrevs
 open Watom
-
+    
 (* ** Constraint expressions and constraints
  * ----------------------------------------------------------------------- *)
 
@@ -93,6 +93,15 @@ let equal_conj     a b = compare_conj     a b = 0
 
 (* ** Extracting index variables (all, free, bound)
  * ----------------------------------------------------------------------- *)
+
+let mons (p : poly) =
+  Map.fold p.poly_map
+    ~init:[]
+    ~f:(fun ~key:s ~data:_c list ->
+      let mon = match s.sum_summand with | Mon(m) -> m | Coeff(_) -> (monom_of_map Atom.Map.empty) in
+      (Map.filter mon.monom_map ~f:(fun ~key:v ~data:_e -> not (is_param v))) :: list)
+  |> L.map ~f:monom_of_map
+  |> L.dedup ~compare:compare_monom
 
 let ivars_monom (mon : monom) =
   Map.fold mon.monom_map

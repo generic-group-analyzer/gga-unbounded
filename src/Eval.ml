@@ -7,10 +7,10 @@ open Util
 
 (* ** FIXME : Get rid of this *)
 
-let bound_ivars_poly (poly : poly) =
-  Map.fold poly.poly_map
-    ~init:Ivar.Set.empty
-    ~f:(fun ~key:s ~data:_c se -> Set.union se (Ivar.Set.of_list (unzip1 s.sum_ivarsK)))
+let power_poly (p : poly) (e : BI.t) =
+  let rec aux p' n = if BI.is_one n then p' else aux SP.(p' *! p) BI.(n -! one) in
+  if BI.(compare e zero) < 0 then failwith "Not supported"
+  else if BI.(compare e zero) = 0 then SP.one else aux p e
 
 let rename_sum s rn =
   let ivars = L.map (unzip1 s.sum_ivarsK) ~f:(apply_renaming rn) in
@@ -33,7 +33,7 @@ let subst_sum (c : BI.t) (s : sum) (par : atom) qvars (value : poly) =
   let mon = (match s.sum_summand with | Mon(mon) -> mon | _ -> assert false) in
   let d = degree par mon in
   let s = mk_sum s.sum_ivarsK (Mon(mk_monom_of_map (Map.remove mon.monom_map par))) in
-  let (rn,_) = renaming_away_from (Ivar.Set.of_list qvars) (bound_ivars_poly value) in
+  let (rn,_) = renaming_away_from (Ivar.Set.of_list qvars) (ivars_poly value) in
   let new_value = rename_poly value rn in
   Map.fold (power_poly new_value d).poly_map ~init:(mk_poly [])
            ~f:(fun ~key:s' ~data:c' p -> SP.(p +! (mk_poly [(BI.(c *! c'), mult_sum s s')])))
@@ -58,7 +58,7 @@ type eval_state = {
   es_gs       : group_setting option;
   es_inputs   : (poly * group_name) list;
   es_varnames : string list;
-  es_rvars    : atom list;
+  es_uvars    : atom list;
 
   es_odefs    : ((poly * group_name) list) option;  (* oracle return values *)
   es_oparams  : (string * ty) list;
@@ -72,7 +72,7 @@ let empty_eval_state = {
   es_gs       = None;
   es_inputs   = [];
   es_varnames = [];
-  es_rvars    = [];
+  es_uvars    = [];
   es_odefs    = None;
   es_oparams  = [];
   es_orvars   = [];
@@ -80,31 +80,26 @@ let empty_eval_state = {
   es_lcombs   = [];
 }
 
-let atom_to_name = function
-  | Uvar (name, _) -> name
-  | Param (name,_) -> name
-  | Hvar hv        -> hv.hv_name
-
 let fold_sum_monom (s : sum) ~f =
   match s.sum_summand with
   | Mon(mon) -> mk_sum s.sum_ivarsK (Mon(map_atom_monom ~f mon))
   | _ -> assert false
 
-let rvar_to_param (s : sum) (v : atom) =
+let uvar_to_param (s : sum) (v : atom) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Uvar (name, idx) when name = atom_to_name v -> Param(name, idx)
+      | Uvar (name, idx) when name = atom_name v -> Param(name, idx)
       | _ -> k
     in
     Map.add m ~key:new_k ~data:d
   in
   fold_sum_monom s ~f
 
-let rvar_to_hvar (s : sum) (v : atom) (g : group_name) =
+let uvar_to_hvar (s : sum) (v : atom) (g : group_name) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Uvar (name, oivar) when name = atom_to_name v ->
-        let ivar = Option.value ~default:{name = "k"; id = 0} oivar in
+      | Uvar (name, oivar) when name = atom_name v ->
+        let ivar = Option.value ~default:{ name = "k"; id = 0; } oivar in
         Hvar { hv_name = name; hv_ivar = ivar; hv_gname = g }
       | _ -> k
     in
@@ -112,14 +107,12 @@ let rvar_to_hvar (s : sum) (v : atom) (g : group_name) =
   in
   fold_sum_monom s ~f
 
-let vars_s s =
+let uvars_sum (s : sum) =
   match s.sum_summand with
-  | Mon(mon) ->
-    let (vars,_) = L.unzip (uvars mon) in
-    vars
+  | Mon(mon) -> unzip1 (uvars mon)
   | _ -> assert false
 
-let used_vars_p p = Map.fold p.poly_map ~init:[] ~f:(fun ~key:s ~data:_ l -> l @ (vars_s s))
+let used_uvars_poly p = Map.fold p.poly_map ~init:[] ~f:(fun ~key:s ~data:_ l -> l @ (uvars_sum s))
 
 (* ** Well-formedness checking
  * ----------------------------------------------------------------------- *)
@@ -142,7 +135,7 @@ let ensure_oracle_valid estate ovarnames used =
   ensure_vars_defined used ovarnames
 
 let ensure_winning_valid estate choices used =
-  let names = estate.es_varnames @ L.map choices ~f:(fun (v,_) -> atom_to_name v) in
+  let names = estate.es_varnames @ L.map choices ~f:(fun (v,_) -> atom_name v) in
   if not (unique names ~equal:String.equal) then
     failwith "Winning condition reuses names.";
   ensure_vars_defined used (estate.es_varnames @ names)
@@ -157,21 +150,21 @@ let ipoly_to_opoly params p =
      | Fp ->
        Map.fold p'.poly_map
          ~init:SP.zero
-         ~f:(fun ~key:s ~data:c p''-> SP.(p'' +! mk_poly [(c, rvar_to_param s v)] ))
+         ~f:(fun ~key:s ~data:c p''-> SP.(p'' +! mk_poly [(c, uvar_to_param s v)] ))
      | GroupName gid ->
        Map.fold p'.poly_map
          ~init:SP.zero
-         ~f:(fun ~key:s ~data:c p''-> SP.(p'' +! mk_poly [(c, rvar_to_hvar s v gid)] ))
+         ~f:(fun ~key:s ~data:c p''-> SP.(p'' +! mk_poly [(c, uvar_to_hvar s v gid)] ))
   in
   L.fold_left params ~init:p ~f:add_param
 
 let interp_add_oracle params orvars fs estate =
   let varnames =
     estate.es_varnames @
-    L.map orvars ~f:atom_to_name @
-    L.map params ~f:(fun (v,_) -> atom_to_name v)
+    L.map orvars ~f:atom_name @
+    L.map params ~f:(fun (v,_) -> atom_name v)
   in
-  let used_vars = L.map (L.concat_map fs ~f:(fun (p,_) -> used_vars_p p)) ~f:atom_to_name in
+  let used_vars = L.map (L.concat_map fs ~f:(fun (p,_) -> used_uvars_poly p)) ~f:atom_name in
   ensure_oracle_valid estate varnames used_vars;
   let od =
     Some (L.map fs ~f:(fun (p, gid) -> (ipoly_to_opoly params p,gid)))
@@ -179,7 +172,7 @@ let interp_add_oracle params orvars fs estate =
   if estate.es_odefs <> None then failwith "At most one oracle definition supported";
   { estate with
     es_odefs    = od;
-    es_oparams  = L.map params ~f:(fun (p,gid) -> (atom_to_name p,gid));
+    es_oparams  = L.map params ~f:(fun (p,gid) -> (atom_name p,gid));
     es_orvars   = orvars;
     es_varnames = varnames }
 
@@ -187,21 +180,21 @@ let interp_add_oracle params orvars fs estate =
 (* ** Interpret winning condition
  * ----------------------------------------------------------------------- *)
 
-let rvar_to_irvar (s : sum) (v : atom) (i : ivar) =
+let uvar_to_idxuvar (s : sum) (v : atom) (i : ivar) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Uvar(name, None) when name = atom_to_name v -> Uvar(name, Some i)
-      | _                                           -> k
+      | Uvar(name, None) when name = atom_name v -> Uvar(name, Some i)
+      | _ -> k
     in
     Map.add m ~key:new_k ~data:d
   in
   fold_sum_monom s ~f
 
-let param_to_iparam (s : sum) (par_name : string) (i : ivar) =
+let param_to_idxparam (s : sum) (par_name : string) (i : ivar) =
   let f ~key:k ~data:d m =
     let new_k = match k with
       | Param (name, None) when name = par_name -> Param (name, Some i)
-      | _                                       -> k
+      | _ -> k
     in
     Map.add m ~key:new_k ~data:d
   in
@@ -222,12 +215,12 @@ let fresh_params n used =
   aux [] n used
 
 let index_sum s i orvars oparams =
-  let s = L.fold_left orvars ~init:s ~f:(fun s' var -> rvar_to_irvar s' var i) in
+  let s = L.fold_left orvars ~init:s ~f:(fun s' var -> uvar_to_idxuvar s' var i) in
   let s = L.fold_left oparams
             ~init:s
             ~f:(fun s' (name,ty) ->
                   match ty with
-                  | Fp -> param_to_iparam s' name i
+                  | Fp -> param_to_idxparam s' name i
                   | _  -> s')
   in
   mk_sum (s.sum_ivarsK @ [(i, Ivar.Set.empty)]) s.sum_summand
@@ -243,12 +236,12 @@ let iconds_to_wconds conds choices estate =
                 Map.fold p.poly_map
                   ~init:SP.zero
                   ~f:(fun ~key:s ~data:c p ->
-                        SP.(p +! mk_poly [(c, rvar_to_param s (Uvar (v, None)))] ))
+                        SP.(p +! mk_poly [(c, uvar_to_param s (Uvar (v, None)))] ))
               | GroupName(gid) ->
                 Map.fold p.poly_map
                   ~init:SP.zero
                   ~f:(fun ~key:s ~data:c p ->
-                        SP.(p +! mk_poly [(c, rvar_to_hvar s (Uvar (v,None)) gid)] )))
+                        SP.(p +! mk_poly [(c, uvar_to_hvar s (Uvar (v,None)) gid)] )))
     in
     mk_constr c.constr_ivarsK c.constr_is_eq new_poly
   in
@@ -263,12 +256,12 @@ let iconds_to_wconds conds choices estate =
            let new_poly =
              Map.fold c.constr_poly.poly_map
                ~init:SP.zero
-               ~f:(fun ~key:s ~data:c p' -> SP.(p' +! mk_poly [(c, rvar_to_param s v)]) )
+               ~f:(fun ~key:s ~data:c p' -> SP.(p' +! mk_poly [(c, uvar_to_param s v)]) )
            in
            mk_constr c.constr_ivarsK c.constr_is_eq new_poly
          in
          (L.map conds ~f:fp,
-          { estate with es_oparams = estate.es_oparams @ [(atom_to_name v, Fp)] },
+          { estate with es_oparams = estate.es_oparams @ [(atom_name v, Fp)] },
          lcombshapes)
        | (v, GroupName gid) ->
           let (inputs,_) = L.filter estate.es_inputs ~f:(fun (_,g) -> equal_group_name g gid)
@@ -322,14 +315,14 @@ let eval_cmd estate cmd =
     { estate with es_gs = Some gs }
 
   | AddSamplings(vars),None ->
-    let varnames = L.map vars ~f:atom_to_name in
+    let varnames = L.map vars ~f:atom_name in
     ensure_vars_fresh varnames estate.es_varnames;
-    { estate with es_rvars = estate.es_rvars @ vars; es_varnames = estate.es_varnames @ varnames }
+    { estate with es_uvars = estate.es_uvars @ vars; es_varnames = estate.es_varnames @ varnames }
 
   | AddInput(fs,gid), None ->
-    let used_vars = L.concat (L.map fs ~f:(fun p -> used_vars_p p)) in
-    let used_varnames = L.map used_vars ~f:atom_to_name in
-    ensure_vars_defined used_varnames (L.map estate.es_rvars ~f:atom_to_name);
+    let used_vars = L.concat (L.map fs ~f:(fun p -> used_uvars_poly p)) in
+    let used_varnames = L.map used_vars ~f:atom_name in
+    ensure_vars_defined used_varnames (L.map estate.es_uvars ~f:atom_name);
     { estate with
       es_varnames = L.dedup ~compare:String.compare (estate.es_varnames @ used_varnames);
       es_inputs   = estate.es_inputs @ (L.map fs ~f:(fun p -> (p, gid)));
@@ -339,7 +332,7 @@ let eval_cmd estate cmd =
     interp_add_oracle params orvars fs estate
 
   | SetWinning(choices,conds), None ->
-    let used_vars = L.map (L.concat_map conds.conj_constrs ~f:(fun c -> used_vars_p c.constr_poly)) ~f:atom_to_name in
+    let used_vars = L.map (L.concat_map conds.conj_constrs ~f:(fun c -> used_uvars_poly c.constr_poly)) ~f:atom_name in
     ensure_winning_valid estate choices used_vars;
     let wconstrs, lcombshapes = iconds_to_wconds conds.conj_constrs choices estate in
     { estate with es_mwcond = Some (mk_conj conds.conj_ivarsK wconstrs); 
@@ -352,47 +345,45 @@ let eval_cmd estate cmd =
  * ----------------------------------------------------------------------- *)
 
 let knowledge estate =
-  let auxiliary mon =
+  let add_index_to_orvars mon =
     Map.fold mon.monom_map
        ~init:Atom.Map.empty
        ~f:(fun ~key:k ~data:d m ->
            let new_k = match k with
              | Uvar (name, None) when L.mem estate.es_orvars k ~equal:Atom.equal ->
-                Uvar (name, Some { name = "k"; id = 0 })
+               Uvar (name, Some { name = "k"; id = 0 })
              | _ -> k
            in
            Map.add m ~key:new_k ~data:d)
     |> mk_monom_of_map
   in
-  let update_k k non_recur recur recur_idx =
-    { non_recur = L.dedup (k.non_recur @ non_recur) ~compare:compare_monom;
-      recur     = L.dedup (k.recur @ recur)         ~compare:compare_monom;
-      recur_idx = L.dedup (k.recur_idx @ recur_idx) ~compare:compare_monom }
+  let update advMsets non_recur recur =
+    let sm_glob = L.filter non_recur ~f:(fun m -> Set.length (ivars_monom m) = 0) in
+    let sm_orcl = L.filter non_recur ~f:(fun m -> Set.length (ivars_monom m) > 0) in
+    let tm_glob = L.filter recur ~f:(fun m -> Set.length (ivars_monom (uvars_monom m)) = 0) in
+    let tm_orcl = L.filter recur ~f:(fun m -> Set.length (ivars_monom (uvars_monom m)) > 0) in
+    { sm_glob = advMsets.sm_glob @ (L.map sm_glob ~f:mon2umon);
+      sm_orcl = advMsets.sm_glob @ (L.map sm_orcl ~f:mon2umon);
+      tm_glob = advMsets.sm_glob @ (L.map tm_glob ~f:mon2umon);
+      tm_orcl = advMsets.sm_glob @ (L.map tm_orcl ~f:mon2umon);
+    }
   in
-  let k_init = { non_recur = [mk_monom []]; recur = []; recur_idx = [] } in
-  let ooutputs = match estate.es_odefs with | Some od -> od | _ -> assert false in
-  L.fold_left (estate.es_inputs @ ooutputs)
-   ~init:(k_init, k_init)
-   ~f:(fun (k1,k2) (p,group) ->
-       let monomials = L.map (mons p) ~f:auxiliary in
-       let non_recur = L.filter monomials ~f:(fun m -> L.length (hvars m) = 0) in
-       let recur =
-         L.filter monomials
-          ~f:(fun m -> (Set.length (ivars_monom (uvars_monom m)) = 0) && (L.length (hvars m) > 0))
-         |> L.map ~f:(fun m -> uvars_monom m)
-       in
-       let recur_idx =
-         L.filter monomials
-          ~f:(fun m -> (Set.length (ivars_monom (uvars_monom m)) > 0) && (L.length (hvars m) > 0))
-         |> L.map ~f:(fun m -> uvars_monom m)
-       in
-       match group, estate.es_gs with
-       | G1, _        -> (update_k k1 non_recur recur recur_idx, k2)
-       | G2, Some II  -> (update_k k1 non_recur recur recur_idx, update_k k2 non_recur recur recur_idx)
-       | G2, Some III -> (k1, update_k k2 non_recur recur recur_idx)
-       | G2, Some I   -> failwith "G2 encountered for Type I"
-       | G2, None     -> (k1, update_k k2 non_recur recur recur_idx)
-      )
+  let uone = mk_monom [] |> mon2umon in
+  let advMsets_init = { sm_glob = [ uone ]; sm_orcl = []; tm_glob = []; tm_orcl = []; } in
+  let oracle_outputs = match estate.es_odefs with | Some od -> od | _ -> assert false in
+  L.fold_left (estate.es_inputs @ oracle_outputs)
+   ~init:(advMsets_init, advMsets_init)
+   ~f:(fun (advMsets1, advMsets2) (p,group) ->
+     let monomials = L.map (mons p) ~f:add_index_to_orvars in
+     let non_recur = L.filter monomials ~f:(fun m -> L.length (hvars m) = 0) in
+     let recur = L.filter monomials ~f:(fun m -> L.length (hvars m) > 0) in
+     match group, estate.es_gs with
+     | G1, _        -> (update advMsets1 non_recur recur, advMsets2)
+     | G2, Some II  -> (update advMsets1 non_recur recur, update advMsets2 non_recur recur)
+     | G2, Some III -> (advMsets1, update advMsets2 non_recur recur)
+     | G2, _ -> failwith "G2 cannot be defined in Type I setting"
+   )
+  |> (fun (advMsets1, advMsets2) -> { g1 = advMsets1; g2 = advMsets2; })
 
 let lcombs_g1g2 lcombs =
   L.fold_left lcombs
@@ -434,31 +425,9 @@ type instr =
   | ClearIndpEqs
   | SplitInFactors of int
   | SimplifyCoeffs
+  | ExtractCoeffs
 
-let adv_of_k1k2 (k1,k2) =
-  let advMsets1 = {
-    sm_glob = L.filter k1.non_recur ~f:(fun m -> (Set.length (ivars_monom m)) = 0) |> L.map ~f:mon2umon;
-    sm_orcl = L.filter k1.non_recur ~f:(fun m -> (Set.length (ivars_monom m)) > 0) |> L.map ~f:mon2umon;
-    tm_glob = L.map k1.recur ~f:mon2umon;
-    tm_orcl = L.map k1.recur_idx ~f:mon2umon;
-  } 
-  in
-  let advMsets2 = {
-    sm_glob = L.filter k2.non_recur ~f:(fun m -> (Set.length (ivars_monom m)) = 0) |> L.map ~f:mon2umon;
-    sm_orcl = L.filter k2.non_recur ~f:(fun m -> (Set.length (ivars_monom m)) > 0) |> L.map ~f:mon2umon;
-    tm_glob = L.map k2.recur ~f:mon2umon;
-    tm_orcl = L.map k2.recur_idx ~f:mon2umon;
-  }
-  in
-  { g1 = advMsets1; g2 = advMsets2 }
-
-let rec maximal_quant add_excepts output = function
-  | [] -> output
-  | i :: rest ->
-    maximal_quant add_excepts (output @ [(i, Ivar.Set.of_list (add_excepts @ (unzip1 output)))]) rest
-
-let eval_instr (k1,k2) system nth instr =
-  let advK = adv_of_k1k2 (k1,k2) in (*FIXME : Get rid of this *)
+let eval_instr advK system nth instr =
   match instr with
   | GoTo(n) ->
     if (n >= 0 && n <= L.length system) then (system, n)
@@ -533,9 +502,17 @@ let eval_instr (k1,k2) system nth instr =
     (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> new_cases)), nth)
 
   | SimplifyCoeffs ->
-        (list_map_nth system nth (simplify_coeff_conj advK), nth)
+    (list_map_nth system nth (simplify_coeff_conj advK), nth)
 
-let eval_instrs instrs (k1,k2) system nth =
+  | ExtractCoeffs ->
+    let f conj =
+      let conj, msgs = introduce_coeff_everywhere advK conj in
+      print_messages 0 msgs;
+      conj
+    in
+    (list_map_nth system nth f, nth)
+
+let eval_instrs instrs advK system nth =
   L.fold_left instrs
     ~init:(system,nth)
-    ~f:(fun (system,nth) instr -> eval_instr (k1,k2) system nth instr)
+    ~f:(fun (system,nth) instr -> eval_instr advK system nth instr)

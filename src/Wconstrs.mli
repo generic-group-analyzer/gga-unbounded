@@ -94,8 +94,7 @@ val mk_conj   : (ivar * Ivar.Set.t) list -> constr list -> conj
 val mk_monom_of_map : BI.t Atom.Map.t -> monom
 val mk_poly_of_map  : BI.t Sum.Map.t  -> poly 
 
-(* val all_pairs: ivar list -> ivar_pair list *)
-(* val all_ivar_distinct_poly : poly -> poly *)
+val mons : poly -> monom list
 
 (* ** Arithmetic operations
  * ----------------------------------------------------------------------- *)

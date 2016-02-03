@@ -176,13 +176,13 @@ function resizeAce() {
     var vpadding = 100;
     var edit = $('#editor-proof');
     edit.height($(window).height() - vpadding + 13);
-    edit.width($(window).width() / 2 - hpadding);
+    edit.width($(window).width() / 3 - hpadding);
     edit = $('#editor-goal');
-    edit.height(($(window).height() - vpadding) * 0.6);
-    edit.width($(window).width() / 2 - hpadding);
+    edit.height(($(window).height() - vpadding) * 0.8);
+    edit.width($(window).width() * 2 / 3 - hpadding);
     edit = $('#editor-message');
-    edit.height(($(window).height() - vpadding) * 0.4);
-    edit.width($(window).width() / 2 - hpadding);
+    edit.height(($(window).height() - vpadding) * 0.2);
+    edit.width($(window).width() * 2 / 3 - hpadding);
 }
 //listen for changes
 $(window).resize(resizeAce);

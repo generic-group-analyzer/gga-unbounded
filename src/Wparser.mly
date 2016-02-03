@@ -59,6 +59,7 @@
 %token CLEAR_INDP_EQS
 %token SPLIT_IN_FACTORS
 %token SIMPLIFY_COEFFS
+%token EXTRACT_COEFFS
 
 %token QUOTE
 
@@ -127,7 +128,7 @@ poly :
 | LPAR; f = poly; RPAR       { f };
 | LPAR; f = poly; RPAR; EXP; e = INT { if e < 0
                                        then failwith "negative exponent only allowed for variables"
-                                       else Wrules.power_poly f (BI.of_int e) }
+                                       else Eval.power_poly f (BI.of_int e) }
 
 qprefix :
 | FORALL; ids = separated_list(COMMA,ID); COLON { L.map ~f:(fun s -> { name = s; id = 0}) ids };
@@ -207,5 +208,7 @@ instr :
   { SplitInFactors(a) }
 | SIMPLIFY_COEFFS; DOT;
   { SimplifyCoeffs }
+| EXTRACT_COEFFS; DOT;
+  { ExtractCoeffs }
 
 instrs_t : instrs = list(instr); EOF; { instrs };

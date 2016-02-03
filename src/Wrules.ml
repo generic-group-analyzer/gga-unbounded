@@ -259,6 +259,11 @@ let all_ivars_distinct_conj (conj : conj) =
   mk_conj conj.conj_ivarsK
     (L.concat (L.map conj.conj_constrs ~f:(fun c -> all_ivars_distinct_constr c conj.conj_ivarsK)))
 
+let rec maximal_quant add_excepts output = function
+  | [] -> output
+  | i :: rest ->
+    maximal_quant add_excepts (output @ [(i, Ivar.Set.of_list (add_excepts @ (unzip1 output)))]) rest
+
 (* ** "Coeff" rule *)
 (* *** Introduce "Coeff" *)
 
@@ -590,6 +595,36 @@ let simplify_coeff_conj (advK : advK) (conj : conj) =
   let f c = simplify_coeff_constr c (conj.conj_ivarsK) advK in
   mk_conj conj.conj_ivarsK (L.map conj.conj_constrs ~f)
 
+let simplify_coeffs_with_order (order : ivar list) (conj : conj) =
+  let simp_sum (c : BI.t) (s : sum) =
+    match s.sum_summand with
+    | Mon(_) -> mk_poly [(c, s)]
+    | Coeff(coeff) ->
+      let handle_vars = handle_vars_list coeff.coeff_mon in
+      begin match handle_vars with
+        | [] -> mk_poly [(c, s)]
+        | (Hvar h1) :: [] ->
+          if (Set.exists (ivars_monom (umon2mon coeff.coeff_unif))
+                ~f:(fun j -> Util.before_in_list ~equal:equal_ivar h1.hv_ivar j order)) then SP.zero
+          else mk_poly [(c, s)]
+        | (Hvar h1) :: (Hvar h2) :: [] ->
+          let ivars = ivars_monom (umon2mon coeff.coeff_unif) in
+          if Set.exists ivars ~f:(fun j -> (before_in_list ~equal:equal_ivar h1.hv_ivar j order) &&
+                                           (before_in_list ~equal:equal_ivar h2.hv_ivar j order))
+          then SP.zero
+          else mk_poly [(c, s)]
+        | _ -> assert false
+      end
+  in
+  let simp_poly (p : poly) =
+    Map.fold p.poly_map
+       ~init:SP.zero
+       ~f:(fun ~key:s ~data:c p' ->
+           SP.(p' +! (simp_sum c s))
+         )
+  in
+  let simp_constr (c : constr) = mk_constr c.constr_ivarsK c.constr_is_eq (simp_poly c.constr_poly) in
+  mk_conj conj.conj_ivarsK (L.map conj.conj_constrs ~f:simp_constr)
 
 (* ** Groebner Basis *)
 (* *** Opening *)
@@ -1352,32 +1387,6 @@ let simplify (advK : advK) (conj : conj) =
 (*  |> remove_independent_equations*)
   |> clear_trivial
 
-(* ** Old functions FIXME *)
-(* The previous Eval.ml needs these functions, we will get rid of them soon *)
-
-let mons (p : poly) =
-  Map.fold p.poly_map
-    ~init:[]
-    ~f:(fun ~key:s ~data:_c list ->
-      let mon = match s.sum_summand with | Mon(m) -> m | Coeff(_) -> mk_monom [] in
-      (Map.filter mon.monom_map ~f:(fun ~key:v ~data:_e -> not (is_param v))) :: list)
-  |> L.map ~f:mk_monom_of_map
-  |> L.dedup ~compare:compare_monom
-
-(* Adversary knowledge data type *)
-
-type k_inf = {
-  non_recur : monom list  ; (* non-recursive knowledge in G_i *)
-  recur     : monom list  ; (* recursive knowledge in G_i *)
-  recur_idx : monom list  ; (* recursive indexed knowledge in G_i *)
-}
-
-let power_poly (p : poly) (e : BI.t) =
-  let rec aux p' n = if BI.is_one n then p' else aux SP.(p' *! p) BI.(n -! one) in
-  if BI.(compare e zero) < 0 then failwith "Not supported"
-  else if BI.(compare e zero) = 0 then SP.one else aux p e
-
-
 (* ** Laurent polynomials rule *)
 (* This rule adds conditions on the parameters to make the handle variables be Laurent
    polynomials (and not rational functions) *)
@@ -1608,3 +1617,122 @@ let contradiction (conj : conj) =
     (is_not_null_constant c.constr_poly && c.constr_is_eq = Eq)
   in
   L.find (conj.conj_constrs) ~f
+
+(* ** Applying some rules *)
+
+(* *** Extracting Coeffs *)
+
+let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (conj : conj) =
+  let context = conj.conj_ivarsK in
+  let used_ivars = Set.union (Ivar.Set.of_list (unzip1 context)) (ivars_constr c) in
+  let c_bound_ivars = Set.diff (ivars_constr c) (Ivar.Set.of_list (unzip1 context)) in
+  let (rn,_) = renaming_away_from used_ivars c_bound_ivars in
+  let ivars_context = (unzip1 context) in
+  try
+    match L.map (mons c.constr_poly) ~f:(fun m -> (uvars_monom m))
+          |> L.dedup ~compare:compare_monom
+    with
+    | [] -> [],[]
+    | m :: [] when equal_monom m (mk_monom []) -> [],[]
+    | monomials ->
+      L.fold_left monomials
+        ~init:([],[])
+        ~f:(fun (l,msg_list) m ->
+            let m = map_idx_monom ~f:(apply_renaming rn) m in
+            let bound_ivars =
+              Set.to_list (Set.filter (ivars_monom m) ~f:(fun i -> not(L.mem (ivars_context) i)))
+            in
+            let quant = maximal_quant ivars_context [] bound_ivars in
+            let new_constrs = introduce_coeff c quant (mon2umon m) context
+                              |> L.map ~f:(fun c -> simplify_coeff_constr c context advK)
+            in
+            if L.exists ~f:(fun c -> L.mem conj.conj_constrs c ~equal:equal_constr) new_constrs
+            then l, msg_list
+            else
+              let msg = fsprintf "coeff(%a) %d.\n" WconstrsUtil.pp_monom m n in
+              l @ new_constrs, msg_list @ [msg]
+          )
+  with _ -> [],[]
+
+let introduce_coeff_everywhere (advK : advK) (conj : conj) =
+  let rec aux constrs msg_list n = function
+    | [] -> constrs, msg_list
+    | c :: rest ->
+      if (c.constr_is_eq = Eq) then
+        let new_constrs, new_msgs = coeff_everywhere_constr c n advK conj in
+        aux (constrs @ new_constrs) (msg_list @ new_msgs) (n+1) rest
+      else
+        aux constrs msg_list (n+1) rest
+  in
+  let new_constrs, msg_list = aux [] [] 1 conj.conj_constrs in
+  mk_conj conj.conj_ivarsK (conj.conj_constrs @ new_constrs), msg_list
+
+(* *** Dividing by variables and parameters *)
+
+let divide_by_every_variable (conj : conj) =
+  let rec aux conj msg_list = function
+    | [] -> conj, msg_list
+    | v :: rest ->
+      let conj = clear_trivial conj in
+      let conj', divided = divide_conj_by v conj in
+      if not divided then aux conj msg_list rest
+      else
+        let msg = fsprintf "divide_by_var %a.\n" pp_atom v in
+        aux conj' (msg_list @ [msg]) (v :: rest)
+  in
+  let vars = Set.filter (get_atoms_conj conj) ~f:(function | Uvar(_,None) -> true | _ -> false) in
+  aux conj [] (Set.to_list vars)
+
+let get_not_null_params (conj : conj) =
+  L.fold_left conj.conj_constrs
+   ~init:[]
+   ~f:(fun l c ->
+       match (Map.to_alist c.constr_poly.poly_map), c.constr_is_eq with
+       | (s,_) :: [], InEq ->
+         begin match s.sum_ivarsK, s.sum_summand with
+           | [], Mon(mon) ->
+             begin match Map.to_alist mon.monom_map with
+               | (Param(name, Some i), _) :: [] ->
+                 if (L.mem (unzip1 conj.conj_ivarsK) i ~equal:equal_ivar)
+                 then l @ [Param(name, Some i)]
+                 else l
+               | (Param(name, None), _) :: [] -> l @ [Param(name, None)]
+               | _ -> l
+             end
+           | _ -> l
+         end
+       | _ -> l
+     )
+
+let divide_by_not_null_params (conj : conj) =
+  let rec aux conj msg_list = function
+    | [] -> conj, msg_list
+    | p :: rest ->
+      let conj = clear_trivial conj in
+      let conj', divided = divide_conj_by p conj in
+      if not divided then aux conj msg_list rest
+      else
+        let msg = fsprintf "divide_by_param %a.\n" pp_atom p in
+        aux conj' (msg_list @ [msg]) (p :: rest)
+  in
+  aux conj [] (get_not_null_params conj)
+
+(* *** Spliting in factors *)
+
+let split_in_factors_all (conj : conj) =
+  let rec aux k previous = function
+    | [] -> [conj], []
+    | c :: rest ->
+      if c.constr_is_eq = InEq || c.constr_ivarsK <> []
+      then aux (k+1) (previous @ [c]) rest
+      else
+        try
+          let new_constrs = split_in_factors conj.conj_ivarsK c in
+          if L.length new_constrs > 1 then
+            let msg = fsprintf "split_in_factors %d.\n" k in
+            L.map new_constrs ~f:(fun c -> mk_conj conj.conj_ivarsK (previous @ [c] @ rest)), [msg]
+          else
+            aux (k+1) (previous @ [c]) rest
+        with _ -> aux (k+1) (previous @ [c]) rest
+  in
+  aux 1 [] (conj.conj_constrs)
