@@ -553,19 +553,49 @@ let eval_contMon_double uM advMsets1 advMsets2 forbidden_idxs1 forbidden_idxs2 =
   with
   | Not_simplifiable -> true
 
+type contMonObj = {
+  contMon_uM : umonom;
+  contMon_hM : monom;
+} with compare, sexp
+
+module ContMonObj = struct
+  module T = struct
+    type t = contMonObj
+    let compare = compare_contMonObj
+    let sexp_of_t = sexp_of_contMonObj
+    let t_of_sexp = contMonObj_of_sexp
+  end
+  include T
+  include Comparable.Make(T)
+end
+
+let contMonTable = ref ContMonObj.Map.empty
+
 let contMon coeff advK =
   let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
-  let handle_vars = handle_vars_list coeff.coeff_mon in
-  match handle_vars with
-  | [] -> Map.is_empty uM.umonom_map
-  | (Hvar h1) :: [] ->
-    let advMsets = adv_sets advK h1.hv_gname in
-    eval_contMon uM advMsets [h1.hv_ivar]
-  | (Hvar h1) :: (Hvar h2) :: [] ->
-    let advMsets1 = adv_sets advK h1.hv_gname in
-    let advMsets2 = adv_sets advK h2.hv_gname in
-    eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar]
-  | _ -> assert false
+  let obj = { contMon_uM = uM; contMon_hM = hvars_monom coeff.coeff_mon; } in
+  match Map.find !contMonTable obj with
+  | None ->
+    let handle_vars = handle_vars_list coeff.coeff_mon in
+    begin match handle_vars with
+      | [] ->
+        let answer = Map.is_empty uM.umonom_map in
+        let () = contMonTable := Map.add !contMonTable ~key:obj ~data:answer in
+        answer
+      | (Hvar h1) :: [] ->
+        let advMsets = adv_sets advK h1.hv_gname in
+        let answer = eval_contMon uM advMsets [h1.hv_ivar] in
+        let () = contMonTable := Map.add !contMonTable ~key:obj ~data:answer in
+        answer
+      | (Hvar h1) :: (Hvar h2) :: [] ->
+        let advMsets1 = adv_sets advK h1.hv_gname in
+        let advMsets2 = adv_sets advK h2.hv_gname in
+        let answer = eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] in
+        let () = contMonTable := Map.add !contMonTable ~key:obj ~data:answer in
+        answer
+      | _ -> assert false
+    end
+  | Some answer -> answer
 
 let simplify_coeff_sum (c : BI.t) (s : sum) (context : context_ivars) (advK : advK) =
   let context = update_context context s.sum_ivarsK in
@@ -857,7 +887,7 @@ let poly_system_of_gb_string (s : string) (abs : abstraction) =
 let param_poly_equation (c : constr) =
   let is_param_sum (s : sum) =
     match s.sum_summand with
-    | Coeff(_) -> s.sum_ivarsK = [] && c.constr_ivarsK = []
+    | Coeff(_) -> (L.length s.sum_ivarsK) + (L.length c.constr_ivarsK) <= 1
     | Mon(mon) -> equal_monom (params_monom mon) mon
   in
   c.constr_is_eq = Eq &&
@@ -978,6 +1008,7 @@ let groebner_basis (param_polys : poly list) (abs : abstraction) =
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
+  F.print_flush();
   let groebner_basis = call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   poly_system_of_gb_string groebner_basis abs
 
@@ -986,6 +1017,9 @@ let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstracti
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let gb_poly_to_reduce = poly2gb_poly poly_to_reduce abs in
+  let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'reduce','system':" ^ gb_system ^
+               ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n") in
+  F.print_flush();
   let reduced =
     call_Sage ("{'cmd':'reduce','system':" ^ gb_system ^
                ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n")
@@ -1243,29 +1277,6 @@ let simplify_eqs_in_others (conj : conj) =
   in         
   mk_conj conj.conj_ivarsK (f [] conj.conj_constrs)
 
-let remove_independent_equations (conj : conj) =
-  (* We say an equation is independent if it has a parameter that only occurs in it *)
-  (* FIXME : To be less incomplete, only remove things when the parameter degree is one *)
-  let p_occurs_in_constrs constrs p =
-    L.fold_left constrs
-     ~init:false
-     ~f:(fun b c ->
-         let params = get_atoms_constr c |> Set.filter ~f:is_param in
-         b || (L.exists (Set.to_list params) ~f:(fun p' -> (atom_name p') = (atom_name p)) )
-       )
-  in
-  let rec aux new_constrs = function
-    | [] -> new_constrs
-    | c :: rest ->
-      let vars = get_atoms_constr c |> Set.filter ~f:(fun p -> not (is_param p)) in
-      let params = get_atoms_constr c |> Set.filter ~f:is_param in
-      if Set.exists params ~f:(fun p -> not (p_occurs_in_constrs (new_constrs @ rest) p) ) &&
-         Set.is_empty vars
-      then aux new_constrs rest
-      else aux (new_constrs @ [c]) rest
-  in
-  mk_conj conj.conj_ivarsK (aux [] conj.conj_constrs)
-
 let uniform_vars_constr (context : context_ivars) (c : constr) =
   let rec aux c = function
     | [] -> c
@@ -1384,7 +1395,6 @@ let simplify (advK : advK) (conj : conj) =
   |> uniform_vars
   |> simplify_null_handle_vars
   |> remove_complex_equations (* we are still sound after removing some equations *)
-(*  |> remove_independent_equations*)
   |> clear_trivial
 
 (* ** Laurent polynomials rule *)
@@ -1622,16 +1632,29 @@ let contradiction (conj : conj) =
 
 (* *** Extracting Coeffs *)
 
-let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (conj : conj) =
+let monomial_candidates (p : poly) (advK : advK) =
+  let poly_monoms = L.map (mons p) ~f:(fun m -> (uvars_monom m))
+                  |> L.dedup ~compare:compare_monom
+  in
+  let advK_monomials = (advK.g1.sm_glob @ advK.g1.sm_orcl @ advK.g1.tm_glob @ advK.g1.tm_orcl @
+                       advK.g2.sm_glob @ advK.g2.sm_orcl @ advK.g2.tm_glob @ advK.g2.tm_orcl)
+                       |> L.map ~f:umon2mon |> L.dedup ~compare:compare_monom
+  in
+  L.map (cross_lists poly_monoms advK_monomials) ~f:(fun (m1,m2) -> mult_monom m1 m2)
+  |> L.dedup ~compare:compare_monom  
+
+let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (full : bool) (conj : conj) =
   let context = conj.conj_ivarsK in
   let used_ivars = Set.union (Ivar.Set.of_list (unzip1 context)) (ivars_constr c) in
   let c_bound_ivars = Set.diff (ivars_constr c) (Ivar.Set.of_list (unzip1 context)) in
   let (rn,_) = renaming_away_from used_ivars c_bound_ivars in
   let ivars_context = (unzip1 context) in
   try
-    match L.map (mons c.constr_poly) ~f:(fun m -> (uvars_monom m))
-          |> L.dedup ~compare:compare_monom
-    with
+    let monomials =
+      if full then monomial_candidates c.constr_poly advK
+      else L.dedup (mons c.constr_poly) ~compare:compare_monom
+    in
+    match monomials with
     | [] -> [],[]
     | m :: [] when equal_monom m (mk_monom []) -> [],[]
     | monomials ->
@@ -1643,9 +1666,7 @@ let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (conj : conj) =
               Set.to_list (Set.filter (ivars_monom m) ~f:(fun i -> not(L.mem (ivars_context) i)))
             in
             let quant = maximal_quant ivars_context [] bound_ivars in
-            let new_constrs = introduce_coeff c quant (mon2umon m) context
-                              |> L.map ~f:(fun c -> simplify_coeff_constr c context advK)
-            in
+            let new_constrs = introduce_coeff c quant (mon2umon m) context in
             if L.exists ~f:(fun c -> L.mem conj.conj_constrs c ~equal:equal_constr) new_constrs
             then l, msg_list
             else
@@ -1654,12 +1675,12 @@ let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (conj : conj) =
           )
   with _ -> [],[]
 
-let introduce_coeff_everywhere (advK : advK) (conj : conj) =
+let introduce_coeff_everywhere (advK : advK) (full : bool) (conj : conj) =
   let rec aux constrs msg_list n = function
     | [] -> constrs, msg_list
     | c :: rest ->
       if (c.constr_is_eq = Eq) then
-        let new_constrs, new_msgs = coeff_everywhere_constr c n advK conj in
+        let new_constrs, new_msgs = coeff_everywhere_constr c n advK full conj in
         aux (constrs @ new_constrs) (msg_list @ new_msgs) (n+1) rest
       else
         aux constrs msg_list (n+1) rest

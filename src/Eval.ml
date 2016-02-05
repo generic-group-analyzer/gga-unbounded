@@ -422,7 +422,6 @@ type instr =
   | DivideByParam   of atom
   | UniformVars
   | AssureLaurent
-  | ClearIndpEqs
   | SplitInFactors of int
   | SimplifyCoeffs
   | ExtractCoeffs
@@ -488,9 +487,6 @@ let eval_instr advK system nth instr =
     else
       (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> new_cases)), nth)
 
-  | ClearIndpEqs ->
-    (list_map_nth system nth remove_independent_equations, nth)
-
   | SplitInFactors(n_eq) ->
     let n_eq = n_eq - 1 in
     let conj = L.nth_exn system (nth-1) in
@@ -506,7 +502,7 @@ let eval_instr advK system nth instr =
 
   | ExtractCoeffs ->
     let f conj =
-      let conj, msgs = introduce_coeff_everywhere advK conj in
+      let conj, msgs = introduce_coeff_everywhere advK false conj in
       print_messages 0 msgs;
       conj
     in

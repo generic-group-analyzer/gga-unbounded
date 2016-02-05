@@ -14,7 +14,6 @@ type proof_branch = {
   branch_used_params : atom list * string list;
   branch_ivars_order : ivar list;
   branch_unfolded_hvars : hvar list;
-  branch_coeff_only_if_simp : bool;
 } with compare, sexp
 
 (* data structures with proof branches *)
@@ -31,12 +30,11 @@ end
 
 let equal_proof_branch b1 b2 = compare_proof_branch b1 b2 = 0
 
-let mk_proof_branch conj used_params ivars_order unfolded_hvars only_if_simp =
+let mk_proof_branch conj used_params ivars_order unfolded_hvars =
   { branch_conj = conj; 
     branch_used_params = used_params;
     branch_ivars_order = ivars_order;
     branch_unfolded_hvars = unfolded_hvars;
-    branch_coeff_only_if_simp = only_if_simp;
   }
 
 (* ** Get and sort parameters to split *)
@@ -66,7 +64,7 @@ let parameters_to_split (branch : proof_branch) (free_indices : ivar list) =
             if not(L.mem not_bound_params p ~equal:equal_atom) then l @ [p]
             else l
           else
-            if not(L.mem bound_params name ~equal:String.equal) && (L.length free_indices <= 1) then l @ [p]
+            if not(L.mem bound_params name ~equal:String.equal) && (L.length free_indices <= 2) then l @ [p]
             else l
         | _ -> assert false
       )
@@ -115,15 +113,19 @@ let rec simplify_if_possible (advK : advK) (depth : int) (n : int) (order : ivar
   | None ->
     if n = 0 then conj
     else
-      let new_conj, msg_list = divide_by_not_null_params conj in print_messages depth msg_list;
-      let new_conj, msg_list = divide_by_every_variable new_conj in print_messages depth msg_list;
+      let new_conj, msg_list1 = divide_by_not_null_params conj in
+      let new_conj, msg_list2 = divide_by_every_variable new_conj in
       let new_conj = simplify_coeffs_with_order order new_conj
                      |> simplify advK
       in
       if (equal_conj conj new_conj) then conj
       else
-        let () = F.printf "%ssimplify.\n" (String.make depth ' ') in
-        F.print_flush();
+        let () =
+          print_messages depth msg_list1;
+          print_messages depth msg_list2;
+          F.printf "%ssimplify.\n" (String.make depth ' ');
+          F.print_flush()
+        in
         simplify_if_possible advK depth (n-1) order new_conj
 
 (* ** Unfolding new Handle Variables *)
@@ -183,7 +185,7 @@ let unfold_hvars conj unfolded_hvars lcombs =
 
 (* ** Automatic Algorithm *)
 
-let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (lcombs : poly option * poly option) =
+let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extraction : bool) (lcombs : poly option * poly option) =
   if (L.length goals) = 0 then true
   else if L.length goals > 100 then
     let current_branch = L.hd_exn goals in
@@ -191,7 +193,10 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (lcombs : 
     false
   else
     let goals = dedup_preserve_order goals
-        ~equal:(fun g1 g2 -> equal_conj g1.branch_conj g2.branch_conj)
+        ~equal:(fun g1 g2 ->
+            equal_conj g1.branch_conj g2.branch_conj &&
+            g1.branch_ivars_order = g2.branch_ivars_order
+          )
     in
     let depth = (L.length goals) - 1 in
     let current_branch = L.hd_exn goals in
@@ -200,13 +205,12 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (lcombs : 
     let used_params = current_branch.branch_used_params in
     let ivars_order = current_branch.branch_ivars_order in
     let unfolded_hvars = current_branch.branch_unfolded_hvars in
-    let only_if_simp = current_branch.branch_coeff_only_if_simp in
     let conj = current_branch.branch_conj in
-    (* let conj, unfolded_hvars = unfold_hvars conj unfolded_hvars lcombs in *)
     try
       let conj = simplify_if_possible advK depth 2 ivars_order conj in
-      let conj, msgs = introduce_coeff_everywhere advK conj in
-      print_messages depth msgs;
+      let conj, _msgs = introduce_coeff_everywhere advK full_extraction conj in
+      F.printf "%sextract_coeffs.\n" (String.make depth ' ');
+      F.print_flush();
       let conj = simplify_if_possible advK depth 2 ivars_order conj in
 
       let used_params = update_used_params used_params conj in
@@ -214,40 +218,48 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (lcombs : 
       let disj', msg = split_in_factors_all conj in
       print_messages depth msg;
       if (L.length disj' > 1) then
-        let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars only_if_simp) in
-        automatic_algorithm (new_branches @ (L.tl_exn goals)) advK lcombs
+        let new_branches =
+          L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars)
+        in
+        automatic_algorithm (new_branches @ (L.tl_exn goals)) advK full_extraction lcombs
       else
         let disj' = assure_laurent_polys conj in
         if (disj' <> []) then
           let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
-          let new_branches = L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars only_if_simp) in
-          automatic_algorithm (new_branches @ (L.tl_exn goals)) advK lcombs
+          let new_branches =
+            L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars)
+          in
+          automatic_algorithm (new_branches @ (L.tl_exn goals)) advK full_extraction lcombs
         else
-          let parameters = parameters_to_split (mk_proof_branch conj used_params ivars_order unfolded_hvars only_if_simp) (unzip1 conj.conj_ivarsK) in
+          let parameters = parameters_to_split 
+              (mk_proof_branch conj used_params ivars_order unfolded_hvars)
+              (unzip1 conj.conj_ivarsK)
+          in
           let not_bound_params, bound_params = used_params in
           
           match L.hd parameters with
           | None ->
-            if only_if_simp then
-              let new_branch = mk_proof_branch conj used_params ivars_order unfolded_hvars false in
-              automatic_algorithm (new_branch :: (L.tl_exn goals)) advK lcombs
-            else
-              let not_ordered_ivars = L.filter (unzip1 conj.conj_ivarsK)
-                  ~f:(fun i -> not(L.mem ivars_order i ~equal:equal_ivar))
-              in
-              begin match not_ordered_ivars with
-                | [] -> 
+            let not_ordered_ivars = L.filter (unzip1 conj.conj_ivarsK)
+                ~f:(fun i -> not(L.mem ivars_order i ~equal:equal_ivar))
+            in
+            begin match not_ordered_ivars with
+              | [] -> 
+                let new_conj, unfolded_hvars = unfold_hvars conj unfolded_hvars lcombs in
+                if (L.length new_conj.conj_constrs) = (L.length conj.conj_constrs) then
                   let conj = simplify_if_possible advK depth 5 ivars_order conj in
                   let () = F.printf "Current goal:\n%a\n" PPLatex.pp_conj_latex conj in
                   false
-                | i :: _ ->
-                  let all_possible_orders = Util.insert i ivars_order in
-                  let new_branches = L.map all_possible_orders
-                      ~f:(fun o -> mk_proof_branch conj used_params o unfolded_hvars only_if_simp)
-                  in
-                  F.printf "%sadd_ivar_to_order %a\n" (String.make depth ' ') pp_ivar i;
-                  automatic_algorithm (new_branches @ (L.tl_exn goals)) advK lcombs
-              end
+                else
+                  let new_branch = mk_proof_branch new_conj used_params ivars_order unfolded_hvars in
+                  automatic_algorithm (new_branch :: (L.tl_exn goals)) advK full_extraction lcombs
+              | i :: _ ->
+                let all_possible_orders = Util.insert i ivars_order in
+                let new_branches = L.map all_possible_orders
+                    ~f:(fun o -> mk_proof_branch conj used_params o unfolded_hvars)
+                in
+                F.printf "%sadd_ivar_to_order %a\n" (String.make depth ' ') pp_ivar i;
+                automatic_algorithm (new_branches @ (L.tl_exn goals)) advK full_extraction lcombs
+            end
 
           | Some p ->
             F.printf "%scase_distinction %a.\n" (String.make depth ' ') pp_atom p;
@@ -258,15 +270,15 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (lcombs : 
               | Some _ -> (atom_name p) :: bound_params
             in
             let branch1 =
-              mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order unfolded_hvars only_if_simp
+              mk_proof_branch (L.nth_exn cases 0) (p :: not_bound_params, second_list) ivars_order unfolded_hvars
             in
             let branch2 =
-              mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order unfolded_hvars only_if_simp
+              mk_proof_branch (L.nth_exn cases 1) (p :: not_bound_params, bound_params) ivars_order unfolded_hvars
             in
-            automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) advK lcombs
+            automatic_algorithm ([branch1; branch2] @ (L.tl_exn goals)) advK full_extraction lcombs
     with
     | Found_contradiction ->
-      automatic_algorithm (L.tl_exn goals) advK lcombs
+      automatic_algorithm (L.tl_exn goals) advK full_extraction lcombs
 
 let call_heuristic constraints advK lcombs =
-  automatic_algorithm [mk_proof_branch constraints ([],[]) [] [] true] advK lcombs
+  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK true lcombs

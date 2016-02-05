@@ -56,7 +56,6 @@
 %token DIVIDE_PARAM
 %token UNIFORM_VARS
 %token ASSURE_LAURENT
-%token CLEAR_INDP_EQS
 %token SPLIT_IN_FACTORS
 %token SIMPLIFY_COEFFS
 %token EXTRACT_COEFFS
@@ -202,8 +201,6 @@ instr :
   { UniformVars }
 | ASSURE_LAURENT; DOT;
   { AssureLaurent }
-| CLEAR_INDP_EQS; DOT;
-  { ClearIndpEqs }
 | SPLIT_IN_FACTORS; a = INT; DOT;
   { SplitInFactors(a) }
 | SIMPLIFY_COEFFS; DOT;

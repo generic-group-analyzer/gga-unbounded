@@ -55,7 +55,6 @@ rule lex = parse
   | "divide_by_param"  { DIVIDE_PARAM }
   | "uniform_vars"     { UNIFORM_VARS }
   | "assure_Laurent"   { ASSURE_LAURENT }
-  | "clear_independent_eqs"   { CLEAR_INDP_EQS }
   | "split_in_factors" { SPLIT_IN_FACTORS }
   | "simp_Coeff"       { SIMPLIFY_COEFFS }
   | "extract_coeffs"   { EXTRACT_COEFFS }
