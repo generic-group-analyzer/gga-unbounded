@@ -11,4 +11,5 @@ oracle o1(M:G2) =
   return [ R ] in G1,
          [ R, M*V + R^2 + W] in G2.
 
-win (wM:G2, wR1:G1, wR2:G2, wS:G2) = (forall i: wM <> M_i /\ wR1 = wR2 /\ wS = V*wM + wR1*wR2 + W).
+win (wM:G2, wR1:G1, wR2:G2, wS:G2) =
+    (forall i: wM <> M_i /\ wR1 = wR2 /\ wS = V*wM + wR1*wR2 + W).

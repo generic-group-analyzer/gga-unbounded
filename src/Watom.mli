@@ -3,7 +3,6 @@
 (* ** Imports *)
 open Core_kernel.Std
 open Util
-open Abbrevs
 
 (* ** Variables and parameters
  * ----------------------------------------------------------------------- *)
@@ -83,18 +82,3 @@ val map_idx  : f:(ivar -> ivar) -> atom -> atom
 val mk_uvar  : ?idx:ivar option -> string               -> atom
 val mk_param : ?idx:ivar option -> string               -> atom
 val mk_hvar  : idx:ivar         -> group_name -> string -> atom
-
-
-(* ** Pretty printing
- * ----------------------------------------------------------------------- *)
-
-val pp_gname     : F.formatter -> group_name -> unit
-val pp_ivar      : F.formatter -> ivar -> unit
-val pp_name_idx  : F.formatter -> string * ivar -> unit
-val pp_name_oidx : F.formatter -> string * ivar option -> unit
-(* val pp_ivar_pair : F.formatter -> ivar_pair-> unit *)
-val pp_uvar      : F.formatter -> string * ivar option -> unit
-val pp_param     : F.formatter -> string * ivar option -> unit
-val pp_hvar      : F.formatter -> hvar -> unit
-val pp_inv       : F.formatter -> inv -> unit
-val pp_atom      : F.formatter -> atom -> unit

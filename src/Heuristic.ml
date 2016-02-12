@@ -211,10 +211,10 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
       let conj, _msgs = introduce_coeff_everywhere advK full_extraction conj in
       F.printf "%sextract_coeffs.\n" (String.make depth ' ');
       F.print_flush();
-      let conj = simplify_if_possible advK depth 2 ivars_order conj in
+      let conj = simplify_if_possible advK depth 5 ivars_order conj in
 
       let used_params = update_used_params used_params conj in
-      
+
       let disj', msg = split_in_factors_all conj in
       print_messages depth msg;
       if (L.length disj' > 1) then
@@ -281,4 +281,5 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
       automatic_algorithm (L.tl_exn goals) advK full_extraction lcombs
 
 let call_heuristic constraints advK lcombs =
-  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK true lcombs
+  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK false
+ lcombs

@@ -53,7 +53,7 @@ let rename_sum_for_subst (s : sum) rn =
   mk_sum (L.zip_exn ivars isetsK) summand
 
 let subst_idx_sum (s : sum) (i : ivar) (j : ivar) =
-  let aux_sum = 
+  let aux_sum =
     if L.mem (unzip1 s.sum_ivarsK) j then
       let (rn,_) = renaming_away_from (ivars_sum s) (Ivar.Set.singleton j) in
       rename_sum_for_subst s rn
@@ -126,17 +126,22 @@ let rec split_ivar_sum (s : sum) (i : ivar) (j : ivar) (context : context_ivars)
                 else (i',s')
               )
           in
-          let ivarsK2 =
-            L.filter s.sum_ivarsK ~f:(fun (i',_) -> not (equal_ivar i i') && not (equal_ivar j i'))
-          in
+          let ivarsK2 = L.filter s.sum_ivarsK ~f:(fun (i',_) -> not (equal_ivar i i') && not (equal_ivar j i')) in
+          
           let s1 = mk_sum ivarsK1 s.sum_summand in
           let s2 = subst_idx_sum (mk_sum ivarsK2 s.sum_summand) i j in
+
+          let ivarsK2 = L.filter s.sum_ivarsK ~f:(fun (i',_) -> not (equal_ivar i i')) in
+          let f = fun i' -> if equal_ivar i' i then j else i' in
+          let ivarsK2 = L.zip_exn (L.map ~f (unzip1 ivarsK2)) (L.map ~f:(Ivar.Set.map ~f) (unzip2 ivarsK2)) in
+(*
           let ivarsK2 =
             begin match L.find s.sum_ivarsK ~f:(fun (k,_) -> equal_ivar j k) with
               | None -> s2.sum_ivarsK
               | Some (j,jK) -> (j,jK) :: s2.sum_ivarsK
             end
           in
+*)
           [s1 ; mk_sum ivarsK2 s2.sum_summand]
         else
           split_ivar_sum s j i context
@@ -453,8 +458,10 @@ let eval_contMon uM advMsets forbidden_idxs =
   else
     L.fold_left (Set.to_list (ivars_umonom uM))
      ~init:false
-     ~f:(fun b j -> b || (if L.mem forbidden_idxs j ~equal:equal_ivar then false
-                          else aux2 j advMsets.sm_orcl))
+     ~f:(fun b j -> 
+         if b then b
+         else (if L.mem forbidden_idxs j ~equal:equal_ivar then false
+               else aux2 j advMsets.sm_orcl))
 
 let cancelation_monomials advMsets1 advMsets2 =
   let f m = map_idx_umonom ~f:(fun _ -> { name = "fake"; id = 0 }) m in
@@ -476,7 +483,7 @@ type canMultObj = {
   forb1 : ivar list;
   forb2 : ivar list;
 } with compare, sexp
-
+(*
 module CanMultObj = struct
   module T = struct
     type t = canMultObj
@@ -487,8 +494,8 @@ module CanMultObj = struct
   include T
   include Comparable.Make(T)
 end
-
-let canMultTable = ref CanMultObj.Map.empty
+*)
+let canMultTable = ref []
 
 let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
   let ivarsM = ivars_umonom m in
@@ -498,13 +505,14 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
     then false
     else
       let obj = { monomial = m; sets1 = advMsets1; sets2 = advMsets2; forb1 = forb1; forb2 = forb2; } in
-      match Map.find !canMultTable obj with
+      match L.find !canMultTable ~f:(fun (o,_) -> (compare_canMultObj o obj) = 0) with
       | None -> 
         let try1 =
           L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb1)))
            ~init:false
            ~f:(fun b j ->
-               b || (L.exists (L.map advMsets1.tm_orcl
+               if b then b
+               else (L.exists (L.map advMsets1.tm_orcl
                                  ~f:(fun m' ->
                                      let m'' = mult_umonom m (inv_umonom m') in
                                      canMult_double m'' advMsets1 advMsets2 (j :: forb1) forb2))
@@ -512,23 +520,24 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
              )  
         in
         if try1 then
-          let () = canMultTable := Map.add !canMultTable ~key:obj ~data:true in
+          let () = canMultTable := (obj,true) :: !canMultTable in
           true
         else
           let try2 =
             L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb2)))
               ~init:false
               ~f:(fun b j ->
-                  b || (L.exists (L.map advMsets2.tm_orcl
+                  if b then b
+                  else (L.exists (L.map advMsets2.tm_orcl
                                     ~f:(fun m' ->
                                         let m'' = mult_umonom m (inv_umonom m') in
                                         canMult_double m'' advMsets1 advMsets2 forb1 (j :: forb2)))
                           ~f:(fun b -> b))
                 )
           in
-          let () = canMultTable := Map.add !canMultTable ~key:obj ~data:try2 in
+          let () = canMultTable := (obj,try2) :: !canMultTable in
           try2
-      | Some answer -> answer
+      | Some (_,answer) -> answer
 
 let combine_monoms advMsets forbidden_idxs ivars_uM =
   (L.map advMsets.sm_glob ~f:(fun m -> (m, forbidden_idxs) )) @
@@ -558,7 +567,39 @@ type contMonObj = {
   contMon_hM : monom;
 } with compare, sexp
 
-module ContMonObj = struct
+let compare_contMonObj_mod_renaming o1 o2 =
+  let hivars1 = ivars_monom o1.contMon_hM in
+  let hivars2 = ivars_monom o2.contMon_hM in
+  if (Set.length hivars1) <> (Set.length hivars2) then compare_contMonObj o1 o2
+  else
+    let uivars1 = Set.diff (ivars_umonom o1.contMon_uM) hivars1 in
+    let uivars2 = Set.diff (ivars_umonom o2.contMon_uM) hivars2 in
+    if (Set.length uivars1) <> (Set.length uivars2) then compare_contMonObj o1 o2
+    else
+      let fixed_list = (Set.to_list hivars2) @ (Set.to_list uivars2) in
+      let renamings = cross_lists (perms (Set.to_list hivars1)) (perms (Set.to_list uivars1)) in
+      let equal =
+        L.fold_left renamings
+         ~init:false
+         ~f:(fun b (l1,l2) ->
+             if b then b
+             else
+               let rn = Ivar.Map.of_alist_exn (L.zip_exn (l1 @ l2) fixed_list) in
+               let new_hM = map_idx_monom ~f:(apply_renaming rn) o1.contMon_hM in
+               if not(equal_monom new_hM o2.contMon_hM) then false
+               else
+                 let new_uM = map_idx_umonom ~f:(apply_renaming rn) o1.contMon_uM in
+                 if not(equal_monom (umon2mon new_uM) (umon2mon o2.contMon_uM)) then false
+                 else true
+           )
+      in
+      if equal then 0
+      else compare_contMonObj o1 o2
+
+let pp_contMonObj fmt o =
+  F.fprintf fmt "%a(%a)" WconstrsUtil.pp_monom (umon2mon o.contMon_uM) WconstrsUtil.pp_monom o.contMon_hM
+
+(*module ContMonObj = struct
   module T = struct
     type t = contMonObj
     let compare = compare_contMonObj
@@ -567,35 +608,49 @@ module ContMonObj = struct
   end
   include T
   include Comparable.Make(T)
-end
+end*)
 
-let contMonTable = ref ContMonObj.Map.empty
+let contMonTable = ref []
 
 let contMon coeff advK =
   let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
   let obj = { contMon_uM = uM; contMon_hM = hvars_monom coeff.coeff_mon; } in
-  match Map.find !contMonTable obj with
+  match L.find !contMonTable ~f:(fun (o,_) -> (compare_contMonObj_mod_renaming o obj) = 0) with
   | None ->
     let handle_vars = handle_vars_list coeff.coeff_mon in
+    F.printf "%a" pp_contMonObj obj;
+    F.print_flush();
     begin match handle_vars with
       | [] ->
         let answer = Map.is_empty uM.umonom_map in
-        let () = contMonTable := Map.add !contMonTable ~key:obj ~data:answer in
+        let () = contMonTable := (obj, answer) :: !contMonTable in
+        F.printf " -> %b\n" answer;
+        F.print_flush();
         answer
       | (Hvar h1) :: [] ->
         let advMsets = adv_sets advK h1.hv_gname in
-        let answer = eval_contMon uM advMsets [h1.hv_ivar] in
-        let () = contMonTable := Map.add !contMonTable ~key:obj ~data:answer in
+        let answer = 
+          if Set.mem (ivars_umonom uM) h1.hv_ivar then false
+          else eval_contMon uM advMsets [h1.hv_ivar]
+        in
+        let () = contMonTable := (obj, answer) :: !contMonTable in
+        F.printf " -> %b\n" answer;
+        F.print_flush();
         answer
       | (Hvar h1) :: (Hvar h2) :: [] ->
         let advMsets1 = adv_sets advK h1.hv_gname in
         let advMsets2 = adv_sets advK h2.hv_gname in
-        let answer = eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] in
-        let () = contMonTable := Map.add !contMonTable ~key:obj ~data:answer in
+        let answer =
+          let uMivars = ivars_umonom uM in
+          if (Set.mem uMivars h1.hv_ivar) && (Set.mem uMivars h2.hv_ivar) then false
+          else eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] in
+        let () = contMonTable := (obj, answer) :: !contMonTable in
+        F.printf " -> %b\n" answer;
+        F.print_flush();
         answer
       | _ -> assert false
     end
-  | Some answer -> answer
+  | Some (_,answer) -> answer
 
 let simplify_coeff_sum (c : BI.t) (s : sum) (context : context_ivars) (advK : advK) =
   let context = update_context context s.sum_ivarsK in
@@ -887,7 +942,8 @@ let poly_system_of_gb_string (s : string) (abs : abstraction) =
 let param_poly_equation (c : constr) =
   let is_param_sum (s : sum) =
     match s.sum_summand with
-    | Coeff(_) -> (L.length s.sum_ivarsK) + (L.length c.constr_ivarsK) <= 1
+    | Coeff(coeff) -> (c.constr_ivarsK = []) && (s.sum_ivarsK = []) && (L.length (handle_vars_list coeff.coeff_mon) <= 1)(* ||
+                  (L.length s.sum_ivarsK = 1 && c.constr_ivarsK = [])*)
     | Mon(mon) -> equal_monom (params_monom mon) mon
   in
   c.constr_is_eq = Eq &&
@@ -1064,6 +1120,9 @@ let groebner_basis_simplification (conj : conj) =
                       |> permute_param_polys (unzip1 delta_binder)
                       |> L.dedup ~compare:compare_poly
     in
+    F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
+    F.printf "I start the GB\n";
+    F.print_flush();
     let rest_constrs = L.filter conj.conj_constrs ~f:(fun c -> not (param_poly_equation c)) in
     let abs = abstraction_from_parampolys param_polys in
     let param_polys = groebner_basis param_polys abs in
@@ -1085,6 +1144,9 @@ let groebner_basis_simplification (conj : conj) =
       |> L.concat
       )
     in
+   F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
+   F.printf "GB done\n";
+   F.print_flush();
     (* Phase 2: Simplification below binders *)
     let param_poly_constrs_without_sums =
       L.filter new_constrs ~f:(fun c -> (without_variables_but_possibly_coeffs c) && (without_summations c))
@@ -1092,11 +1154,16 @@ let groebner_basis_simplification (conj : conj) =
     let rest_constraints =
       L.filter new_constrs ~f:(fun c -> not(without_variables_but_possibly_coeffs c) || not(without_summations c))
     in
+   F.printf "I am going to start the reduction\n";
+   F.print_flush();
     let simplified_rest =
       L.map rest_constraints
        ~f:(fun c ->
             let () = if (maximal_excp_sets_constr c []) then () else assert false in
             let xpoly = xpoly_of_poly c.constr_poly in
+            F.printf "Working on %a\n" WconstrsUtil.pp_constr c;
+            L.iter xpoly ~f:(fun x -> F.printf "%a (poly -> %a)\n vars -> %a\n\n" WconstrsUtil.pp_varsK x.xterm_ivarsK WconstrsUtil.pp_poly x.xterm_param_poly WconstrsUtil.pp_summand x.xterm_summand);
+            F.print_flush();
             L.map xpoly
              ~f:(fun x ->
                let x_ivars = c.constr_ivarsK @ x.xterm_ivarsK in
@@ -1369,7 +1436,7 @@ let total_degree (m : monom) =
 let remove_complex_equations (conj : conj) =
   let not_complex_sum (s : sum) =
     match s.sum_summand with
-    | Coeff(_) -> true
+    | Coeff(_) -> (* s.sum_ivarsK = [] *) true
     | Mon(mon) ->
       if equal_monom (params_monom mon) mon then BI.compare (total_degree mon) (BI.of_int 3) <= 0
       else true
@@ -1652,7 +1719,8 @@ let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (full : bool) (
   try
     let monomials =
       if full then monomial_candidates c.constr_poly advK
-      else L.dedup (mons c.constr_poly) ~compare:compare_monom
+      else mons c.constr_poly
+           |> L.dedup ~compare:compare_monom
     in
     match monomials with
     | [] -> [],[]
@@ -1698,7 +1766,7 @@ let divide_by_every_variable (conj : conj) =
       let conj', divided = divide_conj_by v conj in
       if not divided then aux conj msg_list rest
       else
-        let msg = fsprintf "divide_by_var %a.\n" pp_atom v in
+        let msg = fsprintf "divide_by_var %a.\n" WconstrsUtil.pp_atom v in
         aux conj' (msg_list @ [msg]) (v :: rest)
   in
   let vars = Set.filter (get_atoms_conj conj) ~f:(function | Uvar(_,None) -> true | _ -> false) in
@@ -1733,7 +1801,7 @@ let divide_by_not_null_params (conj : conj) =
       let conj', divided = divide_conj_by p conj in
       if not divided then aux conj msg_list rest
       else
-        let msg = fsprintf "divide_by_param %a.\n" pp_atom p in
+        let msg = fsprintf "divide_by_param %a.\n" WconstrsUtil.pp_atom p in
         aux conj' (msg_list @ [msg]) (p :: rest)
   in
   aux conj [] (get_not_null_params conj)

@@ -3,7 +3,6 @@
 (* ** Imports *)
 open Core_kernel.Std
 open Util
-open Abbrevs
 
 (* ** Variables and parameters
  * ----------------------------------------------------------------------- *)
@@ -128,37 +127,3 @@ let map_idx ~f = function
   | Param (v,Some i) -> Param (v,Some (f i))
   | Hvar hv          -> Hvar { hv with hv_ivar = f hv.hv_ivar }
   | a                -> a
-
-(* ** Pretty printing
- * ----------------------------------------------------------------------- *)
-
-let pp_gname fmt = function
-  | G1 -> pp_string fmt "G1"
-  | G2 -> pp_string fmt "G2"
-
-let pp_ivar fmt { name; id } =
-  F.fprintf fmt "%s%s" name (String.make id '\'')
-
-let pp_name_idx fmt (s,i) =
-  F.fprintf fmt "%s_%a" s pp_ivar i
-
-let pp_name_oidx fmt (s,oi) =
-  match oi with
-  | None   -> pp_string fmt s
-  | Some i -> pp_name_idx fmt (s,i)
-
-let pp_uvar = pp_name_oidx
-
-let pp_param = pp_name_oidx
-
-let pp_hvar fmt { hv_name=s; hv_ivar=i; hv_gname=gn } =
-  F.fprintf fmt "%s_%a@%a" s pp_ivar i pp_gname gn
-
-let pp_inv fmt = function
-  | NoInv -> pp_string fmt "NoInv"
-  | Inv   -> pp_string fmt "Inv"
-
-let pp_atom fmt = function
-  | Uvar(vi)  -> F.fprintf fmt "%a" pp_uvar vi
-  | Param(vi) -> F.fprintf fmt "%a" pp_param vi
-  | Hvar(hv)  -> F.fprintf fmt "%a" pp_hvar hv
