@@ -200,7 +200,7 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
     in
     let depth = (L.length goals) - 1 in
     let current_branch = L.hd_exn goals in
-    (* let () = F.printf "%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in *)
+    (*let () = F.printf "%a\n" PPLatex.pp_conj_latex current_branch.branch_conj in*)
 
     let used_params = current_branch.branch_used_params in
     let ivars_order = current_branch.branch_ivars_order in
@@ -211,16 +211,18 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
       let conj, _msgs = introduce_coeff_everywhere advK full_extraction conj in
       F.printf "%sextract_coeffs.\n" (String.make depth ' ');
       F.print_flush();
-      let conj = simplify_if_possible advK depth 5 ivars_order conj in
+      let conj = simplify_if_possible advK depth 10 ivars_order conj in
 
       let used_params = update_used_params used_params conj in
 
+      let () = F.printf "%a\n" PPLatex.pp_conj_latex conj in
       let disj', msg = split_in_factors_all conj in
       print_messages depth msg;
       if (L.length disj' > 1) then
         let new_branches =
           L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars)
         in
+        (*L.iter disj' ~f:(fun c -> let () = F.printf "%a\n" PPLatex.pp_conj_latex c in ());*)
         automatic_algorithm (new_branches @ (L.tl_exn goals)) advK full_extraction lcombs
       else
         let disj' = assure_laurent_polys conj in
@@ -281,5 +283,5 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
       automatic_algorithm (L.tl_exn goals) advK full_extraction lcombs
 
 let call_heuristic constraints advK lcombs =
-  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK false
+  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK true
  lcombs

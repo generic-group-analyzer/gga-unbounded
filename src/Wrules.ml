@@ -319,14 +319,44 @@ let handle_vars_list (mon : monom) =
   in
   aux [] (hvars mon)
 
-let contains_coeff_sum (s : sum) =
-  match s.sum_summand with
-  | Mon(_) -> false
-  | Coeff(_) -> true
+let exists_summand_poly (p : poly) ~f = L.exists (Map.keys p.poly_map) ~f
 
-let contains_coeff_poly (p : poly) = L.exists (Map.keys p.poly_map) ~f:contains_coeff_sum
+let exists_summand (c : constr) ~f = exists_summand_poly c.constr_poly ~f
 
-let contains_coeff_constr (c : constr) = contains_coeff_poly c.constr_poly
+let contains_coeff_poly (p : poly) = 
+  let f (s : sum) =
+    match s.sum_summand with
+    | Mon(_)   -> false
+    | Coeff(_) -> true
+  in
+  exists_summand_poly p ~f
+
+let contains_specific_coeff (p : poly) (c : coeff) = 
+  let f (s : sum) =
+    match s.sum_summand with
+    | Mon(_)   -> false
+    | Coeff(c') ->
+      (equal_umonom c.coeff_unif c'.coeff_unif) &&
+      (equal_monom (not_params_monom c.coeff_mon) (not_params_monom c'.coeff_mon))
+  in
+  exists_summand_poly p ~f
+
+let contains_specific_coeff_in_list (coeff_list : coeff list) (p : poly) =
+  L.fold_left coeff_list
+    ~init:false 
+    ~f:(fun b c ->
+        if b then b
+        else contains_specific_coeff p c
+      )
+
+let coeff_terms_in_poly (p : poly) =
+  L.fold_left (Map.keys p.poly_map)
+    ~init:[]
+    ~f:(fun l s -> 
+        match s.sum_summand with
+        | Mon(_) -> l
+        | Coeff(coeff) -> coeff :: l
+      )
 
 let introduce_coeff_sum (c : BI.t) (s : sum) (uM : umonom) (context : context_ivars) =
   let ivars_uM = ivars_umonom uM in
@@ -618,14 +648,14 @@ let contMon coeff advK =
   match L.find !contMonTable ~f:(fun (o,_) -> (compare_contMonObj_mod_renaming o obj) = 0) with
   | None ->
     let handle_vars = handle_vars_list coeff.coeff_mon in
-    F.printf "%a" pp_contMonObj obj;
-    F.print_flush();
+    (*F.printf "%a" pp_contMonObj obj;
+    F.print_flush();*)
     begin match handle_vars with
       | [] ->
         let answer = Map.is_empty uM.umonom_map in
         let () = contMonTable := (obj, answer) :: !contMonTable in
-        F.printf " -> %b\n" answer;
-        F.print_flush();
+(*        F.printf " -> %b\n" answer;
+        F.print_flush();*)
         answer
       | (Hvar h1) :: [] ->
         let advMsets = adv_sets advK h1.hv_gname in
@@ -634,8 +664,8 @@ let contMon coeff advK =
           else eval_contMon uM advMsets [h1.hv_ivar]
         in
         let () = contMonTable := (obj, answer) :: !contMonTable in
-        F.printf " -> %b\n" answer;
-        F.print_flush();
+      (*  F.printf " -> %b\n" answer;
+        F.print_flush();*)
         answer
       | (Hvar h1) :: (Hvar h2) :: [] ->
         let advMsets1 = adv_sets advK h1.hv_gname in
@@ -645,8 +675,8 @@ let contMon coeff advK =
           if (Set.mem uMivars h1.hv_ivar) && (Set.mem uMivars h2.hv_ivar) then false
           else eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] in
         let () = contMonTable := (obj, answer) :: !contMonTable in
-        F.printf " -> %b\n" answer;
-        F.print_flush();
+   (*     F.printf " -> %b\n" answer;
+        F.print_flush();*)
         answer
       | _ -> assert false
     end
@@ -942,7 +972,7 @@ let poly_system_of_gb_string (s : string) (abs : abstraction) =
 let param_poly_equation (c : constr) =
   let is_param_sum (s : sum) =
     match s.sum_summand with
-    | Coeff(coeff) -> (c.constr_ivarsK = []) && (s.sum_ivarsK = []) && (L.length (handle_vars_list coeff.coeff_mon) <= 1)(* ||
+    | Coeff(coeff) -> (c.constr_ivarsK = []) && ((L.length s.sum_ivarsK) <= 1) && (L.length (handle_vars_list coeff.coeff_mon) <= 1)(* ||
                   (L.length s.sum_ivarsK = 1 && c.constr_ivarsK = [])*)
     | Mon(mon) -> equal_monom (params_monom mon) mon
   in
@@ -961,7 +991,8 @@ let without_variables_but_possibly_coeffs (c : constr) =
   c.constr_is_eq = Eq &&
   (Map.fold c.constr_poly.poly_map
      ~init:true
-     ~f:(fun ~key:s ~data:_ b -> b && (is_valid_sum s) )
+     ~f:(fun ~key:s ~data:_ b -> if b then is_valid_sum s else false
+        )
   )
 
 let without_summations (c : constr) =
@@ -1069,7 +1100,13 @@ let groebner_basis (param_polys : poly list) (abs : abstraction) =
   poly_system_of_gb_string groebner_basis abs
 
 let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstraction) =
-  let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero)) in
+  let coeffs_in_to_reduce = coeff_terms_in_poly poly_to_reduce in
+  let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero))
+                    |> L.filter ~f:(fun p ->
+                      not (contains_coeff_poly p) ||
+                      (contains_specific_coeff_in_list coeffs_in_to_reduce p)
+                    )
+  in
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let gb_poly_to_reduce = poly2gb_poly poly_to_reduce abs in
@@ -1120,9 +1157,9 @@ let groebner_basis_simplification (conj : conj) =
                       |> permute_param_polys (unzip1 delta_binder)
                       |> L.dedup ~compare:compare_poly
     in
-    F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
+(*    F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
     F.printf "I start the GB\n";
-    F.print_flush();
+    F.print_flush();*)
     let rest_constrs = L.filter conj.conj_constrs ~f:(fun c -> not (param_poly_equation c)) in
     let abs = abstraction_from_parampolys param_polys in
     let param_polys = groebner_basis param_polys abs in
@@ -1144,9 +1181,9 @@ let groebner_basis_simplification (conj : conj) =
       |> L.concat
       )
     in
-   F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
+(*   F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
    F.printf "GB done\n";
-   F.print_flush();
+   F.print_flush();*)
     (* Phase 2: Simplification below binders *)
     let param_poly_constrs_without_sums =
       L.filter new_constrs ~f:(fun c -> (without_variables_but_possibly_coeffs c) && (without_summations c))
@@ -1154,19 +1191,19 @@ let groebner_basis_simplification (conj : conj) =
     let rest_constraints =
       L.filter new_constrs ~f:(fun c -> not(without_variables_but_possibly_coeffs c) || not(without_summations c))
     in
-   F.printf "I am going to start the reduction\n";
-   F.print_flush();
+(*   F.printf "I am going to start the reduction\n";
+   F.print_flush();*)
     let simplified_rest =
       L.map rest_constraints
        ~f:(fun c ->
             let () = if (maximal_excp_sets_constr c []) then () else assert false in
             let xpoly = xpoly_of_poly c.constr_poly in
-            F.printf "Working on %a\n" WconstrsUtil.pp_constr c;
-            L.iter xpoly ~f:(fun x -> F.printf "%a (poly -> %a)\n vars -> %a\n\n" WconstrsUtil.pp_varsK x.xterm_ivarsK WconstrsUtil.pp_poly x.xterm_param_poly WconstrsUtil.pp_summand x.xterm_summand);
-            F.print_flush();
+(*            F.printf "Working on %a\n" WconstrsUtil.pp_constr c;*)
             L.map xpoly
              ~f:(fun x ->
                let x_ivars = c.constr_ivarsK @ x.xterm_ivarsK in
+(*               let () = F.printf "%a (poly -> %a)\n vars -> %a\n\n" WconstrsUtil.pp_varsK x.xterm_ivarsK WconstrsUtil.pp_poly x.xterm_param_poly WconstrsUtil.pp_summand x.xterm_summand in
+               F.print_flush();*)
                let n = L.length c.constr_ivarsK in
                if (L.length delta_binder) > (L.length x_ivars) then
                  let rn =
@@ -1819,7 +1856,7 @@ let split_in_factors_all (conj : conj) =
           let new_constrs = split_in_factors conj.conj_ivarsK c in
           if L.length new_constrs > 1 then
             let msg = fsprintf "split_in_factors %d.\n" k in
-            L.map new_constrs ~f:(fun c -> mk_conj conj.conj_ivarsK (previous @ [c] @ rest)), [msg]
+            L.map new_constrs ~f:(fun c' -> mk_conj conj.conj_ivarsK (previous @ [c'] @ rest)), [msg]
           else
             aux (k+1) (previous @ [c]) rest
         with _ -> aux (k+1) (previous @ [c]) rest
