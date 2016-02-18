@@ -1,5 +1,6 @@
 (* Effcient Fully Structure-Preserving Signatures for Large Messages *)
 (* cryptoeprint:2015:824 *)
+
 group_setting 3.
 
 sample Y,V.

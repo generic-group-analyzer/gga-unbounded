@@ -513,18 +513,7 @@ type canMultObj = {
   forb1 : ivar list;
   forb2 : ivar list;
 } with compare, sexp
-(*
-module CanMultObj = struct
-  module T = struct
-    type t = canMultObj
-    let compare = compare_canMultObj
-    let sexp_of_t = sexp_of_canMultObj
-    let t_of_sexp = canMultObj_of_sexp
-  end
-  include T
-  include Comparable.Make(T)
-end
-*)
+
 let canMultTable = ref []
 
 let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
@@ -535,7 +524,7 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
     then false
     else
       let obj = { monomial = m; sets1 = advMsets1; sets2 = advMsets2; forb1 = forb1; forb2 = forb2; } in
-      match L.find !canMultTable ~f:(fun (o,_) -> (compare_canMultObj o obj) = 0) with
+      match None with (*L.find !canMultTable ~f:(fun (o,_) -> (compare_canMultObj o obj) = 0) with*)
       | None -> 
         let try1 =
           L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb1)))
@@ -597,65 +586,21 @@ type contMonObj = {
   contMon_hM : monom;
 } with compare, sexp
 
-let compare_contMonObj_mod_renaming o1 o2 =
-  let hivars1 = ivars_monom o1.contMon_hM in
-  let hivars2 = ivars_monom o2.contMon_hM in
-  if (Set.length hivars1) <> (Set.length hivars2) then compare_contMonObj o1 o2
-  else
-    let uivars1 = Set.diff (ivars_umonom o1.contMon_uM) hivars1 in
-    let uivars2 = Set.diff (ivars_umonom o2.contMon_uM) hivars2 in
-    if (Set.length uivars1) <> (Set.length uivars2) then compare_contMonObj o1 o2
-    else
-      let fixed_list = (Set.to_list hivars2) @ (Set.to_list uivars2) in
-      let renamings = cross_lists (perms (Set.to_list hivars1)) (perms (Set.to_list uivars1)) in
-      let equal =
-        L.fold_left renamings
-         ~init:false
-         ~f:(fun b (l1,l2) ->
-             if b then b
-             else
-               let rn = Ivar.Map.of_alist_exn (L.zip_exn (l1 @ l2) fixed_list) in
-               let new_hM = map_idx_monom ~f:(apply_renaming rn) o1.contMon_hM in
-               if not(equal_monom new_hM o2.contMon_hM) then false
-               else
-                 let new_uM = map_idx_umonom ~f:(apply_renaming rn) o1.contMon_uM in
-                 if not(equal_monom (umon2mon new_uM) (umon2mon o2.contMon_uM)) then false
-                 else true
-           )
-      in
-      if equal then 0
-      else compare_contMonObj o1 o2
-
 let pp_contMonObj fmt o =
   F.fprintf fmt "%a(%a)" WconstrsUtil.pp_monom (umon2mon o.contMon_uM) WconstrsUtil.pp_monom o.contMon_hM
-
-(*module ContMonObj = struct
-  module T = struct
-    type t = contMonObj
-    let compare = compare_contMonObj
-    let sexp_of_t = sexp_of_contMonObj
-    let t_of_sexp = contMonObj_of_sexp
-  end
-  include T
-  include Comparable.Make(T)
-end*)
 
 let contMonTable = ref []
 
 let contMon coeff advK =
   let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
   let obj = { contMon_uM = uM; contMon_hM = hvars_monom coeff.coeff_mon; } in
-  match L.find !contMonTable ~f:(fun (o,_) -> (compare_contMonObj_mod_renaming o obj) = 0) with
+  match L.find !contMonTable ~f:(fun (o,_) -> (compare_contMonObj o obj) = 0) with
   | None ->
     let handle_vars = handle_vars_list coeff.coeff_mon in
-    (*F.printf "%a" pp_contMonObj obj;
-    F.print_flush();*)
     begin match handle_vars with
       | [] ->
         let answer = Map.is_empty uM.umonom_map in
         let () = contMonTable := (obj, answer) :: !contMonTable in
-(*        F.printf " -> %b\n" answer;
-        F.print_flush();*)
         answer
       | (Hvar h1) :: [] ->
         let advMsets = adv_sets advK h1.hv_gname in
@@ -664,8 +609,6 @@ let contMon coeff advK =
           else eval_contMon uM advMsets [h1.hv_ivar]
         in
         let () = contMonTable := (obj, answer) :: !contMonTable in
-      (*  F.printf " -> %b\n" answer;
-        F.print_flush();*)
         answer
       | (Hvar h1) :: (Hvar h2) :: [] ->
         let advMsets1 = adv_sets advK h1.hv_gname in
@@ -675,8 +618,6 @@ let contMon coeff advK =
           if (Set.mem uMivars h1.hv_ivar) && (Set.mem uMivars h2.hv_ivar) then false
           else eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] in
         let () = contMonTable := (obj, answer) :: !contMonTable in
-   (*     F.printf " -> %b\n" answer;
-        F.print_flush();*)
         answer
       | _ -> assert false
     end
@@ -786,7 +727,7 @@ let new_name names =
     if (L.mem names name) then aux (k+1)
     else name
   in
-  aux 1  
+  aux 1
 
 let normalize (conj : conj) =
   let names = ["i"; "j"; "k"] @ (L.map (Set.to_list (ivars_conj conj)) ~f:(fun i -> i.name)) in
@@ -1796,8 +1737,7 @@ let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (full : bool) (
   try
     let monomials =
       if full then monomial_candidates c.constr_poly advK
-      else mons c.constr_poly
-           |> L.filter ~f:(fun m -> equal_monom m (uvars_monom m))
+      else L.map (mons c.constr_poly) ~f:(fun m -> (uvars_monom m))
            |> L.dedup ~compare:compare_monom
     in
     match monomials with
@@ -1812,7 +1752,10 @@ let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (full : bool) (
               Set.to_list (Set.filter (ivars_monom m) ~f:(fun i -> not(L.mem (ivars_context) i)))
             in
             let quant = maximal_quant ivars_context [] bound_ivars in
-            let new_constrs = introduce_coeff c quant (mon2umon m) context in
+            let new_constrs = introduce_coeff c quant (mon2umon m) context
+                              |> L.map ~f:(fun c -> simplify_coeff_constr c context advK)
+            in
+(*            let new_constrs = introduce_coeff c quant (mon2umon m) context in*)
             if L.exists ~f:(fun c -> L.mem conj.conj_constrs c ~equal:equal_constr) new_constrs
             then l, msg_list
             else

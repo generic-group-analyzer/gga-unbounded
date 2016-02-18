@@ -1,4 +1,4 @@
-(* Type 3 randomizable SPS *)
+(* Type 3 re-randomizable SPS *)
 
 group_setting 3.
 

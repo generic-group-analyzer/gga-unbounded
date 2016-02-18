@@ -1,0 +1,11 @@
+group_setting 1.
+
+sample V,W.
+input [V,W] in G1.
+
+oracle o1(a1:Fp, a2:Fp, a3:Fp) =
+  return [(a1+a2*V+a3*W)*V+W^2, (a1+a2*V+a3*W)*V^2+W^2*V] in G1.
+
+win (wM:G1,wS:G1,wT:G1,wa1:Fp, wa2:Fp, wa3:Fp) =
+  ( wS = wM*V+W^2 /\ wT = wS*V /\ wM <> (wa1+wa2*V+wa3*W) /\
+    forall i: a1_i = wa1 /\ forall i: a2_i = wa2 /\ forall i: a3_i = wa3).
