@@ -972,7 +972,7 @@ let poly_system_of_gb_string (s : string) (abs : abstraction) =
 let param_poly_equation (c : constr) =
   let is_param_sum (s : sum) =
     match s.sum_summand with
-    | Coeff(coeff) -> (c.constr_ivarsK = []) && ((L.length s.sum_ivarsK) <= 1) && (L.length (handle_vars_list coeff.coeff_mon) <= 1)(* ||
+    | Coeff(coeff) -> (c.constr_ivarsK = []) && ((L.length s.sum_ivarsK) <= 0) && (L.length (handle_vars_list coeff.coeff_mon) <= 1)(* ||
                   (L.length s.sum_ivarsK = 1 && c.constr_ivarsK = [])*)
     | Mon(mon) -> equal_monom (params_monom mon) mon
   in
@@ -1341,6 +1341,23 @@ let matching_sums (i1,s1) (i2,s2) =
       let aux_sum1 = rename_sum aux_sum1 rn2 in
       equal_sum aux_sum1 aux_sum2
 
+let clean_sum (s : sum) =
+  let f ivars atom = not(Set.is_empty (Set.inter ivars (ivars_atom atom))) in
+  let new_summand, residue =
+    match s.sum_summand with
+    | Mon(m) ->
+      let m1 = monom_filter_vars (f (Ivar.Set.of_list (unzip1 s.sum_ivarsK))) m in
+      let m2 = monom_filter_vars (fun a -> not(f (Ivar.Set.of_list (unzip1 s.sum_ivarsK)) a)) m in
+      Mon(m1), m2
+    | Coeff(coeff) ->
+      let m1 = monom_filter_vars 
+          (fun a -> (not (is_param a)) || (f (Ivar.Set.of_list (unzip1 s.sum_ivarsK)) a)) coeff.coeff_mon in
+      let m2 = monom_filter_vars
+          (fun a -> not((not (is_param a)) || (f (Ivar.Set.of_list (unzip1 s.sum_ivarsK)) a))) coeff.coeff_mon in
+      Coeff(mk_coeff coeff.coeff_unif m1), m2
+  in
+  mk_sum s.sum_ivarsK new_summand, mk_sum [] (Mon(residue))
+
 let simplify_sums (c : constr) (to_simplify : constr) =
   if c.constr_is_eq = InEq then to_simplify
   else
@@ -1350,11 +1367,34 @@ let simplify_sums (c : constr) (to_simplify : constr) =
         Map.fold to_simplify.constr_poly.poly_map
            ~init:SP.zero
            ~f:(fun ~key:s' ~data:c' p' ->
-               if (matching_sums (c.constr_ivarsK, s) (to_simplify.constr_ivarsK, s')) then p'
+               let cleaner_sum, _ = clean_sum s' in
+               if (matching_sums (c.constr_ivarsK, s) (to_simplify.constr_ivarsK, cleaner_sum)) then p'
                else SP.(p' +! (mk_poly [(c',s')]))
              )
       in
       mk_constr to_simplify.constr_ivarsK to_simplify.constr_is_eq new_poly
+    | (s1,c1) :: (s2,c2) :: [] when L.length (s1.sum_ivarsK @ s2.sum_ivarsK) > 0 ->
+      if not(s2.sum_ivarsK = [] && ((BI.is_one c1) || (BI.is_one (BI.opp c1)))) &&
+         not(s1.sum_ivarsK = [] && ((BI.is_one c2) || (BI.is_one (BI.opp c2)))) then to_simplify
+      else
+        let c_subs, s_subs, cx, sx =
+          if s2.sum_ivarsK = [] && ((BI.is_one c1) || (BI.is_one (BI.opp c1))) then c1, s1, c2, s2
+          else c2, s2, c1, s1
+        in
+        let new_poly = 
+          Map.fold to_simplify.constr_poly.poly_map
+            ~init:SP.zero
+            ~f:(fun ~key:s' ~data:c' p' ->
+                let cleaner_sum, residue = clean_sum s' in
+                if (matching_sums (c.constr_ivarsK, s_subs) (to_simplify.constr_ivarsK, cleaner_sum)) then
+                  try
+                    SP.(p' +! (mk_poly [(BI.((opp cx) *! c' *! c_subs), mult_sum sx residue)]))
+                  with
+                  | Mult_Coeff_by_Var -> SP.(p' +! (mk_poly [(c',s')]))
+                else SP.(p' +! (mk_poly [(c',s')]))
+              )
+        in
+        mk_constr to_simplify.constr_ivarsK to_simplify.constr_is_eq new_poly
     | _ -> to_simplify
 
 let simplify_constr_with_constr (c : constr) (to_simplify : constr) =
@@ -1757,6 +1797,7 @@ let coeff_everywhere_constr (c : constr) (n : int) (advK : advK) (full : bool) (
     let monomials =
       if full then monomial_candidates c.constr_poly advK
       else mons c.constr_poly
+           |> L.filter ~f:(fun m -> equal_monom m (uvars_monom m))
            |> L.dedup ~compare:compare_monom
     in
     match monomials with
