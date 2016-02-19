@@ -513,8 +513,31 @@ type canMultObj = {
   forb1 : ivar list;
   forb2 : ivar list;
 } with compare, sexp
+module Sum = struct
+  module T = struct
+    type t = sum
+    let compare = compare_sum
+    let sexp_of_t = sexp_of_sum
+    let t_of_sexp = sum_of_sexp
+  end
+  include T
+  include Comparable.Make(T)
+end
 
-let canMultTable = ref []
+module CanMultObj = struct
+  module T = struct
+    type t = canMultObj
+      let compare = compare_canMultObj
+      let sexp_of_t = sexp_of_canMultObj
+      let t_of_sexp = canMultObj_of_sexp
+      let hash = Hashtbl.hash
+  end
+  include T
+  include Comparable.Make(T)
+  include Hashable.Make(T)
+end     
+
+let canMultTable = CanMultObj.Table.create () ~size:123456
 
 let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
   let ivarsM = ivars_umonom m in
@@ -524,7 +547,7 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
     then false
     else
       let obj = { monomial = m; sets1 = advMsets1; sets2 = advMsets2; forb1 = forb1; forb2 = forb2; } in
-      match None with (*L.find !canMultTable ~f:(fun (o,_) -> (compare_canMultObj o obj) = 0) with*)
+      match Hashtbl.find canMultTable obj with
       | None -> 
         let try1 =
           L.fold_left (Set.to_list (Set.diff ivarsM (Ivar.Set.of_list forb1)))
@@ -539,7 +562,7 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
              )  
         in
         if try1 then
-          let () = canMultTable := (obj,true) :: !canMultTable in
+          let _ = Hashtbl.add canMultTable ~key:obj ~data:true in
           true
         else
           let try2 =
@@ -554,9 +577,9 @@ let rec canMult_double m advMsets1 advMsets2 forb1 forb2 =
                           ~f:(fun b -> b))
                 )
           in
-          let () = canMultTable := (obj,try2) :: !canMultTable in
+          let _ = Hashtbl.add canMultTable ~key:obj ~data:try2 in
           try2
-      | Some (_,answer) -> answer
+      | Some answer -> answer
 
 let combine_monoms advMsets forbidden_idxs ivars_uM =
   (L.map advMsets.sm_glob ~f:(fun m -> (m, forbidden_idxs) )) @
@@ -586,21 +609,34 @@ type contMonObj = {
   contMon_hM : monom;
 } with compare, sexp
 
+module ContMonObj = struct
+  module T = struct
+    type t = contMonObj
+      let compare = compare_contMonObj
+      let sexp_of_t = sexp_of_contMonObj
+      let t_of_sexp = contMonObj_of_sexp
+      let hash = Hashtbl.hash
+  end
+  include T
+  include Comparable.Make(T)
+  include Hashable.Make(T)
+end     
+
+let contMonTable = ContMonObj.Table.create () ~size:123456
+
 let pp_contMonObj fmt o =
   F.fprintf fmt "%a(%a)" WconstrsUtil.pp_monom (umon2mon o.contMon_uM) WconstrsUtil.pp_monom o.contMon_hM
-
-let contMonTable = ref []
 
 let contMon coeff advK =
   let uM = mult_umonom coeff.coeff_unif (mon2umon (inv_monom (uvars_monom coeff.coeff_mon))) in
   let obj = { contMon_uM = uM; contMon_hM = hvars_monom coeff.coeff_mon; } in
-  match L.find !contMonTable ~f:(fun (o,_) -> (compare_contMonObj o obj) = 0) with
+  match Hashtbl.find contMonTable obj with
   | None ->
     let handle_vars = handle_vars_list coeff.coeff_mon in
     begin match handle_vars with
       | [] ->
         let answer = Map.is_empty uM.umonom_map in
-        let () = contMonTable := (obj, answer) :: !contMonTable in
+        let _ = Hashtbl.add contMonTable ~key:obj ~data:answer in
         answer
       | (Hvar h1) :: [] ->
         let advMsets = adv_sets advK h1.hv_gname in
@@ -608,7 +644,7 @@ let contMon coeff advK =
           if Set.mem (ivars_umonom uM) h1.hv_ivar then false
           else eval_contMon uM advMsets [h1.hv_ivar]
         in
-        let () = contMonTable := (obj, answer) :: !contMonTable in
+        let _ = Hashtbl.add contMonTable ~key:obj ~data:answer in
         answer
       | (Hvar h1) :: (Hvar h2) :: [] ->
         let advMsets1 = adv_sets advK h1.hv_gname in
@@ -616,12 +652,13 @@ let contMon coeff advK =
         let answer =
           let uMivars = ivars_umonom uM in
           if (Set.mem uMivars h1.hv_ivar) && (Set.mem uMivars h2.hv_ivar) then false
-          else eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] in
-        let () = contMonTable := (obj, answer) :: !contMonTable in
+          else eval_contMon_double uM advMsets1 advMsets2 [h1.hv_ivar] [h2.hv_ivar] 
+        in
+        let _ = Hashtbl.add contMonTable ~key:obj ~data:answer in
         answer
       | _ -> assert false
     end
-  | Some (_,answer) -> answer
+  | Some answer -> answer
 
 let simplify_coeff_sum (c : BI.t) (s : sum) (context : context_ivars) (advK : advK) =
   let context = update_context context s.sum_ivarsK in
