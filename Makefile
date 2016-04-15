@@ -13,14 +13,14 @@ BINDIR := $(DESTDIR)$(PREFIX)/bin
 LIBDIR := $(DESTDIR)$(PREFIX)/lib/generic-unbounded
 SHRDIR := $(DESTDIR)$(PREFIX)/share/generic-unbounded
 
-.PHONY: install wsubt.native ubt.native notabs
+.PHONY: install wsubt.native ubt.native
 
-all: wsubt.native
+all: ubt.native wsubt.native
 
-ubt.native: notabs
+ubt.native:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./ubt.native
 
-wsubt.native: notabs
+wsubt.native:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) ./wsubt.native
 
 install: ubt.native wsubt.native
@@ -31,9 +31,6 @@ install: ubt.native wsubt.native
 OCAMLDEP= ocamlfind ocamldep -package core_kernel -syntax camlp4o \
             -package comparelib.syntax -package sexplib.syntax -package fieldslib.syntax \
             -I src one-line
-
-notabs:
-	! grep -P '\t' src/*.ml src/*.mli
 
 dev:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) Wparser.cmx

@@ -215,14 +215,12 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
 
       let used_params = update_used_params used_params conj in
 
-      let () = F.printf "%a\n" PPLatex.pp_conj_latex conj in
       let disj', msg = split_in_factors_all conj in
       print_messages depth msg;
       if (L.length disj' > 1) then
         let new_branches =
           L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars)
         in
-        (*L.iter disj' ~f:(fun c -> let () = F.printf "%a\n" PPLatex.pp_conj_latex c in ());*)
         automatic_algorithm (new_branches @ (L.tl_exn goals)) advK full_extraction lcombs
       else
         let disj' = assure_laurent_polys conj in
@@ -283,5 +281,6 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
       automatic_algorithm (L.tl_exn goals) advK full_extraction lcombs
 
 let call_heuristic constraints advK lcombs =
-  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK true
- lcombs
+  automatic_algorithm [mk_proof_branch constraints ([],[]) [] []] advK false lcombs
+    (* Write "true" instead of "false" to perform a full coeff extraction.
+       This takes more time and was used to analyze the synthesized schemes in the paper *)

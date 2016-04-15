@@ -33,7 +33,7 @@ let split_proof_script s =
       | _ ->
         find_dot (i+1)
     with
-      Invalid_argument _ -> None
+      | Invalid_argument _ -> None
   and find_comment_end i =
     match s.[i] with
     | '*' when s.[i+1] = ')' -> i+2

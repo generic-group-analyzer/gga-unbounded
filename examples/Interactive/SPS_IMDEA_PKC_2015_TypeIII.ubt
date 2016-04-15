@@ -13,4 +13,24 @@ win (wM:G2, wR:G1, wT:G2, wS:G2) = (forall i: wM <> M_i /\ wR*wT = 1 /\ wR*wS = 
 
 proof.
 
-
+simplify.
+extract_coeffs.
+simplify.
+simplify.
+split_in_factors 2.
+ simplify.
+ extract_coeffs.
+ simplify.
+ contradiction.
+simplify.
+extract_coeffs.
+simplify.
+case_distinction p9_j'1.
+ simplify.
+ contradiction.
+simplify.
+divide_by_param p9_i'1.
+simplify.
+extract_coeffs.
+simplify.
+contradiction.

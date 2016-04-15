@@ -8,10 +8,10 @@ let automatic_prover cmds =
   let proven = call_heuristic conj advK lcombs in
   let t2 = Unix.gettimeofday() in
   if proven then
-    let () = F.printf "Proven!\nTime %F seconds\n" (t2 -. t1) in
+    let () = F.printf "Proven!\nTime %F seconds\n" (Pervasives.ceil ((100.0 *. (t2 -. t1))) /. 100.0) in
     exit 0
   else
-    let () = F.printf "Not proven!\nTime: %F seconds\n" (t2 -. t1) in
+    let () = F.printf "Not proven!\nTime: %F seconds\n" (Pervasives.ceil ((100.0 *. (t2 -. t1))) /. 100.0) in
     exit 1    
 
 let analyze_unbounded cmds instrs =

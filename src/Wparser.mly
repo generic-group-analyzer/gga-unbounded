@@ -110,9 +110,12 @@ monom_or_one:
 summand:
 | m = monom    { Mon(m) };
 
+id_exceptions :
+| idx = ivar                                                       { (idx, Ivar.Set.empty) }
+| idx = ivar; INEQ; LPAR; ids = separated_list(COMMA,ivar) RPAR;   { (idx, Ivar.Set.of_list ids) }
+
 sum:
-| LPAR; SUM; ids=separated_list(COMMA,ID); COLON; m = summand; RPAR
-   { mk_sum (L.map ~f:(fun s -> ({ name = s; id = 0}, Ivar.Set.empty)) ids ) m };
+| LPAR; SUM; ids=separated_list(COMMA,id_exceptions); COLON; m = summand; RPAR { mk_sum ids m };
 
 poly :
 | n = INT                    { SP.of_const (BI.of_int n) }
@@ -130,7 +133,7 @@ poly :
                                        else Eval.power_poly f (BI.of_int e) }
 
 qprefix :
-| FORALL; ids = separated_list(COMMA,ID); COLON { L.map ~f:(fun s -> { name = s; id = 0}) ids };
+| FORALL; ids = separated_list(COMMA,id_exceptions); COLON; { ids };
 
 is_eq :
 | EQ   { Eq }
@@ -138,7 +141,7 @@ is_eq :
 
 constr :
 | qp = qprefix? f = poly sep = is_eq g = poly?
-  { mk_constr (L.map (optional ~d:[] qp) ~f:(fun i -> (i, Ivar.Set.empty))) sep SP.(f -! (optional ~d:zero g)) };
+  { mk_constr (L.map (optional ~d:[] qp) ~f:(fun (i,set) -> (i, set))) sep SP.(f -! (optional ~d:zero g)) };
 
 param_type :
 | s = GROUP { GroupName(s) }

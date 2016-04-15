@@ -1072,8 +1072,6 @@ let groebner_basis (param_polys : poly list) (abs : abstraction) =
   let param_polys = L.filter param_polys ~f:(fun p -> not (equal_poly p SP.zero)) in
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
-  let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
-  F.print_flush();
   let groebner_basis = call_Sage ("{'cmd':'GroebnerBasis','system':" ^ gb_system ^ "}\n") in
   poly_system_of_gb_string groebner_basis abs
 
@@ -1088,9 +1086,6 @@ let gb_reduce (param_polys : poly list) (poly_to_reduce : poly) (abs : abstracti
   let gb_polys = L.map param_polys ~f:(fun p -> poly2gb_poly p abs) in
   let gb_system = "[" ^ (gb_system_of_gb_polys "" gb_polys) ^ "]" in
   let gb_poly_to_reduce = poly2gb_poly poly_to_reduce abs in
-  let () = Out_channel.write_all "ubt.log" ~data:("{'cmd':'reduce','system':" ^ gb_system ^
-               ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n") in
-  F.print_flush();
   let reduced =
     call_Sage ("{'cmd':'reduce','system':" ^ gb_system ^
                ",'to_reduce':" ^ (string_of_gb_poly gb_poly_to_reduce) ^ "}\n")
@@ -1135,9 +1130,6 @@ let groebner_basis_simplification (conj : conj) =
                       |> permute_param_polys (unzip1 delta_binder)
                       |> L.dedup ~compare:compare_poly
     in
-(*    F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
-    F.printf "I start the GB\n";
-    F.print_flush();*)
     let rest_constrs = L.filter conj.conj_constrs ~f:(fun c -> not (param_poly_equation c)) in
     let abs = abstraction_from_parampolys param_polys in
     let param_polys = groebner_basis param_polys abs in
@@ -1159,9 +1151,6 @@ let groebner_basis_simplification (conj : conj) =
       |> L.concat
       )
     in
-(*   F.printf "%a\n" PPLatex.pp_conj_latex (mk_conj conj.conj_ivarsK (L.map param_polys ~f:(fun p -> mk_constr delta_binder Eq p)));
-   F.printf "GB done\n";
-   F.print_flush();*)
     (* Phase 2: Simplification below binders *)
     let param_poly_constrs_without_sums =
       L.filter new_constrs ~f:(fun c -> (without_variables_but_possibly_coeffs c) && (without_summations c))
@@ -1169,19 +1158,14 @@ let groebner_basis_simplification (conj : conj) =
     let rest_constraints =
       L.filter new_constrs ~f:(fun c -> not(without_variables_but_possibly_coeffs c) || not(without_summations c))
     in
-(*   F.printf "I am going to start the reduction\n";
-   F.print_flush();*)
     let simplified_rest =
       L.map rest_constraints
        ~f:(fun c ->
             let () = if (maximal_excp_sets_constr c []) then () else assert false in
             let xpoly = xpoly_of_poly c.constr_poly in
-(*            F.printf "Working on %a\n" WconstrsUtil.pp_constr c;*)
             L.map xpoly
              ~f:(fun x ->
                let x_ivars = c.constr_ivarsK @ x.xterm_ivarsK in
-(*               let () = F.printf "%a (poly -> %a)\n vars -> %a\n\n" WconstrsUtil.pp_varsK x.xterm_ivarsK WconstrsUtil.pp_poly x.xterm_param_poly WconstrsUtil.pp_summand x.xterm_summand in
-               F.print_flush();*)
                let n = L.length c.constr_ivarsK in
                if (L.length delta_binder) > (L.length x_ivars) then
                  let rn =
