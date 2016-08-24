@@ -12,11 +12,11 @@ build: [
 ]
 install: [make "install"]
 depends: [
-  "core_kernel"
-  "ctypes"
+  "core_kernel"      {<= "113.00.00"}
+  "ctypes"           {<= "0.4.1"}
   "ctypes-foreign"
   "cryptokit"
   "yojson"
   "menhir"
-  "websocket"
+  "websocket"        {>= "0.9.3" & <= "2.1" }
 ]
