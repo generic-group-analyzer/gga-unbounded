@@ -2,8 +2,8 @@ open Core_kernel.Std
 module YS = Yojson.Safe
 
 (* Set the env variable UBT_PATH *)
-let sage_script = Format.sprintf "sage -python %s/groebner_basis.py" (Sys.getenv "UBT_PATH")
-(* let sage_script = "tee -a log-stdin | sage -python groebner_basis.py 2>&1 | tee -a log-stdout" *)
+let sage_script = Format.sprintf "sage -python3 %s/groebner_basis.py" (Sys.getenv "UBT_PATH")
+(* let sage_script = "tee -a log-stdin | sage -python3 groebner_basis.py 2>&1 | tee -a log-stdout" *)
 
 type st_sage = {
   mutable sts_closed : bool;

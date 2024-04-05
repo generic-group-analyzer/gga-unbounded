@@ -96,7 +96,7 @@ atom :
 | s = UVAR                                  { mk_uvar s }
 
 oexp_atom:
-| a = atom;                            { [(NoInv,a)] };
+| a = atom;                            { [(NoInv,a)] }
 | a = atom; EXP; n = INT               { repeat_element ((if n < 0 then Inv else NoInv),a) (abs n) }
 | a = atom; EXP; LPAR; n = INT; RPAR   { repeat_element ((if n < 0 then Inv else NoInv),a) (abs n) }
 
@@ -127,7 +127,7 @@ poly :
 | f = poly; STAR; g = poly   { SP.( f *! g) }
 | f = poly; MINUS; g = poly  { SP.( f -! g) }
 | MINUS; f = poly            { SP.( zero -! f) }
-| LPAR; f = poly; RPAR       { f };
+| LPAR; f = poly; RPAR       { f }
 | LPAR; f = poly; RPAR; EXP; e = INT { if e < 0
                                        then failwith "negative exponent only allowed for variables"
                                        else Eval.power_poly f (BI.of_int e) }
