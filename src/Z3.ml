@@ -1,7 +1,7 @@
 module YS = Yojson.Safe
 
 (* Set the env variable UBT_PATH *)
-let z3_script = Format.sprintf "python %s/smt_solver.py" (Sys.getenv "UBT_PATH")
+let z3_script = Format.sprintf "python3 %s/smt_solver.py" (Sys.getenv "UBT_PATH")
 
 type st_z3 = {
   mutable sts_closed : bool;

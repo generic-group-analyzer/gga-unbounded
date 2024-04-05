@@ -1,5 +1,5 @@
-#!/bin/sh
-''''exec python -- "$0" ${1+"$@"} # '''
+#!/bin/python3
+''''exec python3 -- "$0" ${1+"$@"} # '''
 
 from z3 import *
 import json
@@ -14,7 +14,7 @@ def check_feasibility(matrix, vector):
     for i in range(n_lambda):
         Lambda.append(Int('Lambda' + str(i+1)) )
         s.add(Lambda[i] >= 0)
-        
+
     for i in range(len(vector)):
         expression = 0
         for j in range(n_lambda):
@@ -47,25 +47,24 @@ def main():
     try:
       while True:
         inp = sys.stdin.readline()
-	if (inp == ''): break
+        if inp == '':
+           break
 
-	cmd = ast.literal_eval(inp)
+        cmd = ast.literal_eval(inp)
         M = cmd["matrix"]
         v = cmd["vector"]
         if len(M) == 0:
           result = v == []
         elif len(M[0]) == 0:
-          result = not any(v)	   
-        else:	     
-          result = check_feasibility(M, v)	
-     
+          result = not any(v)
+        else:
+          result = check_feasibility(M, v)
+
         print(json.dumps(result))
         sys.stdout.flush()
-	    
+
     except Exception:
         traceback.print_exc()
-      
+
 if __name__ == "__main__":
     main()
- 
-
