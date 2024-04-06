@@ -1,4 +1,4 @@
-map G1 * G2 -> GT.
+group_setting 3.
 
 sample u,p,d, t1,t2,t3,y,a,b,c.
 sample A.
