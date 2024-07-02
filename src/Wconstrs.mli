@@ -1,6 +1,6 @@
 (* * Constraints and operations on constraints *)
 
-open Core_kernel.Std
+open Core
 open Util
 open Watom
 
@@ -8,27 +8,29 @@ open Watom
  * ======================================================================= *)
 
 type is_eq = Eq | InEq
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_is_eq : is_eq -> is_eq -> bool
 
 type monom = private { monom_map : BI.t Atom.Map.t }
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_monom : monom -> monom -> bool
+val hash_fold_monom: Hash.state -> monom -> Hash.state
 
 type umonom = private { umonom_map : BI.t Uvar.Map.t }
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_umonom : umonom -> umonom -> bool
+val hash_fold_umonom: Hash.state -> umonom -> Hash.state
 
 type coeff = private { coeff_unif : umonom ; coeff_mon : monom }
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_coeff : coeff -> coeff -> bool
 
 type summand = Mon of monom | Coeff of coeff
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_summand : summand -> summand -> bool
 
 type sum = private { sum_ivarsK : (ivar * Ivar.Set.t) list; sum_summand : summand; }
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_sum : sum -> sum -> bool
 
 module Sum : sig
@@ -36,15 +38,15 @@ module Sum : sig
 end
 
 type poly = private { poly_map : BI.t Sum.Map.t }
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_poly : poly -> poly -> bool
 
 type constr = private { constr_ivarsK : (ivar * Ivar.Set.t) list; constr_is_eq : is_eq; constr_poly : poly; }
-  with sexp, compare
+  [@@deriving compare, sexp]
 val equal_constr : constr -> constr -> bool
 
 type conj = private { conj_ivarsK : (ivar * Ivar.Set.t) list; conj_constrs : constr list; }
-  with sexp, compare
+  [@@deriving compare, sexp]
 
 exception Mult_Coeff_by_Var
 exception Mult_of_Coeffs
@@ -76,7 +78,7 @@ val map_idx_summand : f:(ivar -> ivar) -> summand -> summand
 val map_idx_sum     : f:(ivar -> ivar) -> sum     -> sum
 val map_idx_poly    : f:(ivar -> ivar) -> poly    -> poly
 
-val map_atom_monom : f:(key:atom -> data:BI.t -> Big_int.big_int Watom.Atom.Map.t -> Big_int.big_int Watom.Atom.Map.t)
+val map_atom_monom : f:(key:atom -> data:BI.t -> BI.t Watom.Atom.Map.t -> BI.t Watom.Atom.Map.t)
   -> monom -> monom
 
 val new_ivar : Ivar.Set.t -> ivar -> ivar

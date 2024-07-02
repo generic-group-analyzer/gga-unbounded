@@ -1,11 +1,13 @@
 (* * Websocket server for web interface *)
 
 (* ** Imports and abbreviations *)
+open Util
 open Abbrevs
-open Core_kernel.Std
+open Core
 open Lwt.Infix
 
-module WS = Websocket_lwt
+module WS = Websocket
+module WS_lwt_unix = Websocket_lwt_unix
 module YS = Yojson.Safe
 
 (* ** Global vars
@@ -28,7 +30,7 @@ let split_proof_script s =
         Some i
       | '"' ->
         find_dot (find_quote (i+1))
-      | '(' when s.[i+1] = '*' ->
+      | '(' when Char.equal s.[i+1] '*' ->
         find_dot (find_comment_end (i+2))
       | _ ->
         find_dot (i+1)
@@ -36,7 +38,7 @@ let split_proof_script s =
       | Invalid_argument _ -> None
   and find_comment_end i =
     match s.[i] with
-    | '*' when s.[i+1] = ')' -> i+2
+    | '*' when Char.equal s.[i+1] ')' -> i+2
     | _ -> find_comment_end (i+1)
   and find_quote i =
     match s.[i] with
@@ -51,7 +53,7 @@ let split_proof_script s =
     | Some j, false ->
       let cmd = get_cmd j in
       F.printf "cmd: ``%s''\n" cmd;
-      if String.suffix cmd (String.length "proof") = "proof"
+      if String.(equal (suffix cmd (length "proof")) "proof")
       then go (j+1) true     (acc1)      []
       else go (j+1) in_proof (cmd::acc1) acc2
     | Some j, true ->
@@ -87,11 +89,11 @@ let process_get_debug () =
 
 let process_save filename content =
   F.printf "Save %s: %s\n%!" filename content;
-  if (Sys.file_exists !ps_file && List.mem !ps_files filename
+  if (Sys_unix.file_exists_exn !ps_file && List.mem ~equal:String.equal !ps_files filename
       && not !disallow_save) then (
     Out_channel.write_all filename ~data:content;
     frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveOK")]))
-  ) else if (!new_dir <> "") then (
+  ) else if not (String.is_empty !new_dir) then (
     Out_channel.write_all (!new_dir^"/"^filename) ~data:content;
     ps_files := (!new_dir^"/"^filename) :: !ps_files;
     frame_of_string (YS.to_string (`Assoc [("cmd", `String "saveOK")]))
@@ -101,10 +103,10 @@ let process_save filename content =
 
 let process_load s =
   (* Hashtbl.clear ts_cache; *)
-  ps_file := if s = "" then !ps_file else s;
+  ps_file := if String.is_empty s then !ps_file else s;
   F.printf "Loading %s\n%!" !ps_file;
   let s =
-    if Sys.file_exists !ps_file (* && List.mem !ps_file !ps_files *)
+    if Sys_unix.file_exists_exn !ps_file (* && List.mem !ps_file !ps_files *)
     then In_channel.read_all !ps_file
     else "(* Enter proof script below *)"
   in
@@ -136,7 +138,7 @@ let process_eval _fname proofscript =
                   with
                     Not_found ->
                       let st = Eval.eval_instrs (Wparse.p_instrs (cmd^ ".")) advK st_system st_nth in
-                      cache := Map.add !cache ~key:(new_cmds) ~data:st;
+                      cache := map_add_ignore_duplicate !cache ~key:(new_cmds) ~data:st;
                       cmds := new_cmds;
                       st
                )
@@ -144,10 +146,10 @@ let process_eval _fname proofscript =
       Result.Ok (Analyze.string_of_state st)
     with
     | e ->
+      let bt = Option.value_map ~default:"" ~f:Backtrace.to_string (Backtrace.Exn.most_recent_for_exn e) in
       Result.Error
         (F.sprintf "unknown error: %s,\n%s"
-           (Exn.to_string e)
-           (Exn.backtrace ()))
+           (Exn.to_string e) bt)
   in
   let ok_upto = String.length proofscript in
   let goal, err = match res with
@@ -191,9 +193,9 @@ let process_frame frame =
     begin match YS.from_string inp with
     | `Assoc l ->
       begin try
-        let get k = List.Assoc.find_exn l k in
+        let get k = List.Assoc.find_exn ~equal:String.equal l k in
         match get "cmd", get "arg" with
-        | `String cmd, `String arg when cmd = "eval" || cmd = "save" ->
+        | `String cmd, `String arg when String.equal cmd "eval" || String.equal cmd "save" ->
           begin match get "filename" with
           | `String fname ->
             begin match cmd with
@@ -217,20 +219,24 @@ let process_frame frame =
 
 
 let run_server _node _service =
-  let rec agp_serve id req recv send =
-    recv () >>= fun frame ->
+  let rec agp_serve client =
+    let open WS_lwt_unix in
+    let send = Connected_client.send client in
+    let recv = Connected_client.recv client in
+    recv >>= fun frame ->
     begin match process_frame frame with
     | Some frame' ->
       send frame' >>= fun () ->
-      agp_serve id req recv send
+      agp_serve client
     | None ->
       failwith ""
     end
   in
+  let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
   let uri = Uri.of_string "http://127.0.0.1:9999" in
   Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system >>= fun endp ->
-  Conduit_lwt_unix.(endp_to_server ~ctx:default_ctx endp >>= fun server ->
-  WS.establish_server ~ctx:default_ctx ~mode:server agp_serve)
+  Conduit_lwt_unix.(endp_to_server ~ctx endp >>= fun server ->
+  WS_lwt_unix.establish_server ~ctx ~mode:server agp_serve)
 
 let rec wait_forever () =
   Lwt_unix.sleep 1000.0 >>= wait_forever
@@ -247,16 +253,16 @@ let main =
          " allow creation of new files in given directory");
         ("-s", Arg.Set_string server_name, " bind to this servername (default: localhost)")]
   in
-  let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <file>" in
+  let usage_msg = "Usage: " ^ (Sys.get_argv ()).(0) ^ " <file>" in
   let parse_args s = ps_files := !ps_files @ [s] in
   Arg.parse speclist parse_args usage_msg;
-  if !ps_files = [] then (Arg.usage speclist usage_msg; exit 1);
+  if L.is_empty !ps_files then (Arg.usage speclist usage_msg; exit 1);
   ps_file := List.hd_exn !ps_files;
 
   (* start server *)
   print_endline "Open the following URL in your browser (websocket support required):\n";
-  print_endline ("    file://"^Sys.getcwd ()^"/web/index.html\n\n");
-  if Sys.file_exists !ps_file
+  print_endline ("    file://"^Sys_unix.getcwd ()^"/web/index.html\n\n");
+  if Sys_unix.file_exists_exn !ps_file
     then print_endline ("Files: " ^ (String.concat ~sep:", " !ps_files))
     else failwith (F.sprintf "File ``%s'' does not exist." !ps_file);
   Lwt_main.run (run_server !server_name "9999" >>= fun _ -> wait_forever ())

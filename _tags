@@ -1,16 +1,17 @@
 true: bin_annot, debug
 
 <src>: include
-<src/*>: package(num),\
+<src/*>: package(bignum.bigint),\
          thread,\
          package(core_kernel),\
-         syntax(camlp4o),\
-         package(websocket.lwt),\
+         package(core_unix),\
+         package(core_unix.sys_unix),\
+         package(websocket-lwt-unix),\
          package(yojson),\
          package(lwt),\
-         package(lwt.ppx),\
+         package(lwt_ppx),\
          package(uri),\
-         package(cohttp.lwt),\
+         package(cohttp-lwt),\
          package(ppx_deriving.std),\
          package(containers),\
          package(nocrypto.lwt),\

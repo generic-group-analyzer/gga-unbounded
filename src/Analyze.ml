@@ -1,17 +1,17 @@
-open Core_kernel.Std
+open Core
 open Abbrevs
 open Heuristic
    
 let automatic_prover cmds =
   let conj, advK, lcombs = Wparse.p_cmds cmds |> Eval.eval_cmds in
-  let t1 = Unix.gettimeofday() in
+  let t1 = Core_unix.gettimeofday() in
   let proven = call_heuristic conj advK lcombs in
-  let t2 = Unix.gettimeofday() in
+  let t2 = Core_unix.gettimeofday() in
   if proven then
-    let () = F.printf "Proven!\nTime %F seconds\n" (Pervasives.ceil ((100.0 *. (t2 -. t1))) /. 100.0) in
+    let () = F.printf "Proven!\nTime %F seconds\n" (Stdlib.ceil ((100.0 *. (t2 -. t1))) /. 100.0) in
     exit 0
   else
-    let () = F.printf "Not proven!\nTime: %F seconds\n" (Pervasives.ceil ((100.0 *. (t2 -. t1))) /. 100.0) in
+    let () = F.printf "Not proven!\nTime: %F seconds\n" (Stdlib.ceil ((100.0 *. (t2 -. t1))) /. 100.0) in
     exit 1    
 
 let analyze_unbounded cmds instrs =

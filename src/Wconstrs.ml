@@ -1,7 +1,7 @@
 (* * Constraints and operations on constraints *)
 
 (* ** Imports *)
-open Core_kernel.Std
+open Core
 open Util
 open Abbrevs
 open Watom
@@ -9,20 +9,22 @@ open Watom
 (* ** Constraint expressions and constraints
  * ----------------------------------------------------------------------- *)
 
-type is_eq = Eq | InEq with compare, sexp
+type is_eq = Eq | InEq [@@deriving compare, sexp]
 
 (* Mapping from atom to exponent, we ensure in mk_monom that only uniform
    variables can have negative exponents *)
 type monom = { monom_map : BI.t Atom.Map.t }
-  with compare, sexp
+ [@@deriving compare, sexp]
+let hash_fold_monom st m = hash_fold_atom_map BI.hash_fold_t st m.monom_map
 
 type umonom = { umonom_map : BI.t Uvar.Map.t }
- with compare, sexp
+[@@deriving compare, sexp]
+let hash_fold_umonom st m = hash_fold_uvar_map BI.hash_fold_t st m.umonom_map
 
 let monom_of_map  m = { monom_map  = m } (* DO NOT EXPORT *)
 
 let monom_filter_vars p_var mon =
-  monom_of_map (Map.filter mon.monom_map ~f:(fun ~key:k ~data:_d -> p_var k))
+  monom_of_map (Map.filter_keys mon.monom_map ~f:p_var)
 
 let umon2mon umonom =
   let new_keys = L.map (Map.keys umonom.umonom_map) ~f:(fun u -> Uvar(u)) in
@@ -36,15 +38,15 @@ let mon2umon monom =
   in
   { umonom_map =  Uvar.Map.of_alist_exn (L.map map_list ~f:(fun (m,d) -> (uvar_f m,d))) }
 
-type coeff = { coeff_unif : umonom ; coeff_mon : monom } with compare, sexp
+type coeff = { coeff_unif : umonom ; coeff_mon : monom }[@@deriving compare, sexp]
 
-type summand = Mon of monom | Coeff of coeff with compare, sexp
+type summand = Mon of monom | Coeff of coeff[@@deriving compare, sexp]
 
 (* [Sum ivars: summand] where summand can contain bound and free index variables *)
 type sum = {
   sum_ivarsK   : (ivar * Ivar.Set.t) list;
   sum_summand  : summand;
-} with compare, sexp
+}[@@deriving compare, sexp]
 
 (* data structures with sums *)
 module Sum = struct
@@ -61,7 +63,7 @@ end
 (* Mapping from term to coefficient, we ensure in mk_poly
    that coefficients cannot be zero *)
 type poly = { poly_map : BI.t Sum.Map.t }
-  with compare, sexp
+ [@@deriving compare, sexp]
 
 let poly_of_map m = { poly_map = m } (* DO NOT EXPORT *)
 
@@ -70,13 +72,13 @@ type constr = {
   constr_ivarsK : (ivar * Ivar.Set.t) list;
   constr_is_eq  : is_eq;
   constr_poly   : poly;
-} with compare, sexp
+}[@@deriving compare, sexp]
 
 (* constraint conjunction *)
 type conj = {
   conj_ivarsK  : (ivar * Ivar.Set.t) list;
   conj_constrs : constr list;
-} with compare, sexp
+}[@@deriving compare, sexp]
 
 (* ** Equality functions
  * ----------------------------------------------------------------------- *)
@@ -99,9 +101,9 @@ let mons (p : poly) =
     ~init:[]
     ~f:(fun ~key:s ~data:_c list ->
       let mon = match s.sum_summand with | Mon(m) -> m | Coeff(_) -> (monom_of_map Atom.Map.empty) in
-      (Map.filter mon.monom_map ~f:(fun ~key:v ~data:_e -> not (is_param v))) :: list)
+      (Map.filter_keys mon.monom_map ~f:(fun v -> not (is_param v))) :: list)
   |> L.map ~f:monom_of_map
-  |> L.dedup ~compare:compare_monom
+  |> L.dedup_and_sort ~compare:compare_monom
 
 let ivars_monom (mon : monom) =
   Map.fold mon.monom_map
@@ -166,7 +168,7 @@ let renaming_away_from taken ivars =
   Set.fold ivars ~init:(Ivar.Map.empty,taken)
     ~f:(fun (m,taken) ivar ->
           let ivar' = new_ivar taken ivar in
-          (Map.add m ~key:ivar ~data:ivar', Set.add taken ivar'))
+          (map_add_ignore_duplicate m ~key:ivar ~data:ivar', Set.add taken ivar'))
 
 let apply_renaming rn ivar =
   Option.value ~default:ivar (Map.find rn ivar)
@@ -211,7 +213,7 @@ let fix_exceptions varsK =
     else if (Set.mem iset j) then 1
     else 0      
   in
-  L.sort ~cmp:order varsK
+  L.sort ~compare:order varsK
 
 let mk_sum ivarsK (summand : summand) =
   let ivarsK = fix_exceptions ivarsK in
