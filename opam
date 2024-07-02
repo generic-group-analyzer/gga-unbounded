@@ -13,8 +13,7 @@ depends: [
   "ocaml"            {>= "4.02.0" }
   "core_kernel"
   "core_unix"
-  "core_unix.sys_unix"
-  "ctypes"           
+  "ctypes"
   "ctypes-foreign"
   "cryptokit"
   "yojson"
