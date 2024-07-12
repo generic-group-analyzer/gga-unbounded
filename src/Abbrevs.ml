@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core
 
 module F = Format
 module L = List

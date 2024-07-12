@@ -1,8 +1,8 @@
-open Core_kernel.Std
+open Core
 module YS = Yojson.Safe
 
 (* Set the env variable UBT_PATH *)
-let sage_script = Format.sprintf "sage -python3 %s/groebner_basis.py" (Sys.getenv "UBT_PATH")
+let sage_script = Format.sprintf "sage -python3 %s/groebner_basis.py" (Sys.getenv_exn "UBT_PATH")
 (* let sage_script = "tee -a log-stdin | sage -python3 groebner_basis.py 2>&1 | tee -a log-stdout" *)
 
 type st_sage = {
@@ -14,7 +14,7 @@ type st_sage = {
 let persistent_sage = ref None
 
 let start_sage () =
-  let (c_in, c_out) = Unix.open_process sage_script in
+  let (c_in, c_out) = Core_unix.open_process sage_script in
   { sts_cin = c_in; sts_cout = c_out; sts_closed = false }
 
 let eval_sage sts cmd =
@@ -27,9 +27,9 @@ let eval_sage sts cmd =
   let res = input_line c_in in
   (*i print_endline (">>> got "^res); i*)
   res
-  |> String.filter ~f:(fun c -> c <> '\n')
-  |> String.filter ~f:(fun c -> c <> ' ')
-  |> String.filter ~f:(fun c -> c <> '"')
+  |> String.filter ~f:(fun c -> Char.(<>) c '\n')
+  |> String.filter ~f:(fun c -> Char.(<>) c ' ')
+  |> String.filter ~f:(fun c -> Char.(<>) c '"')
 
 let stop_sage sts =
   if sts.sts_closed then failwith "sage process already closed";
@@ -38,8 +38,8 @@ let stop_sage sts =
   output_string c_out cmd;
   flush c_out;
   let o = input_line c_in in
-  if o <> "end" then failwith "close: end expected";
-  ignore (Unix.close_process (c_in,c_out))
+  if String.(<>) o "end" then failwith "close: end expected";
+  ignore (Core_unix.close_process (c_in,c_out))
 
 let call_Sage cmd =
   match !persistent_sage with

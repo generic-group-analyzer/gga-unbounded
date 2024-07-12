@@ -1,5 +1,5 @@
 (* ** Imports *)
-open Core_kernel.Std
+open Core
 open Abbrevs
 open Util
 open Watom
@@ -14,7 +14,7 @@ type proof_branch = {
   branch_used_params : atom list * string list;
   branch_ivars_order : ivar list;
   branch_unfolded_hvars : hvar list;
-} with compare, sexp
+}[@@deriving compare, sexp]
 
 (* data structures with proof branches *)
 module Proof_branch = struct
@@ -91,7 +91,7 @@ let update_used_params used_params conj =
       | Some p ->
         begin match p with
           | Param(name, Some i) when L.mem (unzip1 c.constr_ivarsK) i ~equal:equal_ivar ->
-            if L.mem used_bound name then aux used_free used_bound rest
+            if L.mem used_bound name ~equal:String.equal then aux used_free used_bound rest
             else aux used_free (name :: used_bound) rest
           | _ ->
             if L.mem used_free p ~equal:equal_atom then aux used_free used_bound rest
@@ -195,7 +195,7 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
     let goals = dedup_preserve_order goals
         ~equal:(fun g1 g2 ->
             equal_conj g1.branch_conj g2.branch_conj &&
-            g1.branch_ivars_order = g2.branch_ivars_order
+            L.equal equal_ivar g1.branch_ivars_order g2.branch_ivars_order
           )
     in
     let depth = (L.length goals) - 1 in
@@ -224,7 +224,7 @@ let rec automatic_algorithm (goals : proof_branch list) (advK : advK) (full_extr
         automatic_algorithm (new_branches @ (L.tl_exn goals)) advK full_extraction lcombs
       else
         let disj' = assure_laurent_polys conj in
-        if (disj' <> []) then
+        if not (L.is_empty disj') then
           let () = F.printf "%sassure_Laurent.\n" (String.make depth ' ') in
           let new_branches =
             L.map disj' ~f:(fun c -> mk_proof_branch c used_params ivars_order unfolded_hvars)

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core
 open Abbrevs
 open Watom
 open Wconstrs
@@ -88,22 +88,22 @@ let fold_sum_monom (s : sum) ~f =
 let uvar_to_param (s : sum) (v : atom) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Uvar (name, idx) when name = atom_name v -> Param(name, idx)
+      | Uvar (name, idx) when String.equal name (atom_name v) -> Param(name, idx)
       | _ -> k
     in
-    Map.add m ~key:new_k ~data:d
+    map_add_ignore_duplicate m ~key:new_k ~data:d
   in
   fold_sum_monom s ~f
 
 let uvar_to_hvar (s : sum) (v : atom) (g : group_name) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Uvar (name, oivar) when name = atom_name v ->
+      | Uvar (name, oivar) when String.equal name (atom_name v) ->
         let ivar = Option.value ~default:{ name = "k"; id = 0; } oivar in
         Hvar { hv_name = name; hv_ivar = ivar; hv_gname = g }
       | _ -> k
     in
-    Map.add m ~key:new_k ~data:d
+    map_add_ignore_duplicate m ~key:new_k ~data:d
   in
   fold_sum_monom s ~f
 
@@ -130,7 +130,7 @@ let ensure_vars_defined used defined =
 let ensure_oracle_valid estate ovarnames used =
   if not (unique ovarnames ~equal:String.equal) then
     failwith "Oracle reuses names for arguments/sampled variables.";
-  if estate.es_odefs <> None then
+  if Option.is_some estate.es_odefs then
     failwith "Oracle already defined, multiple oracles not supported.";
   ensure_vars_defined used ovarnames
 
@@ -169,7 +169,7 @@ let interp_add_oracle params orvars fs estate =
   let od =
     Some (L.map fs ~f:(fun (p, gid) -> (ipoly_to_opoly params p,gid)))
   in
-  if estate.es_odefs <> None then failwith "At most one oracle definition supported";
+  if Option.is_some estate.es_odefs then failwith "At most one oracle definition supported";
   { estate with
     es_odefs    = od;
     es_oparams  = L.map params ~f:(fun (p,gid) -> (atom_name p,gid));
@@ -183,20 +183,20 @@ let interp_add_oracle params orvars fs estate =
 let uvar_to_idxuvar (s : sum) (v : atom) (i : ivar) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Uvar(name, None) when name = atom_name v -> Uvar(name, Some i)
+      | Uvar(name, None) when String.equal name (atom_name v) -> Uvar(name, Some i)
       | _ -> k
     in
-    Map.add m ~key:new_k ~data:d
+    map_add_ignore_duplicate m ~key:new_k ~data:d
   in
   fold_sum_monom s ~f
 
 let param_to_idxparam (s : sum) (par_name : string) (i : ivar) =
   let f ~key:k ~data:d m =
     let new_k = match k with
-      | Param (name, None) when name = par_name -> Param (name, Some i)
+      | Param (name, None) when String.equal name par_name -> Param (name, Some i)
       | _ -> k
     in
-    Map.add m ~key:new_k ~data:d
+    map_add_ignore_duplicate m ~key:new_k ~data:d
   in
   fold_sum_monom s ~f
 
@@ -310,7 +310,7 @@ let eval_cmd estate cmd =
   match cmd,estate.es_mwcond with
 
   | GroupSetting(gs),None ->
-    if estate.es_gs <> None then
+    if Option.is_some estate.es_gs then
       failwith "Cannot set group setting, already set.";
     { estate with es_gs = Some gs }
 
@@ -324,7 +324,7 @@ let eval_cmd estate cmd =
     let used_varnames = L.map used_vars ~f:atom_name in
     ensure_vars_defined used_varnames (L.map estate.es_uvars ~f:atom_name);
     { estate with
-      es_varnames = L.dedup ~compare:String.compare (estate.es_varnames @ used_varnames);
+      es_varnames = L.dedup_and_sort ~compare:String.compare (estate.es_varnames @ used_varnames);
       es_inputs   = estate.es_inputs @ (L.map fs ~f:(fun p -> (p, gid)));
     }
 
@@ -354,7 +354,7 @@ let knowledge estate =
                Uvar (name, Some { name = "k"; id = 0 })
              | _ -> k
            in
-           Map.add m ~key:new_k ~data:d)
+           map_add_ignore_duplicate m ~key:new_k ~data:d)
     |> mk_monom_of_map
   in
   let update advMsets non_recur recur =
@@ -436,7 +436,7 @@ let eval_instr advK system nth instr =
     let n_eq = n_eq - 1 in
     let f conj =
       let bound_ivars = 
-        Set.to_list (Set.filter (ivars_umonom uM) ~f:(fun i -> not(L.mem (unzip1 conj.conj_ivarsK) i)))
+        Set.to_list (Set.filter (ivars_umonom uM) ~f:(fun i -> not(L.mem ~equal:equal_ivar (unzip1 conj.conj_ivarsK) i)))
       in
       let quant = maximal_quant (unzip1 conj.conj_ivarsK) [] bound_ivars in
       let new_constrs = introduce_coeff (L.nth_exn conj.conj_constrs n_eq) quant uM (conj.conj_ivarsK) in
@@ -483,7 +483,7 @@ let eval_instr advK system nth instr =
 
   | AssureLaurent ->
     let new_cases = assure_laurent_polys (L.nth_exn system (nth-1)) in
-    if new_cases = [] then failwith "New constraints were not found after applying 'assure_Laurent'"
+    if L.is_empty new_cases then failwith "New constraints were not found after applying 'assure_Laurent'"
     else
       (L.concat (list_map_nth (L.map system ~f:(fun c -> [c])) nth (fun _ -> new_cases)), nth)
 

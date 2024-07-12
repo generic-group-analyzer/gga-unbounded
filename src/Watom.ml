@@ -1,25 +1,25 @@
 (* * Atoms: Variables and parameters *)
 
 (* ** Imports *)
-open Core_kernel.Std
+open Core
 open Util
 
 (* ** Variables and parameters
  * ----------------------------------------------------------------------- *)
 
-type inv = NoInv | Inv with compare, sexp
+type inv = NoInv | Inv [@@deriving compare, sexp]
 
 (* group settings *)
 
-type group_name = G1 | G2 with compare, sexp
-type group_setting = I | II | III with compare, sexp
-type ty = Fp | GroupName of group_name with compare, sexp
+type group_name = G1 | G2[@@deriving compare, sexp, hash]
+type group_setting = I | II | III[@@deriving compare, sexp]
+type ty = Fp | GroupName of group_name[@@deriving compare, sexp]
 
 (* index variables *)
 type ivar = {
   name : string;
   id : int;
-} with compare, sexp
+}[@@deriving compare, sexp, hash]
 
 (* data structures for ivar *)
 module Ivar = struct
@@ -34,26 +34,26 @@ module Ivar = struct
 end
 
 (* name with optional index *)
-type name_oidx = string * ivar option with compare, sexp
+type name_oidx = string * ivar option[@@deriving compare, sexp, hash]
 
 (* uniform variable (possibly indexed) *)
-type uvar = name_oidx with compare, sexp
+type uvar = name_oidx[@@deriving compare, sexp, hash]
 
 (* parameter (possibly indexed) *)
-type param = name_oidx with compare, sexp
+type param = name_oidx[@@deriving compare, sexp, hash]
 
 (* handle variables *)
 type hvar = {
   hv_name : string;
   hv_ivar : ivar;
   hv_gname : group_name
-} with compare, sexp
+}[@@deriving compare, sexp, hash]
 
 type atom =
   | Param of param
   | Uvar  of uvar
   | Hvar  of hvar
-  with compare, sexp
+ [@@deriving compare, sexp, hash]
 
 (* data structures with atoms *)
 module Atom = struct
@@ -62,10 +62,14 @@ module Atom = struct
     let compare = compare_atom
     let sexp_of_t = sexp_of_atom
     let t_of_sexp = atom_of_sexp
+    let hash_fold_t = hash_fold_atom
   end
   include T
   include Comparable.Make(T)
 end
+
+module ProvideHashAtomMap = Atom.Map.Provide_hash(Atom.T)
+let hash_fold_atom_map = ProvideHashAtomMap.hash_fold_t
 
 (* data structures with atoms *)
 module Uvar = struct
@@ -74,10 +78,14 @@ module Uvar = struct
     let compare = compare_uvar
     let sexp_of_t = sexp_of_uvar
     let t_of_sexp = uvar_of_sexp
+    let hash_fold_t = hash_fold_uvar
   end
   include T
   include Comparable.Make(T)
 end
+
+module ProvideHashUvarMap = Uvar.Map.Provide_hash(Uvar.T)
+let hash_fold_uvar_map = ProvideHashUvarMap.hash_fold_t
 
 let equal_inv           x y = compare_inv           x y = 0
 let equal_group_name    x y = compare_group_name    x y = 0

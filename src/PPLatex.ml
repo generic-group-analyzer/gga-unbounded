@@ -2,7 +2,7 @@
 
 (* ** Imports *)
 
-open Core_kernel.Std
+open Core
 open Util
 open Abbrevs
 open Watom
@@ -45,7 +45,7 @@ let pp_atom_pow_latex fmt (a,e) =
     F.fprintf fmt "{%a}^{%s}" pp_atom_latex a (BI.to_string e)
 
 let pp_monom_latex fmt mon =
-  if (Map.to_alist mon.monom_map)<>[] then
+  if not (L.is_empty (Map.to_alist mon.monom_map)) then
     F.fprintf fmt "%a" (pp_list "\\cdot " pp_atom_pow_latex) (Map.to_alist mon.monom_map)
   else
     F.fprintf fmt "1"
@@ -66,7 +66,7 @@ let pp_varsK_latex fmt ivarsK =
   F.fprintf fmt "%a" (pp_list "," pp_ivar_set) (L.map ivarsK ~f:(fun (i,s) -> (i, Set.to_list s)))
 
 let pp_sum_latex fmt sum =
-  if sum.sum_ivarsK = [] then
+  if L.is_empty sum.sum_ivarsK then
     F.fprintf fmt "%a" pp_summand_latex sum.sum_summand
   else
     F.fprintf fmt "\\sum_{%a}\\left(%a\\right)" pp_varsK_latex sum.sum_ivarsK pp_summand_latex sum.sum_summand
@@ -81,7 +81,7 @@ let pp_poly_latex fmt poly =
   let mneg = Map.filter_map poly.poly_map
     ~f:(fun bi -> if BI.(compare bi zero < 0) then Some (BI.opp bi) else None)
   in
-  let mpos = Map.filter poly.poly_map ~f:(fun ~key:_k ~data:bi -> BI.(compare bi zero >= 0)) in
+  let mpos = Map.filter poly.poly_map ~f:(fun bi -> BI.(compare bi zero >= 0)) in
   match Map.to_alist mpos, Map.to_alist mneg with
   | [], [] ->
     F.fprintf fmt "0"
@@ -99,7 +99,7 @@ let is_eq_to_string_latex = function
   | InEq -> "\\neq "
 
 let pp_constr_latex fmt { constr_ivarsK = qvarsK; constr_poly = p; constr_is_eq = is_eq } =
-  if qvarsK <> [] then
+  if not (L.is_empty qvarsK) then
     F.fprintf fmt "\\forall_{%a}. \\ %a %s 0"
                pp_varsK_latex qvarsK
                pp_poly_latex p

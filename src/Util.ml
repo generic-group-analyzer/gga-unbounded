@@ -1,32 +1,39 @@
-open Core_kernel.Std
+open Core
 open Abbrevs
-open Big_int
 
 (* ======================================================================= *)
 (* Big int helper functions *)
 
 module BI = struct
-  type t = big_int
-  let one = unit_big_int
-  let zero = zero_big_int
-  let is_one = eq_big_int one
-  let is_zero = eq_big_int zero
-  let opp = minus_big_int
-  let ( *! ) a b = mult_big_int a b
-  let ( +! ) a b = add_big_int a b
-  let ( -! ) a b = a +! (opp b)
-  let ( /! ) a b = div_big_int a b
-  let of_int = big_int_of_int
-  let to_int = int_of_big_int
-  let to_string = string_of_big_int
-  let t_of_sexp se = big_int_of_string (string_of_sexp se)
-  let sexp_of_t bi = sexp_of_string (string_of_big_int bi)
-  let compare = compare_big_int
-  let equal a b = compare a b = 0
-  let max = max_big_int
-  let min = min_big_int
-  let abs = abs_big_int
-  let sign = sign_big_int
+  type t = Bigint.t
+  let one = Bigint.one
+  let zero = Bigint.zero
+  let is_one = Bigint.equal one
+  let is_zero = Bigint.equal zero
+  let opp = Bigint.( ~- )
+  let ( *! ) = Bigint.( * )
+  let ( +! ) = Bigint.( + )
+  let ( -! ) = Bigint.( - )
+  let ( /! ) = Bigint.( / )
+  let of_int = Bigint.of_int
+  let to_int = Bigint.to_int_exn
+  let to_string = Bigint.to_string
+  let of_string = Bigint.of_string
+  let t_of_sexp = Bigint.t_of_sexp
+  let sexp_of_t = Bigint.sexp_of_t
+  let compare = Bigint.compare
+  let equal = Bigint.equal
+  let max = Bigint.max
+  let min = Bigint.min
+  let abs = Bigint.abs
+  let rec gcd a b =
+    if is_zero b then a
+    else gcd b (Bigint.rem a b)
+  let sign bi = match Bigint.sign bi with
+    | Neg -> -1
+    | Zero -> 0
+    | Pos -> 1
+  let hash_fold_t = Bigint.hash_fold_t
 end
 
 (* ======================================================================= *)
@@ -73,7 +80,7 @@ let nchoosek_perm list k ~compare =
       aux (L.concat ( L.map output ~f:(fun l -> L.map list ~f:(fun x -> x::l) ) )) list (k-1)
   in
   aux [[]] list k
-  |> L.filter ~f:(fun l -> L.length (L.dedup ~compare l) = L.length l)
+  |> L.filter ~f:(fun l -> L.length (L.dedup_and_sort ~compare l) = L.length l)
 
 (* list of all permutations of a list *)
 let rec perms = function
@@ -88,7 +95,7 @@ let rec rm_diagonal = function
 let gcd_big_int_list list =
   let rec aux gcd = function
     | [] -> gcd
-    | a :: rest -> aux (gcd_big_int gcd a) rest
+    | a :: rest -> aux (BI.gcd gcd a) rest
   in
   match list with
   | [] -> BI.one
@@ -96,7 +103,7 @@ let gcd_big_int_list list =
   | hd :: tl -> aux hd tl
 
 let most_frequent_sign list =
-  let positive = L.count list ~f:(fun x -> compare x BI.zero > 0) in
+  let positive = L.count list ~f:(fun x -> Stdlib.compare x BI.zero > 0) in
   if (2 * positive) >= L.length list then BI.one
   else BI.(opp one)
 
@@ -245,8 +252,8 @@ let group rel xs =
   | []    -> []
   | x::xs -> go xs x [x]
 
-let sorted_nub cmp xs =
-  xs |> L.sort ~cmp |> group (fun a b -> cmp a b = 0) |> L.map ~f:L.hd_exn
+let sorted_nub compare xs =
+  xs |> L.sort ~compare |> group (fun a b -> compare a b = 0) |> L.map ~f:L.hd_exn
 
 let conc_map f xs = L.concat (L.map ~f xs)
 
@@ -255,3 +262,12 @@ let (%) f g x = f (g x)
 let print_messages indent_level msgs =
   L.iter msgs ~f:(fun m -> F.printf "%s%s" (String.make indent_level ' ') m);
   F.print_flush()
+
+
+(* ======================================================================= *)
+(* Map functions *)
+
+let map_add_ignore_duplicate ~key ~data m =
+  match Map.add m ~key ~data with
+  | `Ok m -> m
+  | `Duplicate -> m

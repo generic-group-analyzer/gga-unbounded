@@ -1,7 +1,7 @@
 OCAMLBUILDFLAGS=-cflags "-w +a-e-9-44-48" -use-menhir -menhir "menhir -v" -classic-display -use-ocamlfind -quiet -ocamlc ocamlc -ocamlopt ocamlopt
 COREFLAGS=-pkg core_kernel \
-    -pkg sexplib.syntax,comparelib.syntax,fieldslib.syntax,variantslib.syntax \
-    -pkg bin_prot.syntax \
+    -pkg ppx_compare,ppx_sexp_conv,ppx_hash \
+    -pkg ppx_bin_prot \
     -tag short_paths \
     -cflags -strict-sequence
 
@@ -28,9 +28,9 @@ install: ubt.native wsubt.native
 	$(INSTALL) -m 0755 -T ubt.native $(BINDIR)/generic-group-unbounded
 	$(INSTALL) -m 0755 -T wsubt.native $(BINDIR)/generic-group-unbounded-ws
 
-OCAMLDEP= ocamlfind ocamldep -package core_kernel -syntax camlp4o \
-            -package comparelib.syntax -package sexplib.syntax -package fieldslib.syntax \
-            -I src one-line
+# OCAMLDEP= ocamlfind ocamldep -package core_kernel \
+#             -package ppx_jane \
+#             -I src one-line
 
 dev:
 	ocamlbuild $(COREFLAGS) $(OCAMLBUILDFLAGS) Wparser.cmx
